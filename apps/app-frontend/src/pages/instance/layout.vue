@@ -106,6 +106,7 @@ import {
 	StopCircleIcon,
 	TerminalSquareIcon,
 	UserPlusIcon,
+	VideoIcon,
 } from '@modrinth/assets'
 import {
 	commonMessages,
@@ -169,6 +170,8 @@ import { provideInstancePage } from './instance-context'
 import {
 	instanceContentQueryOptions,
 	instanceDetailQueryOptions,
+	// Modrinth Studios addition
+	instanceHasReplaysQueryOptions,
 	instanceKeys,
 	instanceLinkedProjectQueryOptions,
 	instanceProcessesQueryOptions,
@@ -193,6 +196,8 @@ const messages = defineMessages({
 	contentTab: { id: 'app.instance.tab.content', defaultMessage: 'Content' },
 	filesTab: { id: 'app.instance.tab.files', defaultMessage: 'Files' },
 	worldsTab: { id: 'app.instance.tab.worlds', defaultMessage: 'Worlds' },
+	// Modrinth Studios addition
+	replaysTab: { id: 'app.instance.tab.replays', defaultMessage: 'Replays' },
 	logsTab: { id: 'app.instance.tab.logs', defaultMessage: 'Logs' },
 	shareTab: { id: 'app.instance.tab.share', defaultMessage: 'Share' },
 	shortcutCreated: {
@@ -235,6 +240,16 @@ useQuery(
 	})),
 )
 const instance = computed(() => instanceQuery.data.value)
+
+// Modrinth Studios addition: only show the Replays tab once we've confirmed
+// there's actually a replay_recordings/ or flashback/replays/ folder here.
+const hasReplaysQuery = useQuery(
+	computed(() => ({
+		...instanceHasReplaysQueryOptions(instanceId.value),
+		enabled: !!instanceId.value,
+	})),
+)
+const showReplaysTab = computed(() => hasReplaysQuery.data.value === true)
 useQuery(
 	computed(() => ({
 		queryKey: instanceKeys.contentUpdateCheck(instanceId.value),
@@ -493,12 +508,22 @@ const tabs = computed(() => {
 			href: `${basePath.value}/worlds`,
 			icon: GlobeIcon,
 		},
-		{
-			label: formatMessage(messages.logsTab),
-			href: `${basePath.value}/logs`,
-			icon: TerminalSquareIcon,
-		},
 	]
+
+	// Modrinth Studios addition
+	if (showReplaysTab.value) {
+		instanceTabs.push({
+			label: formatMessage(messages.replaysTab),
+			href: `${basePath.value}/replays`,
+			icon: VideoIcon,
+		})
+	}
+
+	instanceTabs.push({
+		label: formatMessage(messages.logsTab),
+		href: `${basePath.value}/logs`,
+		icon: TerminalSquareIcon,
+	})
 
 	if (showShareTab.value) {
 		instanceTabs.push({

@@ -381,6 +381,30 @@ fn main() {
                     ),
             )
             .plugin(
+                // Modrinth Studios addition
+                "studio",
+                InlinedPlugin::new()
+                    .commands(&["studio_set_background_image"])
+                    .default_permission(
+                        DefaultPermissionRule::AllowAllCommands,
+                    ),
+            )
+            .plugin(
+                // Modrinth Studios addition
+                "replays",
+                InlinedPlugin::new()
+                    .commands(&[
+                        "replays_has_any",
+                        "replays_list",
+                        "replays_delete",
+                        "replays_rename",
+                        "replays_import",
+                    ])
+                    .default_permission(
+                        DefaultPermissionRule::AllowAllCommands,
+                    ),
+            )
+            .plugin(
                 "worlds",
                 InlinedPlugin::new()
                     .commands(&[

@@ -12,6 +12,8 @@ pub mod mr_auth;
 pub mod onboarding_checklist;
 pub mod pack;
 pub mod process;
+// Modrinth Studios addition, see packages/app-lib/src/api/replays.rs
+pub mod replays;
 pub mod reports;
 pub mod server_address;
 pub mod settings;

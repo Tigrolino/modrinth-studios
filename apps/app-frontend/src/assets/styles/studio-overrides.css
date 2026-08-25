@@ -1,0 +1,34 @@
+/*
+ * Modrinth Studios addition.
+ *
+ * Driven by CSS custom properties set at runtime by
+ * src/composables/use-studio-appearance.ts. Everything here is `!important`
+ * on purpose: it's meant to sit as a thin override layer on top of the
+ * upstream Modrinth styling (packages/assets/styles/variables.scss and the
+ * scoped styles in App.vue / packages/ui's NewModal.vue) without editing
+ * those files, so pulling in upstream style changes later won't conflict
+ * with this file.
+ *
+ * All custom properties default to inert values (`none` / `1`), so importing
+ * this file has zero visual effect until the user actually changes an
+ * appearance setting.
+ */
+
+.app-contents {
+	background-image: var(--studio-bg-image, none) !important;
+	background-size: cover !important;
+	background-position: center !important;
+	background-color: color-mix(
+		in srgb,
+		var(--color-bg) calc(var(--studio-bg-overlay-alpha, 1) * 100%),
+		transparent
+	) !important;
+}
+
+.modal-body {
+	background-color: color-mix(
+		in srgb,
+		var(--color-raised-bg) calc(var(--studio-modal-opacity, 1) * 100%),
+		transparent
+	) !important;
+}
