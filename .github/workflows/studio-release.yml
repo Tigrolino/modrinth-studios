@@ -52,6 +52,17 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      - name: Set up app-lib environment
+        # Modrinth Studios addition: packages/app-lib/build.rs bakes these
+        # URLs into the binary at compile time via `env!(...)`, reading them
+        # from a `.env` file (see build.rs's `dotenvy::dotenv_iter()` call).
+        # Upstream's own CI does this same copy in theseus-build.yml; without
+        # it the build fails with "environment variable ... not defined at
+        # compile time". `.env.prod` points at the real modrinth.com API,
+        # which is what we want (only the update endpoint is customized).
+        shell: bash
+        run: cp packages/app-lib/.env.prod packages/app-lib/.env
+
       - name: Build and publish
         uses: tauri-apps/tauri-action@v0
         env:
