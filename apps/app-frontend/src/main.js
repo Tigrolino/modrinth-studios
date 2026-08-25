@@ -1,5 +1,8 @@
 import 'floating-vue/dist/style.css'
 import 'overlayscrollbars/overlayscrollbars.css'
+// Modrinth Studios addition, see the file itself for why this is safe to
+// import unconditionally (it's a no-op until the user changes a setting).
+import '@/assets/styles/studio-overrides.css'
 
 import * as Sentry from '@sentry/vue'
 import { VueScanPlugin } from '@taijased/vue-render-tracker'
@@ -8,10 +11,16 @@ import FloatingVue from 'floating-vue'
 import { createApp } from 'vue'
 
 import App from '@/App.vue'
+import { applyStudioAppearance, applyStudioWindowIcon } from '@/composables/use-studio-appearance'
 import { overlayScrollbarsDirective } from '@/directives/overlayScrollbars'
 import i18nPlugin from '@/plugins/i18n'
 import i18nDebugPlugin from '@/plugins/i18n-debug'
 import router from '@/routes'
+
+// Modrinth Studios addition: apply saved accent color / background / modal
+// opacity / window icon as early as possible.
+applyStudioAppearance()
+void applyStudioWindowIcon()
 
 const vueScan = new VueScanPlugin({
 	enabled: false, // Enable or disable the tracker

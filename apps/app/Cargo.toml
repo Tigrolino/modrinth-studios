@@ -33,7 +33,7 @@ tauri-plugin-updater = { workspace = true }
 tauri-plugin-window-state = { workspace = true }
 theseus = { workspace = true, features = ["tauri"] }
 thiserror = { workspace = true }
-tokio = { workspace = true, features = ["time"] }
+tokio = { workspace = true, features = ["time", "fs"] }
 tracing = { workspace = true }
 tracing-error = { workspace = true }
 url = { workspace = true }
@@ -42,7 +42,9 @@ uuid = { workspace = true, features = ["serde", "v4"] }
 
 [dependencies.tauri]
 workspace = true
-features = ["devtools", "macos-private-api", "protocol-asset"]
+# image-png/image-ico added by Modrinth Studios for the runtime window icon
+# changer (Window.setIcon from the frontend needs one of these enabled).
+features = ["devtools", "macos-private-api", "protocol-asset", "image-png", "image-ico"]
 
 [build-dependencies]
 tauri-build = { workspace = true, features = ["codegen"] }

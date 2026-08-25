@@ -115,6 +115,12 @@ export default new createRouter({
 					component: Instance.Worlds,
 				},
 				{
+					// Modrinth Studios addition
+					path: 'replays',
+					name: 'InstanceReplays',
+					component: Instance.Replays,
+				},
+				{
 					path: 'share',
 					name: 'InstanceShare',
 					component: Instance.Share,

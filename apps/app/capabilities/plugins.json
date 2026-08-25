@@ -113,6 +113,8 @@
 		"utils:default",
 		"ads:default",
 		"friends:default",
+		"replays:default",
+		"studio:default",
 		"worlds:default"
 	]
 }

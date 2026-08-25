@@ -28,6 +28,9 @@ mod ads_occlusion_windows;
 pub mod cache;
 pub mod files;
 pub mod friends;
+// Modrinth Studios additions, see apps/app/src/api/replays.rs and studio.rs
+pub mod replays;
+pub mod studio;
 pub mod worlds;
 
 mod oauth_utils;

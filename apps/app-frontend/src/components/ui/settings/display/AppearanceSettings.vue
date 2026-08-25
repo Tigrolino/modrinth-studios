@@ -13,6 +13,9 @@ import { type AppSettings, get, set } from '@/helpers/settings.ts'
 import { getOS } from '@/helpers/utils'
 import { appSettingsModalContextKey } from '@/providers/app-settings-modal'
 
+// Modrinth Studios addition
+import StudioAppearanceSettings from './StudioAppearanceSettings.vue'
+
 const theme = useTheme()
 const auth = injectAuth()
 const { updatePreferences } = injectUserPreferences()
@@ -151,4 +154,6 @@ provideAppearanceSettings({
 
 <template>
 	<AppearanceSettingsLayout />
+	<!-- Modrinth Studios addition -->
+	<StudioAppearanceSettings />
 </template>

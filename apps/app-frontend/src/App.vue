@@ -196,6 +196,11 @@ async function handleFullscreenChange() {
 
 updateHistoryNavigationState()
 
+// Modrinth Studios: keep the sidebar ad + Modrinth+ upsell in the code (so a
+// future upstream merge doesn't fight us) but never render them. Flip this
+// back to `false` to restore stock behavior.
+const STUDIO_HIDE_SIDEBAR_PROMO = true
+
 const APP_LEFT_NAV_WIDTH = '4rem'
 const APP_SIDEBAR_WIDTH = 300
 const INTERCOM_BUBBLE_DEFAULT_PADDING = 20
@@ -209,6 +214,12 @@ watch(
 		sidebarToggled.value = !toggleSidebar
 	},
 )
+// --- Modrinth Studios: hover-to-reveal sidebar toggle ---
+// The toggle button (and, when the sidebar is closed, a thin strip along the
+// right edge of the window) only need to be hovered to fade the button in,
+// instead of it sitting on screen permanently.
+const studioSidebarToggleHovered = ref(false)
+// --- end Modrinth Studios ---
 const forceSidebar = computed(
 	() =>
 		route.path.startsWith('/browse') ||
@@ -1909,8 +1920,14 @@ provideAppUpdateDownloadProgress(appUpdateDownload)
 					v-if="!forceSidebar && appSettings.toggleSidebar"
 					:type="sidebarToggled ? 'base' : 'quiet'"
 					:label="formatMessage(messages.nextImage)"
-					class="mr-3 transition-transform"
-					:class="{ 'rotate-180': !sidebarToggled }"
+					class="mr-3 transition-opacity duration-150"
+					:class="{
+						'rotate-180': !sidebarToggled,
+						'opacity-100': studioSidebarToggleHovered,
+						'opacity-0 focus-visible:opacity-100': !studioSidebarToggleHovered,
+					}"
+					@mouseenter="studioSidebarToggleHovered = true"
+					@mouseleave="studioSidebarToggleHovered = false"
 					@click="sidebarToggled = !sidebarToggled"
 				>
 					<RightArrowIcon />
@@ -1923,6 +1940,15 @@ provideAppUpdateDownloadProgress(appUpdateDownload)
 				<WindowControls />
 			</section>
 		</div>
+		<!-- Modrinth Studios: hovering the right edge while the sidebar is closed
+		     reveals the toggle button above, so you don't need a permanently
+		     visible affordance to know it's there. -->
+		<div
+			v-if="!forceSidebar && appSettings.toggleSidebar && !sidebarToggled"
+			class="studio-sidebar-edge-hover-zone"
+			@mouseenter="studioSidebarToggleHovered = true"
+			@mouseleave="studioSidebarToggleHovered = false"
+		></div>
 	</div>
 	<div
 		v-if="stateInitialized"
@@ -1994,7 +2020,7 @@ provideAppUpdateDownloadProgress(appUpdateDownload)
 			<div
 				v-overlay-scrollbars="sidebarOverlayScrollbarsOptions"
 				class="app-sidebar-scrollable flex-grow shrink relative"
-				:class="{ 'pb-12': !hasPlus }"
+				:class="{ 'pb-12': !hasPlus && !STUDIO_HIDE_SIDEBAR_PROMO }"
 				data-overlayscrollbars-initialize
 			>
 				<OnboardingChecklist
@@ -2052,7 +2078,7 @@ provideAppUpdateDownloadProgress(appUpdateDownload)
 					</div>
 				</div>
 			</div>
-			<template v-if="showAd">
+			<template v-if="showAd && !STUDIO_HIDE_SIDEBAR_PROMO">
 				<a
 					href="https://modrinth.plus?app"
 					class="absolute bottom-[250px] w-full flex justify-center items-center gap-1 px-4 py-3 text-purple font-medium hover:underline z-10"
@@ -2156,6 +2182,17 @@ provideAppUpdateDownloadProgress(appUpdateDownload)
 [data-tauri-drag-region-exclude] {
 	-webkit-app-region: no-drag;
 }
+
+// --- Modrinth Studios: sidebar hover-reveal edge zone ---
+.studio-sidebar-edge-hover-zone {
+	position: fixed;
+	top: var(--top-bar-height);
+	right: 0;
+	width: 10px;
+	height: calc(100vh - var(--top-bar-height));
+	z-index: 3;
+}
+// --- end Modrinth Studios ---
 
 .app-contents {
 	position: absolute;

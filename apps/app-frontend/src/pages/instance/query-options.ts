@@ -4,6 +4,7 @@ import { get_project_v3 } from '@/helpers/cache.js'
 import { get as getInstance } from '@/helpers/instance'
 import { loadInstanceContentData } from '@/helpers/instance-content'
 import { get_by_instance_id } from '@/helpers/process'
+import { hasReplays, listReplays } from '@/helpers/replays'
 import { refreshWorlds } from '@/helpers/worlds'
 
 export const instanceKeys = {
@@ -22,6 +23,9 @@ export const instanceKeys = {
 		[...instanceKeys.detail(instanceId), 'installed-project-ids', source] as const,
 	linkedContent: (instanceId: string) => ['linkedModpackContent', instanceId] as const,
 	worlds: (instanceId: string) => ['worlds', instanceId] as const,
+	// Modrinth Studios addition
+	replays: (instanceId: string) => ['replays', instanceId] as const,
+	hasReplays: (instanceId: string) => ['replays-exist', instanceId] as const,
 	linkedProject: (projectId: string) => ['project', 'v3', projectId] as const,
 	sharedEligibility: (userId: string | null | undefined) =>
 		['shared-instance-eligibility', userId] as const,
@@ -76,6 +80,23 @@ export function instanceWorldsQueryOptions(instanceId: string) {
 	return queryOptions({
 		queryKey: instanceKeys.worlds(instanceId),
 		queryFn: () => refreshWorlds(instanceId),
+		staleTime: 0,
+	})
+}
+
+// Modrinth Studios addition
+export function instanceHasReplaysQueryOptions(instanceId: string) {
+	return queryOptions({
+		queryKey: instanceKeys.hasReplays(instanceId),
+		queryFn: () => hasReplays(instanceId),
+		staleTime: 30_000,
+	})
+}
+
+export function instanceReplaysQueryOptions(instanceId: string) {
+	return queryOptions({
+		queryKey: instanceKeys.replays(instanceId),
+		queryFn: () => listReplays(instanceId),
 		staleTime: 0,
 	})
 }

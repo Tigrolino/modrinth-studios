@@ -1,0 +1,70 @@
+name: Modrinth Studios release
+
+# Modrinth Studios addition. This is a new, self-contained workflow — it
+# does not touch or reuse Modrinth's own theseus-build.yml/theseus-release.yml,
+# which are wired to Modrinth's private S3 bucket and code-signing certs we
+# don't have. Push a tag like `studio-v0.1.0` to build the Windows app,
+# sign the update artifacts with our own updater key, and publish a GitHub
+# release with a `latest.json` that apps/app/tauri-release.conf.json points
+# the in-app updater at.
+#
+# One-time setup (see STUDIO.md):
+#   - Add repo secrets TAURI_SIGNING_PRIVATE_KEY and
+#     TAURI_SIGNING_PRIVATE_KEY_PASSWORD (the keypair Claude generated when
+#     setting this up; ask for it again with `tauri signer generate` if lost
+#     — you'll also need to update the pubkey in tauri-release.conf.json).
+
+on:
+  push:
+    tags:
+      - 'studio-v*'
+
+permissions:
+  contents: write
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: windows-latest
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v4
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.33.2
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24.15.0
+          cache: pnpm
+
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: '1.95.0'
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build and publish
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        with:
+          projectPath: apps/app
+          tagName: ${{ github.ref_name }}
+          releaseName: 'Modrinth Studios ${{ github.ref_name }}'
+          releaseBody: |
+            Auto-built from ${{ github.sha }}. Friends running the app can update from
+            Settings once this release finishes publishing.
+          releaseDraft: false
+          prerelease: false
+          args: --config tauri-release.conf.json
