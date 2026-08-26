@@ -51,11 +51,31 @@ Then tag + push a release (see below) so everyone's app picks it up.
     Windows' own icon for the installed .exe/shortcut (what Explorer shows before you open it)
     can only be changed by rebuilding with new files under `apps/app/icons/` — see
     [Tauri's icon docs](https://v2.tauri.app/reference/cli/#icon) (`pnpm tauri icon <image>`).
+  - When a custom background is active, its "background transparency" slider makes a broad set
+    of panels/buttons/cards see-through (`SURFACE_PROPERTIES` in use-studio-appearance.ts) and
+    pairs most of them with a `backdrop-filter` blur for a frosted-glass look
+    (`studio-overrides.css`). The blur is deliberately **not** applied to `ContentCardTable`'s
+    rows (the mod/resource-pack/shader/datapack list) — that list can run into the hundreds of
+    rows, and blurring every one of them at once overwhelmed the webview's compositor (corrupted
+    color blocks, heavy flashing while scrolling). Those rows stay plain see-through instead. If
+    a similar long, densely-repeated list gets this treatment in the future, give it the same
+    exception rather than adding it to the blur selector list in `studio-overrides.css`.
+  - "Keep update buttons green" (only shown once an accent color is set) opts a color back out
+    of the accent recolor — `--color-green` is shared by a lot of unrelated "positive" UI
+    (update buttons, the Beta tag, ping indicators), so this is a blanket "leave green stuff
+    green" switch, not something scoped to literally just update buttons.
 
 ## Releasing an update
 
-1. Bump the version somewhere sensible (e.g. `apps/app/tauri.conf.json`'s `version`) and commit.
-2. `git tag studio-v0.1.0 && git push myfork studio-v0.1.0` (bump the number each time).
+1. Bump `version` in `apps/app-frontend/package.json` (that's what
+   `apps/app/tauri.conf.json`'s own `"version": "../app-frontend/package.json"` points at — it's
+   a path reference, not a literal version, so this is the one place to actually change) and
+   commit. **Use plain semver** (`0.1.3`, not `1.0.0-local` or anything with a suffix) — the
+   in-app updater compares this against the latest release with normal semver rules, so a
+   non-numeric or otherwise out-of-order version can make it think there's nothing newer to
+   update to, forever.
+2. `git tag studio-v0.1.2 && git push myfork studio-v0.1.2` (match the number you just set, bump
+   each time).
 3. `.github/workflows/studio-release.yml` builds the Windows app, signs it with our updater key,
    and publishes a GitHub release with the files the in-app updater expects.
 4. Everyone running the app gets the update prompt automatically (Modrinth's built-in updater,

@@ -30,7 +30,23 @@ function buildTerminalTheme() {
 	const purple = getCssVar('--color-purple', '#bc3fbc')
 
 	return {
-		background: surface2,
+		// Modrinth Studios: literally `'transparent'`, not `surface2`. xterm
+		// paints its background onto its own canvas using this value, and
+		// `getCssVar` returns a custom property's *raw* text (so if Studios'
+		// custom-background feature has overridden --surface-2 to a
+		// `color-mix(...)` expression, that literal text — not a resolved
+		// color — is what would get handed to xterm here, which it can't
+		// parse and silently falls back to opaque black for). A real CSS
+		// property like `.xterm-viewport`'s own `background-color:
+		// var(--surface-2)` below resolves color-mix() just fine; canvas
+		// paint doesn't go through that machinery. Using the literal keyword
+		// 'transparent' sidesteps needing to parse anything, and lets that
+		// already-correct (and already theme/background-aware)
+		// `.xterm-viewport` background show through underneath instead —
+		// same solid look as before when no custom background is active
+		// (both this and .xterm-viewport would've been the same opaque
+		// surface2 color anyway), and correctly translucent when one is.
+		background: 'transparent',
 		foreground: textDefault,
 		cursor: textDefault,
 		cursorAccent: surface2,

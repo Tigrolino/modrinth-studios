@@ -4,7 +4,7 @@
 	work in that shared package never conflicts with this file. New file.
 -->
 <script setup lang="ts">
-import { Button, injectNotificationManager, Slider } from '@modrinth/ui'
+import { Button, injectNotificationManager, Slider, Toggle } from '@modrinth/ui'
 import { open } from '@tauri-apps/plugin-dialog'
 import { computed } from 'vue'
 
@@ -92,6 +92,17 @@ async function resetAppIcon() {
 						Reset
 					</Button>
 				</div>
+			</div>
+
+			<div v-if="state.accentColor" class="flex items-center justify-between gap-4">
+				<div>
+					<h3 class="m-0 text-lg font-semibold text-contrast">Keep update buttons green</h3>
+					<p class="m-0 mt-1">
+						Update buttons, the Beta tag, and other green "success" elements stay their original
+						green instead of switching to your accent color.
+					</p>
+				</div>
+				<Toggle id="studio-preserve-update-green" v-model="state.preserveUpdateGreen" />
 			</div>
 
 			<div>

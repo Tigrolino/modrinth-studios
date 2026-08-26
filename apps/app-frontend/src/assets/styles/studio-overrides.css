@@ -41,3 +41,47 @@
 		transparent
 	) !important;
 }
+
+/* Frosted-glass blur, paired with the surface transparency above (see
+ * SURFACE_PROPERTIES / applySurfaceVars() in use-studio-appearance.ts).
+ * Plain transparency alone let the sharp background image show straight
+ * through small/detailed surfaces, which read as a washed-out "hazy" look
+ * rather than a clean glass panel — this is the same fix the app's own
+ * modals already use for their backdrop (NewModal.vue's
+ * `.modal-overlay { backdrop-filter: blur(5px) }`), just applied here too.
+ *
+ * `--studio-glass-blur` defaults to `none` (see applyGlassBlurVar()) and is
+ * only ever set to an actual blur() while a custom background is active, so
+ * this whole block is a no-op — and costs nothing — in the default look.
+ *
+ * Deliberately EXCLUDES `.bg-surface-1`/`.bg-surface-1\.5`/`.bg-surface-2`/
+ * `.bg-surface-2\.5` — the zebra-striped row backgrounds used specifically
+ * by ContentCardTable (the mod/resource-pack/shader/datapack list, which can
+ * run to hundreds of rows). Those still get plain color-mix() transparency
+ * from SURFACE_PROPERTIES, just with no blur layer, because blurring
+ * hundreds of simultaneously-visible rows overwhelmed the webview's
+ * compositor (corrupted color blocks, heavy flashing while scrolling).
+ * Everything else below is normally a much smaller, bounded set of elements
+ * on screen at once (a handful of cards, buttons, one sidebar) and keeps its
+ * blur. */
+.bg-bg-raised,
+.bg-surface-3,
+.bg-surface-4,
+.bg-surface-5,
+.bg-button-bg,
+svg.avatar,
+.app-sidebar,
+.modal-body,
+.xterm-viewport {
+	backdrop-filter: var(--studio-glass-blur, none) !important;
+}
+
+/* The Logs tab (BaseTerminal.vue) renders via xterm.js onto its own canvas,
+ * which paints an opaque background completely independent of any of the
+ * CSS above — see the comment on buildTerminalTheme() in
+ * packages/ui/src/composables/terminal.ts for why that canvas is now told to
+ * paint a transparent background instead, letting `.xterm-viewport`'s own
+ * (already correctly translucent, via --surface-2 in SURFACE_PROPERTIES)
+ * CSS background-color show through underneath it. Only one terminal is
+ * ever on screen at a time, so it's safe to blur directly like the sidebar
+ * and modals, unlike the long content lists above. */

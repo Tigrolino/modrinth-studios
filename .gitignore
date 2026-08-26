@@ -95,3 +95,9 @@ apps/frontend/src/public/robots.txt
 /test_result.md
 
 packages/tooling-config/script-utils/import-sort.js
+
+# Stray temp files dropped by tooling in some sandboxed dev environments
+# (e.g. pnpm's temp-file cleanup failing with EPERM on certain network/FUSE
+# mounts) — a wildcard instead of one-off hashes like the previous entry.
+_tmp_9_449739ce95d8a47c03bfe0cd33320fae
+_tmp_*
