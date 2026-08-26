@@ -212,13 +212,16 @@ const INTERCOM_BUBBLE_DEFAULT_PADDING = 20
 const PRIDE_FUNDRAISER_END_DATE = new Date('2026-07-01T00:00:00Z').getTime()
 const credentials = ref()
 let credentialsRefreshId = 0
-const sidebarToggled = ref(true)
-watch(
-	() => appSettings.toggleSidebar,
-	(toggleSidebar) => {
-		sidebarToggled.value = !toggleSidebar
-	},
-)
+// Modrinth Studios: this used to be initialized from / kept in sync with
+// `appSettings.toggleSidebar` (upstream's "hide right sidebar" preference).
+// That setting syncs from the user's Modrinth account across devices, and
+// that sync watcher (further down, on `userPreferences.preferences`) was
+// unconditionally overwriting it right after startup for any signed-in
+// account with sync enabled — silently flipping it back to open and hiding
+// our toggle button (which required it to be true to render at all). Fully
+// decoupled now: our own toggle starts closed and is controlled only by
+// this ref, independent of that account-synced setting.
+const sidebarToggled = ref(false)
 // Modrinth Studios: the sidebar toggle button used to only fade in on
 // hover (plus a separate hover strip along the window edge when closed).
 // After several rounds it was still unreliable/unverifiable, so this was
@@ -1932,7 +1935,7 @@ provideAppUpdateDownloadProgress(appUpdateDownload)
 			</div>
 			<section data-tauri-drag-region class="flex shrink-0 ml-auto items-center">
 				<IconButton
-					v-if="!forceSidebar && appSettings.toggleSidebar"
+					v-if="!forceSidebar"
 					:type="sidebarToggled ? 'base' : 'quiet'"
 					:label="formatMessage(messages.nextImage)"
 					class="mr-3"
@@ -2015,7 +2018,7 @@ provideAppUpdateDownloadProgress(appUpdateDownload)
 		</div>
 		<div
 			class="app-sidebar mt-px shrink-0 flex flex-col border-0 border-l-[1px] border-[--brand-gradient-border] border-solid"
-			:class="{ 'has-plus': hasPlus }"
+			:class="{ 'has-plus': hasPlus || STUDIO_HIDE_SIDEBAR_PROMO }"
 		>
 			<div
 				v-overlay-scrollbars="sidebarOverlayScrollbarsOptions"

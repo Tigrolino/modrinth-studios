@@ -194,6 +194,25 @@ function applySurfaceVars() {
 	}
 }
 
+// The right sidebar's actual visible background is --brand-gradient-bg, not
+// any of the --color-* surface tokens above — easy to miss since it's a
+// literal `linear-gradient(...)` value, not a plain color, so it can't go
+// through the generic color-mix() approach (color-mix needs two <color>
+// values, not a gradient). This is a separate, dedicated override for that
+// one variable: a flat dark tint whose strength follows the same slider,
+// replacing the theme's subtle built-in gradient while a custom background
+// is active so the sidebar is actually see-through instead of unaffected.
+function applySidebarTintVar() {
+	if (typeof document === 'undefined') return
+	const root = document.documentElement.style
+	if (state.backgroundMode === 'default') {
+		root.removeProperty('--brand-gradient-bg')
+		return
+	}
+	const alpha = state.modalOpacity / 100
+	root.setProperty('--brand-gradient-bg', `rgba(0, 0, 0, ${(alpha * 0.35).toFixed(3)})`)
+}
+
 function applyModalOpacityVar() {
 	if (typeof document === 'undefined') return
 	document.documentElement.style.setProperty('--studio-modal-opacity', String(state.modalOpacity / 100))
@@ -249,6 +268,7 @@ export function applyStudioAppearance() {
 	applyOverlayVar()
 	applyModalOpacityVar()
 	applySurfaceVars()
+	applySidebarTintVar()
 }
 
 // Deliberately split into narrow watchers instead of one `watch(state, ...,
@@ -270,6 +290,7 @@ watch(
 watch([() => state.backgroundMode, () => state.backgroundOverlay], applyOverlayVar)
 watch(() => state.modalOpacity, applyModalOpacityVar)
 watch([() => state.backgroundMode, () => state.modalOpacity], applySurfaceVars)
+watch([() => state.backgroundMode, () => state.modalOpacity], applySidebarTintVar)
 // modalOpacity defaults to 100 (fully opaque), which is correct for popups
 // on their own — but it also meant switching on a custom background had no
 // visible transparency effect at all until you happened to go drag that
