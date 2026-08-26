@@ -15,6 +15,8 @@ import {
 	useStudioAppearance,
 } from '@/composables/use-studio-appearance'
 
+import StudioColorSwatch from './StudioColorSwatch.vue'
+
 const { handleError } = injectNotificationManager()
 const state = useStudioAppearance()
 
@@ -85,11 +87,7 @@ async function resetAppIcon() {
 					<p class="m-0 mt-1">Replaces Modrinth's green accent throughout the app.</p>
 				</div>
 				<div class="flex items-center gap-2">
-					<input
-						v-model="accentColorModel"
-						type="color"
-						class="h-9 w-14 cursor-pointer rounded-lg border border-solid border-surface-5 bg-transparent p-1"
-					/>
+					<StudioColorSwatch v-model="accentColorModel" label="Accent" />
 					<Button type="outlined" :disabled="!state.accentColor" @click="resetAccentColor">
 						Reset
 					</Button>
@@ -121,22 +119,8 @@ async function resetAppIcon() {
 					v-else-if="state.backgroundMode === 'gradient'"
 					class="flex flex-wrap items-center gap-3 mt-3"
 				>
-					<label class="flex items-center gap-2 text-sm">
-						From
-						<input
-							v-model="state.gradientFrom"
-							type="color"
-							class="h-8 w-12 cursor-pointer rounded-md border border-solid border-surface-5 bg-transparent p-1"
-						/>
-					</label>
-					<label class="flex items-center gap-2 text-sm">
-						To
-						<input
-							v-model="state.gradientTo"
-							type="color"
-							class="h-8 w-12 cursor-pointer rounded-md border border-solid border-surface-5 bg-transparent p-1"
-						/>
-					</label>
+					<StudioColorSwatch v-model="state.gradientFrom" label="From" />
+					<StudioColorSwatch v-model="state.gradientTo" label="To" />
 					<label class="flex items-center gap-2 text-sm flex-1 min-w-[160px]">
 						Angle
 						<Slider v-model="state.gradientAngle" :min="0" :max="360" :step="5" unit="°" />
@@ -145,15 +129,21 @@ async function resetAppIcon() {
 
 				<div v-if="state.backgroundMode !== 'default'" class="mt-3">
 					<p class="m-0 mb-1 text-sm text-secondary">
-						Overlay strength (higher keeps text easier to read)
+						Darken/tint strength (higher fades the image toward the app's normal background, for
+						readability)
 					</p>
 					<Slider v-model="state.backgroundOverlay" :min="0" :max="100" :step="5" unit="%" />
 				</div>
 			</div>
 
 			<div>
-				<h3 class="m-0 text-lg font-semibold text-contrast">Popup background transparency</h3>
-				<p class="m-0 mt-1">Controls how see-through modal/popup backgrounds are.</p>
+				<h3 class="m-0 text-lg font-semibold text-contrast">Background transparency</h3>
+				<p class="m-0 mt-1">
+					Controls how see-through modal/popup backgrounds are, and — whenever a custom image or
+					gradient background is active above — how much the rest of the app's panels and cards
+					fade out so that background shows through everywhere, not just behind the main page. Has
+					no effect while the background is set to Default.
+				</p>
 				<div class="mt-3 max-w-sm">
 					<Slider v-model="state.modalOpacity" :min="10" :max="100" :step="5" unit="%" />
 				</div>
