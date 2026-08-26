@@ -96,6 +96,7 @@ import { useCheckDisableMouseover } from '@/composables/macCssFix.js'
 import { useAppEvent } from '@/composables/use-app-event'
 import { useAppSettings } from '@/composables/use-app-settings.ts'
 import { useError } from '@/composables/use-error.js'
+import { useStudioAppearance } from '@/composables/use-studio-appearance.ts'
 import { useTheme } from '@/composables/use-theme.ts'
 import { config } from '@/config'
 import {
@@ -161,6 +162,10 @@ import { appSettingsModalOpenProfileKey } from './providers/app-settings-modal'
 
 const appSettings = useAppSettings()
 const appTheme = useTheme()
+// Modrinth Studios: when a custom app icon is set, reflect it in the app's
+// own title bar too (not just the OS window/taskbar icon), so the branding
+// is consistent everywhere at once.
+const studioAppearance = useStudioAppearance()
 const router = useRouter()
 const route = useRoute()
 const { channel: appEventChannel, events: appEvents } = setupAppEventsProvider()
@@ -217,8 +222,29 @@ watch(
 // --- Modrinth Studios: hover-to-reveal sidebar toggle ---
 // The toggle button (and, when the sidebar is closed, a thin strip along the
 // right edge of the window) only need to be hovered to fade the button in,
-// instead of it sitting on screen permanently.
+// instead of it sitting on screen permanently. The button and the edge strip
+// are two physically separate DOM regions, so moving the mouse from one to
+// the other briefly leaves both — without a small grace period the button
+// would hide itself again before the cursor ever reached it. `revealSidebarToggle`/
+// `scheduleHideSidebarToggle` add that grace period; clicking the edge strip
+// directly also just toggles the sidebar outright as a fallback so this
+// never depends on the hover handoff working perfectly.
 const studioSidebarToggleHovered = ref(false)
+let studioSidebarToggleHideTimeout = null
+function revealSidebarToggle() {
+	if (studioSidebarToggleHideTimeout) {
+		clearTimeout(studioSidebarToggleHideTimeout)
+		studioSidebarToggleHideTimeout = null
+	}
+	studioSidebarToggleHovered.value = true
+}
+function scheduleHideSidebarToggle() {
+	if (studioSidebarToggleHideTimeout) clearTimeout(studioSidebarToggleHideTimeout)
+	studioSidebarToggleHideTimeout = setTimeout(() => {
+		studioSidebarToggleHovered.value = false
+		studioSidebarToggleHideTimeout = null
+	}, 500)
+}
 // --- end Modrinth Studios ---
 const forceSidebar = computed(
 	() =>
@@ -324,7 +350,11 @@ const hasPlus = computed(
 			hasActivePride26Midas(authenticatedModrinthUser.value?.campaigns?.pride_26)),
 )
 const showAd = computed(
-	() => sidebarVisible.value && !hasPlus.value && credentials.value !== undefined,
+	() =>
+		!STUDIO_HIDE_SIDEBAR_PROMO &&
+		sidebarVisible.value &&
+		!hasPlus.value &&
+		credentials.value !== undefined,
 )
 const adConsentAvailable = computed(() => credentials.value !== undefined && !hasPlus.value)
 providePageContext({
@@ -1886,7 +1916,13 @@ provideAppUpdateDownloadProgress(appUpdateDownload)
 		</div>
 		<div data-tauri-drag-region class="app-grid-statusbar bg-bg-raised h-[--top-bar-height] flex">
 			<div data-tauri-drag-region class="flex min-w-0 flex-1 items-center overflow-hidden p-2">
-				<TextLogo class="h-7 w-auto shrink-0 text-contrast pointer-events-none" />
+				<img
+				v-if="studioAppearance.windowIconPath"
+				:src="convertFileSrc(studioAppearance.windowIconPath)"
+				alt=""
+				class="h-7 w-7 shrink-0 rounded-md pointer-events-none object-cover"
+			/>
+			<TextLogo v-else class="h-7 w-auto shrink-0 text-contrast pointer-events-none" />
 				<div data-tauri-drag-region class="ml-2 flex shrink-0 items-center gap-2">
 					<IconButton
 						type="outlined"
@@ -1926,8 +1962,8 @@ provideAppUpdateDownloadProgress(appUpdateDownload)
 						'opacity-100': studioSidebarToggleHovered,
 						'opacity-0 focus-visible:opacity-100': !studioSidebarToggleHovered,
 					}"
-					@mouseenter="studioSidebarToggleHovered = true"
-					@mouseleave="studioSidebarToggleHovered = false"
+					@mouseenter="revealSidebarToggle"
+					@mouseleave="scheduleHideSidebarToggle"
 					@click="sidebarToggled = !sidebarToggled"
 				>
 					<RightArrowIcon />
@@ -1942,12 +1978,15 @@ provideAppUpdateDownloadProgress(appUpdateDownload)
 		</div>
 		<!-- Modrinth Studios: hovering the right edge while the sidebar is closed
 		     reveals the toggle button above, so you don't need a permanently
-		     visible affordance to know it's there. -->
+		     visible affordance to know it's there. It's also directly
+		     clickable itself, so opening the sidebar never depends on the
+		     mouse successfully finding the (separate, tiny) header button. -->
 		<div
 			v-if="!forceSidebar && appSettings.toggleSidebar && !sidebarToggled"
 			class="studio-sidebar-edge-hover-zone"
-			@mouseenter="studioSidebarToggleHovered = true"
-			@mouseleave="studioSidebarToggleHovered = false"
+			@mouseenter="revealSidebarToggle"
+			@mouseleave="scheduleHideSidebarToggle"
+			@click="sidebarToggled = !sidebarToggled"
 		></div>
 	</div>
 	<div
@@ -2188,9 +2227,10 @@ provideAppUpdateDownloadProgress(appUpdateDownload)
 	position: fixed;
 	top: var(--top-bar-height);
 	right: 0;
-	width: 10px;
+	width: 20px;
 	height: calc(100vh - var(--top-bar-height));
 	z-index: 3;
+	cursor: pointer;
 }
 // --- end Modrinth Studios ---
 

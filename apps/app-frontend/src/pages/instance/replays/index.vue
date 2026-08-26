@@ -16,14 +16,32 @@
 					{{ formatMessage(importing ? messages.adding : messages.addReplay) }}
 				</Button>
 			</div>
+			<Input
+				v-if="replays.length > 8"
+				v-model="searchFilter"
+				:icon="SearchIcon"
+				type="text"
+				autocomplete="off"
+				:spellcheck="false"
+				input-class="!h-10"
+				clearable
+				:placeholder="formatMessage(messages.searchPlaceholder, { count: replays.length })"
+			/>
 			<div class="flex flex-col w-full gap-2">
 				<div
-					v-for="replay in replays"
+					v-for="replay in filteredReplays"
 					:key="`${replay.kind}-${replay.fileName}`"
 					class="flex items-center gap-3 rounded-2xl border border-solid border-divider bg-bg-raised p-3"
 				>
-					<div class="flex items-center justify-center size-10 rounded-xl bg-bg-secondary shrink-0">
-						<VideoIcon class="size-5 text-secondary" />
+					<div
+						class="flex items-center justify-center size-10 rounded-xl shrink-0"
+						:class="
+							replay.kind === 'flashback'
+								? 'bg-[color-mix(in_srgb,var(--color-purple)_18%,transparent)] text-purple'
+								: 'bg-brand-highlight text-brand'
+						"
+					>
+						<VideoIcon class="size-5" />
 					</div>
 					<div class="flex flex-col min-w-0 flex-1">
 						<div class="flex items-center gap-2 flex-wrap">
@@ -36,6 +54,15 @@
 							</span>
 						</div>
 						<div class="flex items-center gap-2 flex-wrap text-sm text-secondary">
+							<span class="truncate font-medium text-primary">
+								{{
+									replay.serverName ??
+									(replay.singleplayer !== false
+										? formatMessage(messages.singleplayer)
+										: formatMessage(messages.multiplayer))
+								}}
+							</span>
+							<BulletDivider />
 							<span class="truncate">{{ replay.fileName }}</span>
 							<BulletDivider />
 							<span>{{
@@ -44,10 +71,6 @@
 							<template v-if="replay.durationMs">
 								<BulletDivider />
 								<span>{{ formatDuration(replay.durationMs) }}</span>
-							</template>
-							<template v-if="replay.serverName">
-								<BulletDivider />
-								<span class="truncate">{{ replay.serverName }}</span>
 							</template>
 							<BulletDivider />
 							<span>{{ formatFileSize(replay.size) }}</span>
@@ -99,6 +122,7 @@ import {
 	FolderOpenIcon,
 	PlayIcon,
 	PlusIcon,
+	SearchIcon,
 	TrashIcon,
 	VideoIcon,
 } from '@modrinth/assets'
@@ -110,6 +134,7 @@ import {
 	EmptyState,
 	IconButton,
 	injectNotificationManager,
+	Input,
 	ReadyTransition,
 	TagItem,
 	useFormatDateTime,
@@ -166,6 +191,18 @@ const messages = defineMessages({
 		id: 'app.instance.replays.delete-confirm-body',
 		defaultMessage: 'This will permanently delete {name} from disk. This cannot be undone.',
 	},
+	searchPlaceholder: {
+		id: 'app.instance.replays.search-placeholder',
+		defaultMessage: 'Search {count} replays...',
+	},
+	singleplayer: {
+		id: 'app.instance.replays.singleplayer',
+		defaultMessage: 'Singleplayer',
+	},
+	multiplayer: {
+		id: 'app.instance.replays.multiplayer',
+		defaultMessage: 'Multiplayer',
+	},
 })
 
 const { formatMessage } = useVIntl()
@@ -185,6 +222,18 @@ const replaysQuery = useQuery(
 )
 const replaysReadyPending = useReadyState(replaysQuery)
 const replays = computed<Replay[]>(() => replaysQuery.data.value ?? [])
+
+const searchFilter = ref('')
+const filteredReplays = computed(() => {
+	const query = searchFilter.value.trim().toLowerCase()
+	if (!query) return replays.value
+	return replays.value.filter(
+		(replay) =>
+			replay.name.toLowerCase().includes(query) ||
+			replay.fileName.toLowerCase().includes(query) ||
+			(replay.serverName?.toLowerCase().includes(query) ?? false),
+	)
+})
 
 const importing = ref(false)
 const launching = ref(false)

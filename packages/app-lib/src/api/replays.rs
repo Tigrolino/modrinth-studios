@@ -77,7 +77,16 @@ pub async fn has_replays(instance: &Path) -> Result<bool> {
 }
 
 pub async fn list_replays(instance: &Path) -> Result<Vec<Replay>> {
-    let mut replays = Vec::new();
+    // Two-phase: first collect cheap filesystem info for every replay (fast,
+    // just directory listing + stat calls), then read each replay's embedded
+    // metadata JSON separately. That second part means opening a zip archive
+    // per file, which is slow enough (a few ms to tens of ms each) that doing
+    // it one file at a time made this tab take a very long time for anyone
+    // with hundreds of replays. `read_zip_metadata_json` is synchronous/
+    // blocking, so each one is farmed out to tokio's blocking thread pool via
+    // `spawn_blocking` — they all start running concurrently as soon as
+    // they're spawned below, rather than waiting on each other.
+    let mut entries = Vec::new();
 
     for kind in ReplayKind::all() {
         let folder = kind.folder(instance);
@@ -115,7 +124,7 @@ pub async fn list_replays(instance: &Path) -> Result<Vec<Replay>> {
                 .map(|d| d.as_secs() as i64)
                 .unwrap_or(0);
 
-            let mut replay = Replay {
+            let replay = Replay {
                 kind,
                 folder: kind.relative_folder().to_string(),
                 file_name: file_name.to_string(),
@@ -129,14 +138,26 @@ pub async fn list_replays(instance: &Path) -> Result<Vec<Replay>> {
                 singleplayer: None,
             };
 
-            if let Ok(bytes) = read_zip_metadata_json(&path) {
-                apply_metadata_json(&mut replay, &bytes);
-            }
-
-            replays.push(replay);
+            entries.push((path, replay));
         }
     }
 
+    let handles: Vec<_> = entries
+        .iter()
+        .map(|(path, _)| {
+            let path = path.clone();
+            tokio::task::spawn_blocking(move || read_zip_metadata_json(&path))
+        })
+        .collect();
+
+    for (handle, (_, replay)) in handles.into_iter().zip(entries.iter_mut()) {
+        if let Ok(Ok(bytes)) = handle.await {
+            apply_metadata_json(replay, &bytes);
+        }
+    }
+
+    let mut replays: Vec<Replay> =
+        entries.into_iter().map(|(_, replay)| replay).collect();
     replays.sort_by(|a, b| b.modified.cmp(&a.modified));
     Ok(replays)
 }

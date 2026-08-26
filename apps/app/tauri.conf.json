@@ -62,9 +62,9 @@
 			}
 		]
 	},
-	"productName": "Modrinth App",
+	"productName": "Modrinth Studio",
 	"version": "../app-frontend/package.json",
-	"mainBinaryName": "Modrinth App",
+	"mainBinaryName": "Modrinth Studio",
 	"identifier": "ModrinthApp",
 	"plugins": {
 		"deep-link": {
@@ -86,7 +86,7 @@
 				"fullscreen": false,
 				"height": 800,
 				"resizable": true,
-				"title": "Modrinth App",
+				"title": "Modrinth Studio",
 				"label": "main",
 				"width": 1280,
 				"minHeight": 700,

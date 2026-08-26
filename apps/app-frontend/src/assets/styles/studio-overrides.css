@@ -9,20 +9,29 @@
  * those files, so pulling in upstream style changes later won't conflict
  * with this file.
  *
- * All custom properties default to inert values (`none` / `1`), so importing
- * this file has zero visual effect until the user actually changes an
- * appearance setting.
+ * All custom properties default to inert values (`none` / `0` / `1`), so
+ * importing this file has zero visual effect until the user actually
+ * changes an appearance setting.
  */
 
 .app-contents {
-	background-image: var(--studio-bg-image, none) !important;
+	/* `background-color` always sits *underneath* `background-image` in CSS,
+	 * so a plain background-color overlay can never show up on top of the
+	 * image/gradient — that's why the "overlay strength" slider used to have
+	 * no visible effect. Instead, stack a second background-image layer (a
+	 * flat-color gradient acting as a tint) on top of the real one; layers
+	 * listed first paint on top. This also doubles as a "darken the image"
+	 * control, since tinting toward the app's (dark-themed) background color
+	 * naturally dims it. */
+	background-image:
+		linear-gradient(
+			color-mix(in srgb, var(--color-bg) calc(var(--studio-bg-overlay-alpha, 0) * 100%), transparent),
+			color-mix(in srgb, var(--color-bg) calc(var(--studio-bg-overlay-alpha, 0) * 100%), transparent)
+		),
+		var(--studio-bg-image, none) !important;
 	background-size: cover !important;
 	background-position: center !important;
-	background-color: color-mix(
-		in srgb,
-		var(--color-bg) calc(var(--studio-bg-overlay-alpha, 1) * 100%),
-		transparent
-	) !important;
+	background-color: var(--color-bg) !important;
 }
 
 .modal-body {
