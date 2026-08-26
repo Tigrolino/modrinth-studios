@@ -384,7 +384,7 @@ fn main() {
                 // Modrinth Studios addition
                 "studio",
                 InlinedPlugin::new()
-                    .commands(&["studio_set_background_image"])
+                    .commands(&["studio_set_background_image", "studio_set_app_icon"])
                     .default_permission(
                         DefaultPermissionRule::AllowAllCommands,
                     ),

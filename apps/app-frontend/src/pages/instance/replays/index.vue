@@ -1,7 +1,8 @@
 <!--
 	Modrinth Studios addition: shows ReplayMod / Flashback recordings found in
 	this instance. New file, new route — doesn't modify any existing
-	upstream instance tab.
+	upstream instance tab. Row rendering lives in ReplayItem.vue, built to
+	mirror WorldItem.vue's card so this tab looks consistent with Worlds.
 -->
 <template>
 	<RenameReplayModal ref="renameModal" :instance-id="instance.id" @submit="onRenamed" />
@@ -28,97 +29,14 @@
 				:placeholder="formatMessage(messages.searchPlaceholder, { count: replays.length })"
 			/>
 			<div class="flex flex-col w-full gap-2">
-				<div
+				<ReplayItem
 					v-for="replay in filteredReplays"
 					:key="`${replay.kind}-${replay.fileName}`"
-					class="flex items-center gap-3 rounded-2xl border border-solid border-divider bg-bg-raised p-3"
-				>
-					<div
-						class="flex items-center justify-center size-10 rounded-xl shrink-0"
-						:class="
-							replay.kind === 'flashback'
-								? 'bg-[color-mix(in_srgb,var(--color-purple)_18%,transparent)] text-purple'
-								: 'bg-brand-highlight text-brand'
-						"
-					>
-						<VideoIcon class="size-5" />
-					</div>
-					<div class="flex flex-col min-w-0 flex-1">
-						<div class="flex items-center gap-2 flex-wrap">
-							<span class="font-semibold text-contrast truncate">{{ replay.name }}</span>
-							<TagItem class="text-xs" :style="`--_color: var(--color-secondary)`">
-								{{ replay.kind === 'flashback' ? 'Flashback' : 'ReplayMod' }}
-							</TagItem>
-							<span v-if="replay.minecraftVersion" class="text-sm text-secondary">
-								{{ replay.minecraftVersion }}
-							</span>
-						</div>
-						<div class="flex items-center gap-2 flex-wrap text-sm text-secondary">
-							<span class="truncate font-medium text-primary">
-								{{
-									replay.serverName ??
-									(replay.singleplayer !== false
-										? formatMessage(messages.singleplayer)
-										: formatMessage(messages.multiplayer))
-								}}
-							</span>
-							<BulletDivider />
-							<span class="truncate">{{ replay.fileName }}</span>
-							<BulletDivider />
-							<span>{{
-								formatDateTime(new Date((replay.recordedAt ?? replay.modified) * 1000))
-							}}</span>
-							<template v-if="replay.durationMs">
-								<BulletDivider />
-								<span>{{ formatDuration(replay.durationMs) }}</span>
-							</template>
-							<BulletDivider />
-							<span>{{ formatFileSize(replay.size) }}</span>
-						</div>
-					</div>
-					<div class="flex items-center gap-1 shrink-0">
-						<Button type="colored" color="brand" :disabled="launching" @click="launch(replay)">
-							<PlayIcon class="size-4" />
-							{{ formatMessage(commonMessages.playButton) }}
-						</Button>
-						<TeleportOverflowMenu
-							type="quiet"
-							:label="formatMessage(messages.moreOptions)"
-							:options="[
-								{
-									id: 'open-folder',
-									label: formatMessage(messages.openFolder),
-									action: () => openFolder(replay),
-								},
-								{
-									id: 'rename',
-									label: formatMessage(commonMessages.renameButton),
-									action: () => startRename(replay),
-								},
-								{
-									id: 'delete',
-									label: formatMessage(commonMessages.deleteLabel),
-									tone: 'red',
-									action: () => promptDelete(replay),
-								},
-							]"
-						>
-							<MoreVerticalIcon aria-hidden="true" />
-							<template #open-folder>
-								<FolderOpenIcon aria-hidden="true" />
-								{{ formatMessage(messages.openFolder) }}
-							</template>
-							<template #rename>
-								<EditIcon aria-hidden="true" />
-								{{ formatMessage(commonMessages.renameButton) }}
-							</template>
-							<template #delete>
-								<TrashIcon aria-hidden="true" />
-								{{ formatMessage(commonMessages.deleteLabel) }}
-							</template>
-						</TeleportOverflowMenu>
-					</div>
-				</div>
+					:replay="replay"
+					@open-folder="openFolder(replay)"
+					@rename="startRename(replay)"
+					@delete="promptDelete(replay)"
+				/>
 			</div>
 		</div>
 		<EmptyState
@@ -137,28 +55,14 @@
 	</ReadyTransition>
 </template>
 <script setup lang="ts">
+import { PlusIcon, SearchIcon } from '@modrinth/assets'
 import {
-	EditIcon,
-	FolderOpenIcon,
-	MoreVerticalIcon,
-	PlayIcon,
-	PlusIcon,
-	SearchIcon,
-	TrashIcon,
-	VideoIcon,
-} from '@modrinth/assets'
-import {
-	BulletDivider,
 	Button,
-	commonMessages,
 	defineMessages,
 	EmptyState,
 	injectNotificationManager,
 	Input,
 	ReadyTransition,
-	TagItem,
-	TeleportOverflowMenu,
-	useFormatDateTime,
 	useReadyState,
 	useVIntl,
 } from '@modrinth/ui'
@@ -166,6 +70,7 @@ import { useQuery, useQueryClient } from '@tanstack/vue-query'
 import { confirm, open } from '@tauri-apps/plugin-dialog'
 import { computed, ref } from 'vue'
 
+import ReplayItem from '@/components/ui/replays/ReplayItem.vue'
 import RenameReplayModal from '@/components/ui/replays/RenameReplayModal.vue'
 import { get_full_path } from '@/helpers/instance'
 import { deleteReplay, importReplay, type Replay } from '@/helpers/replays'
@@ -186,14 +91,6 @@ const messages = defineMessages({
 	adding: {
 		id: 'app.instance.replays.adding',
 		defaultMessage: 'Adding...',
-	},
-	moreOptions: {
-		id: 'app.instance.replays.more-options',
-		defaultMessage: 'More options',
-	},
-	openFolder: {
-		id: 'app.instance.replays.open-folder',
-		defaultMessage: 'Open folder',
 	},
 	noReplaysHeading: {
 		id: 'app.instance.replays.no-replays-heading',
@@ -216,22 +113,12 @@ const messages = defineMessages({
 		id: 'app.instance.replays.search-placeholder',
 		defaultMessage: 'Search {count} replays...',
 	},
-	singleplayer: {
-		id: 'app.instance.replays.singleplayer',
-		defaultMessage: 'Singleplayer',
-	},
-	multiplayer: {
-		id: 'app.instance.replays.multiplayer',
-		defaultMessage: 'Multiplayer',
-	},
 })
 
 const { formatMessage } = useVIntl()
 const { handleError } = injectNotificationManager()
 const instancePage = injectInstancePage()
 const queryClient = useQueryClient()
-
-const formatDateTime = useFormatDateTime({ timeStyle: 'short', dateStyle: 'medium' })
 
 const instance = computed(() => instancePage.instance.value!)
 
@@ -257,29 +144,7 @@ const filteredReplays = computed(() => {
 })
 
 const importing = ref(false)
-const launching = ref(false)
 const renameModal = ref<InstanceType<typeof RenameReplayModal>>()
-
-function formatDuration(ms: number): string {
-	const totalSeconds = Math.floor(ms / 1000)
-	const hours = Math.floor(totalSeconds / 3600)
-	const minutes = Math.floor((totalSeconds % 3600) / 60)
-	const seconds = totalSeconds % 60
-	const pad = (n: number) => n.toString().padStart(2, '0')
-	return hours > 0 ? `${hours}:${pad(minutes)}:${pad(seconds)}` : `${minutes}:${pad(seconds)}`
-}
-
-function formatFileSize(bytes: number): string {
-	if (bytes < 1024) return `${bytes} B`
-	const units = ['KB', 'MB', 'GB']
-	let value = bytes / 1024
-	let unitIndex = 0
-	while (value >= 1024 && unitIndex < units.length - 1) {
-		value /= 1024
-		unitIndex++
-	}
-	return `${value.toFixed(1)} ${units[unitIndex]}`
-}
 
 async function refresh() {
 	await queryClient.invalidateQueries({ queryKey: instanceKeys.replays(instance.value.id) })
@@ -308,23 +173,6 @@ async function addReplay() {
 	}
 }
 
-async function launch(replay: Replay) {
-	if (instance.value.quarantined || launching.value) return
-	launching.value = true
-	try {
-		await instancePage.play('InstanceReplays')
-	} catch (err) {
-		handleError(err as Error)
-	} finally {
-		launching.value = false
-	}
-	// Neither ReplayMod nor Flashback expose a way to pre-select a replay
-	// before the game boots, so this launches the instance the same way the
-	// normal Play button does; open `replay.name` from the mod's own UI
-	// once you're in-game.
-	void replay
-}
-
 async function openFolder(replay: Replay) {
 	const fullPath = await get_full_path(instance.value.id)
 	await openPath(`${fullPath}/${replay.folder}`)
@@ -339,10 +187,10 @@ async function onRenamed() {
 }
 
 async function promptDelete(replay: Replay) {
-	const confirmed = await confirm(
-		formatMessage(messages.deleteConfirmBody, { name: replay.name }),
-		{ title: formatMessage(messages.deleteConfirmTitle), kind: 'warning' },
-	)
+	const confirmed = await confirm(formatMessage(messages.deleteConfirmBody, { name: replay.name }), {
+		title: formatMessage(messages.deleteConfirmTitle),
+		kind: 'warning',
+	})
 	if (!confirmed) return
 	await deleteReplay(instance.value.id, replay.kind, replay.fileName).catch(handleError)
 	await refresh()

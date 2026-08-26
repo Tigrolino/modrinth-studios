@@ -93,6 +93,17 @@ const ACCENT_PROPERTIES = [
 	'--color-brand-highlight',
 	'--color-brand-shadow',
 	'--loading-bar-gradient',
+	// A lot of upstream UI (the home page's quick-play buttons, the "Beta"
+	// tag, server ping indicators, etc.) is styled with a literal "green"
+	// color rather than the semantic "brand" one — historically they were
+	// the same color, so nothing distinguished them. Overriding brand alone
+	// left large chunks of the UI stuck on the original green, which is the
+	// "accent color shows but not everywhere" issue. Overriding green too
+	// makes the accent consistent everywhere, at the cost of also recoloring
+	// a few things that are semantically "positive/success" rather than
+	// "brand" (e.g. that ping indicator will use the accent color too).
+	'--color-green',
+	'--color-green-highlight',
 ] as const
 
 function applyAccentVars() {
@@ -103,6 +114,8 @@ function applyAccentVars() {
 		root.setProperty('--color-brand', state.accentColor)
 		root.setProperty('--color-brand-highlight', hexToRgba(state.accentColor, 0.25))
 		root.setProperty('--color-brand-shadow', hexToRgba(state.accentColor, 0.7))
+		root.setProperty('--color-green', state.accentColor)
+		root.setProperty('--color-green-highlight', hexToRgba(state.accentColor, 0.25))
 		root.setProperty(
 			'--loading-bar-gradient',
 			`linear-gradient(to right, ${state.accentColor} 0%, ${state.accentColor} 100%)`,
@@ -136,23 +149,20 @@ function applyOverlayVar() {
 }
 
 // Surface transparency: when a custom background is active, let it show
-// through the app's normal opaque cards/panels too (not just the modal
-// background), reusing the same "modal opacity" slider so there's one
-// consistent transparency knob instead of a second one. This works by
-// reading each surface variable's current *computed* (theme) color once
-// per application and re-setting it as a color-mix() of that same color —
-// never as `var(--x)` referencing itself, which CSS treats as invalid.
-const SURFACE_PROPERTIES = [
-	'--color-raised-bg',
-	'--color-bg-secondary',
-	'--color-button-bg',
-	'--color-surface-1',
-	'--color-surface-2',
-	'--color-surface-3',
-	'--color-surface-4',
-	'--color-surface-5',
-	'--color-surface-6',
-] as const
+// through the app's biggest panel surfaces too (sidebars, the top bar),
+// not just the modal background, reusing the same "modal opacity" slider so
+// there's one consistent transparency knob instead of a second one. This
+// works by reading each surface variable's current *computed* (theme) color
+// once per application and re-setting it as a color-mix() of that same
+// color — never as `var(--x)` referencing itself, which CSS treats as
+// invalid.
+//
+// Deliberately limited to --color-raised-bg only. Earlier this also covered
+// --color-button-bg and --color-surface-1..6, but those back small
+// interactive elements and promo/news cards too — making those translucent
+// produced a washed-out, low-contrast "hazy" look on things like the Pride
+// fundraiser card rather than a clean see-through panel effect.
+const SURFACE_PROPERTIES = ['--color-raised-bg'] as const
 const surfaceOriginals = new Map<string, string>()
 
 function applySurfaceVars() {
@@ -213,10 +223,20 @@ export async function setStudioBackgroundImage(sourcePath: string) {
 	state.backgroundMode = 'image'
 }
 
+/** Copies `sourcePath` into the app's config dir (same reasoning as
+ * `setStudioBackgroundImage`: the webview can only load images from inside
+ * the asset-protocol scope, and the original file could be moved/deleted
+ * later) and applies it as both the running window/taskbar icon and the
+ * in-app title bar icon. */
 export async function setStudioWindowIcon(path: string | null) {
-	state.windowIconPath = path
 	if (path) {
+		const destPath = await invoke<string>('plugin:studio|studio_set_app_icon', {
+			sourcePath: path,
+		})
+		state.windowIconPath = destPath
 		await applyStudioWindowIcon()
+	} else {
+		state.windowIconPath = null
 	}
 }
 
@@ -250,6 +270,20 @@ watch(
 watch([() => state.backgroundMode, () => state.backgroundOverlay], applyOverlayVar)
 watch(() => state.modalOpacity, applyModalOpacityVar)
 watch([() => state.backgroundMode, () => state.modalOpacity], applySurfaceVars)
+// modalOpacity defaults to 100 (fully opaque), which is correct for popups
+// on their own — but it also meant switching on a custom background had no
+// visible transparency effect at all until you happened to go drag that
+// slider down. Nudge it down automatically, once, the first time a custom
+// background is turned on, so the effect is visible immediately. Only fires
+// if the user hasn't already touched the slider (still at the 100 default).
+watch(
+	() => state.backgroundMode,
+	(mode, previousMode) => {
+		if (mode !== 'default' && previousMode === 'default' && state.modalOpacity === 100) {
+			state.modalOpacity = 75
+		}
+	},
+)
 watch(state, schedulePersist, { deep: true })
 
 export function useStudioAppearance() {
