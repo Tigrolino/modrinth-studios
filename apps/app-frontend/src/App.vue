@@ -219,32 +219,11 @@ watch(
 		sidebarToggled.value = !toggleSidebar
 	},
 )
-// --- Modrinth Studios: hover-to-reveal sidebar toggle ---
-// The toggle button (and, when the sidebar is closed, a thin strip along the
-// right edge of the window) only need to be hovered to fade the button in,
-// instead of it sitting on screen permanently. The button and the edge strip
-// are two physically separate DOM regions, so moving the mouse from one to
-// the other briefly leaves both — without a small grace period the button
-// would hide itself again before the cursor ever reached it. `revealSidebarToggle`/
-// `scheduleHideSidebarToggle` add that grace period; clicking the edge strip
-// directly also just toggles the sidebar outright as a fallback so this
-// never depends on the hover handoff working perfectly.
-const studioSidebarToggleHovered = ref(false)
-let studioSidebarToggleHideTimeout = null
-function revealSidebarToggle() {
-	if (studioSidebarToggleHideTimeout) {
-		clearTimeout(studioSidebarToggleHideTimeout)
-		studioSidebarToggleHideTimeout = null
-	}
-	studioSidebarToggleHovered.value = true
-}
-function scheduleHideSidebarToggle() {
-	if (studioSidebarToggleHideTimeout) clearTimeout(studioSidebarToggleHideTimeout)
-	studioSidebarToggleHideTimeout = setTimeout(() => {
-		studioSidebarToggleHovered.value = false
-		studioSidebarToggleHideTimeout = null
-	}, 500)
-}
+// Modrinth Studios: the sidebar toggle button used to only fade in on
+// hover (plus a separate hover strip along the window edge when closed).
+// After several rounds it was still unreliable/unverifiable, so this was
+// simplified to a plain always-visible button — the same as stock Modrinth,
+// just defaulting to closed (see the studio migration in packages/app-lib).
 // --- end Modrinth Studios ---
 const forceSidebar = computed(
 	() =>
@@ -1956,14 +1935,8 @@ provideAppUpdateDownloadProgress(appUpdateDownload)
 					v-if="!forceSidebar && appSettings.toggleSidebar"
 					:type="sidebarToggled ? 'base' : 'quiet'"
 					:label="formatMessage(messages.nextImage)"
-					class="mr-3 transition-opacity duration-150"
-					:class="{
-						'rotate-180': !sidebarToggled,
-						'opacity-100': studioSidebarToggleHovered,
-						'opacity-0 focus-visible:opacity-100': !studioSidebarToggleHovered,
-					}"
-					@mouseenter="revealSidebarToggle"
-					@mouseleave="scheduleHideSidebarToggle"
+					class="mr-3"
+					:class="{ 'rotate-180': !sidebarToggled }"
 					@click="sidebarToggled = !sidebarToggled"
 				>
 					<RightArrowIcon />
@@ -1976,18 +1949,6 @@ provideAppUpdateDownloadProgress(appUpdateDownload)
 				<WindowControls />
 			</section>
 		</div>
-		<!-- Modrinth Studios: hovering the right edge while the sidebar is closed
-		     reveals the toggle button above, so you don't need a permanently
-		     visible affordance to know it's there. It's also directly
-		     clickable itself, so opening the sidebar never depends on the
-		     mouse successfully finding the (separate, tiny) header button. -->
-		<div
-			v-if="!forceSidebar && appSettings.toggleSidebar && !sidebarToggled"
-			class="studio-sidebar-edge-hover-zone"
-			@mouseenter="revealSidebarToggle"
-			@mouseleave="scheduleHideSidebarToggle"
-			@click="sidebarToggled = !sidebarToggled"
-		></div>
 	</div>
 	<div
 		v-if="stateInitialized"
@@ -2221,18 +2182,6 @@ provideAppUpdateDownloadProgress(appUpdateDownload)
 [data-tauri-drag-region-exclude] {
 	-webkit-app-region: no-drag;
 }
-
-// --- Modrinth Studios: sidebar hover-reveal edge zone ---
-.studio-sidebar-edge-hover-zone {
-	position: fixed;
-	top: var(--top-bar-height);
-	right: 0;
-	width: 20px;
-	height: calc(100vh - var(--top-bar-height));
-	z-index: 3;
-	cursor: pointer;
-}
-// --- end Modrinth Studios ---
 
 .app-contents {
 	position: absolute;
