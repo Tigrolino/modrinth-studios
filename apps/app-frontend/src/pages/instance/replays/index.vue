@@ -79,24 +79,44 @@
 					<div class="flex items-center gap-1 shrink-0">
 						<Button type="colored" color="brand" :disabled="launching" @click="launch(replay)">
 							<PlayIcon class="size-4" />
-							{{ formatMessage(messages.launch) }}
+							{{ formatMessage(commonMessages.playButton) }}
 						</Button>
-						<IconButton :label="formatMessage(messages.openFolder)" @click="openFolder(replay)">
-							<FolderOpenIcon />
-						</IconButton>
-						<IconButton
-							:label="formatMessage(commonMessages.renameButton)"
-							@click="startRename(replay)"
+						<TeleportOverflowMenu
+							type="quiet"
+							:label="formatMessage(messages.moreOptions)"
+							:options="[
+								{
+									id: 'open-folder',
+									label: formatMessage(messages.openFolder),
+									action: () => openFolder(replay),
+								},
+								{
+									id: 'rename',
+									label: formatMessage(commonMessages.renameButton),
+									action: () => startRename(replay),
+								},
+								{
+									id: 'delete',
+									label: formatMessage(commonMessages.deleteLabel),
+									tone: 'red',
+									action: () => promptDelete(replay),
+								},
+							]"
 						>
-							<EditIcon />
-						</IconButton>
-						<IconButton
-							:label="formatMessage(commonMessages.deleteLabel)"
-							class="hover:!text-brand-red"
-							@click="promptDelete(replay)"
-						>
-							<TrashIcon />
-						</IconButton>
+							<MoreVerticalIcon aria-hidden="true" />
+							<template #open-folder>
+								<FolderOpenIcon aria-hidden="true" />
+								{{ formatMessage(messages.openFolder) }}
+							</template>
+							<template #rename>
+								<EditIcon aria-hidden="true" />
+								{{ formatMessage(commonMessages.renameButton) }}
+							</template>
+							<template #delete>
+								<TrashIcon aria-hidden="true" />
+								{{ formatMessage(commonMessages.deleteLabel) }}
+							</template>
+						</TeleportOverflowMenu>
 					</div>
 				</div>
 			</div>
@@ -120,6 +140,7 @@
 import {
 	EditIcon,
 	FolderOpenIcon,
+	MoreVerticalIcon,
 	PlayIcon,
 	PlusIcon,
 	SearchIcon,
@@ -132,11 +153,11 @@ import {
 	commonMessages,
 	defineMessages,
 	EmptyState,
-	IconButton,
 	injectNotificationManager,
 	Input,
 	ReadyTransition,
 	TagItem,
+	TeleportOverflowMenu,
 	useFormatDateTime,
 	useReadyState,
 	useVIntl,
@@ -166,9 +187,9 @@ const messages = defineMessages({
 		id: 'app.instance.replays.adding',
 		defaultMessage: 'Adding...',
 	},
-	launch: {
-		id: 'app.instance.replays.launch',
-		defaultMessage: 'Launch',
+	moreOptions: {
+		id: 'app.instance.replays.more-options',
+		defaultMessage: 'More options',
 	},
 	openFolder: {
 		id: 'app.instance.replays.open-folder',
