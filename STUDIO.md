@@ -405,7 +405,7 @@ repo, so a personal token is needed instead:
 **3. Add it as a secret on the *private* (source) repo** — Settings → Secrets and variables →
 Actions → New repository secret:
 
-- Name: `RELEASES_REPO_TOKEN`
+- Name: `RELEASE_REPO_TOKEN`
 - Value: the token from step 2
 
 Plus the two secrets that were already required:

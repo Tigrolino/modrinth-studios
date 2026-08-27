@@ -20,7 +20,7 @@ name: Modrinth Studios release
 #     setting this up; ask for it again with `tauri signer generate` if lost
 #     — you'll also need to update the pubkey in tauri-release.conf.json).
 #   - Create the public releases-only repo and add a repo secret
-#     RELEASES_REPO_TOKEN (a token with write access to THAT repo — the
+#     RELEASE_REPO_TOKEN (a token with write access to THAT repo — the
 #     default GITHUB_TOKEN below is scoped only to this repo and can't
 #     publish anywhere else). See STUDIO.md for exact steps.
 
@@ -79,7 +79,7 @@ jobs:
           # This has to be a PAT with write access to the releases repo, not
           # the default secrets.GITHUB_TOKEN — that one is auto-scoped to
           # *this* repo only and can't create releases anywhere else.
-          GITHUB_TOKEN: ${{ secrets.RELEASES_REPO_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.RELEASE_REPO_TOKEN }}
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         with:
