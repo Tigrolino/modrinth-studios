@@ -11,7 +11,11 @@ import FloatingVue from 'floating-vue'
 import { createApp } from 'vue'
 
 import App from '@/App.vue'
-import { applyStudioAppearance, applyStudioWindowIcon } from '@/composables/use-studio-appearance'
+import {
+	applyStudioAppearance,
+	applyStudioWindowIcon,
+	initializeStudioBackgroundRotation,
+} from '@/composables/use-studio-appearance'
 import { overlayScrollbarsDirective } from '@/directives/overlayScrollbars'
 import i18nPlugin from '@/plugins/i18n'
 import i18nDebugPlugin from '@/plugins/i18n-debug'
@@ -21,6 +25,10 @@ import router from '@/routes'
 // opacity / window icon as early as possible.
 applyStudioAppearance()
 void applyStudioWindowIcon()
+// Separate from applyStudioAppearance() on purpose — that also re-runs on
+// things like a theme change, which must never count as a new "session" for
+// "once per session" background rotation. See the function's own comment.
+initializeStudioBackgroundRotation()
 
 const vueScan = new VueScanPlugin({
 	enabled: false, // Enable or disable the tracker

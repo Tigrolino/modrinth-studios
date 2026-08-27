@@ -22,6 +22,41 @@ const rootEl = ref<HTMLElement>()
 const svArea = ref<HTMLElement>()
 const hueTrack = ref<HTMLElement>()
 
+// Modrinth Studios addition: the popover used to always be `left: 0` (grow
+// rightward) and `top: calc(100% + 8px)` (grow downward) from the trigger,
+// with no awareness of the viewport at all — so a swatch sitting near the
+// right edge of the Settings window (the "Background" gradient's "To" swatch
+// especially, but really any of them depending on window width) would have
+// its 220px-wide popover run straight off the edge and get clipped. This
+// measures the trigger's actual position right when it opens and flips the
+// popover to grow from whichever side/direction actually has room, instead
+// of assuming there's always space to the right and below.
+const POPOVER_WIDTH = 220
+const POPOVER_HEIGHT_ESTIMATE = 260
+const POPOVER_MARGIN = 12
+const alignRight = ref(false)
+const placeAbove = ref(false)
+
+function updatePopoverPlacement() {
+	const el = rootEl.value
+	if (!el) return
+	const rect = el.getBoundingClientRect()
+
+	// Modrinth Studios addition: checking against the *window* was the bug —
+	// this lives inside the Settings modal's own scrollable panel
+	// (`.modal-body`), which is narrower than the window itself (it's
+	// centered with its own max-width). The popover could still be fully
+	// within the window's bounds while overflowing that narrower panel,
+	// which doesn't "clip" so much as make the panel itself gain a
+	// horizontal scrollbar to accommodate it. Bounding against the panel
+	// instead of the window is what actually matches what the user sees.
+	const boundsEl = (el.closest('.modal-body') as HTMLElement | null) ?? document.documentElement
+	const bounds = boundsEl.getBoundingClientRect()
+
+	alignRight.value = rect.left + POPOVER_WIDTH + POPOVER_MARGIN > bounds.right
+	placeAbove.value = rect.bottom + POPOVER_HEIGHT_ESTIMATE + POPOVER_MARGIN > bounds.bottom
+}
+
 // Hue 0-360, saturation/value 0-100. Kept separate from the hex model value
 // so dragging around the SV square / hue strip doesn't fight with rounding
 // error from repeatedly converting hex -> hsv -> hex.
@@ -175,6 +210,7 @@ function stopDragging() {
 
 function toggleOpen() {
 	open.value = !open.value
+	if (open.value) updatePopoverPlacement()
 }
 
 function onDocumentClick(event: MouseEvent) {
@@ -184,13 +220,19 @@ function onDocumentClick(event: MouseEvent) {
 	}
 }
 
+function onWindowResize() {
+	if (open.value) updatePopoverPlacement()
+}
+
 onMounted(() => {
 	document.addEventListener('pointerdown', onDocumentClick)
 	document.addEventListener('pointerup', stopDragging)
+	window.addEventListener('resize', onWindowResize)
 })
 onBeforeUnmount(() => {
 	document.removeEventListener('pointerdown', onDocumentClick)
 	document.removeEventListener('pointerup', stopDragging)
+	window.removeEventListener('resize', onWindowResize)
 })
 </script>
 
@@ -208,7 +250,14 @@ onBeforeUnmount(() => {
 			<span v-if="label" class="studio-color-swatch__label">{{ label }}</span>
 		</button>
 
-		<div v-if="open" class="studio-color-swatch__popover">
+		<div
+			v-if="open"
+			class="studio-color-swatch__popover"
+			:class="{
+				'studio-color-swatch__popover--right': alignRight,
+				'studio-color-swatch__popover--above': placeAbove,
+			}"
+		>
 			<div
 				ref="svArea"
 				class="studio-color-swatch__sv"
@@ -314,6 +363,18 @@ onBeforeUnmount(() => {
 	border: 1px solid var(--color-surface-5, var(--color-divider));
 	background-color: var(--color-raised-bg);
 	box-shadow: var(--shadow-floating, 0 8px 24px rgba(0, 0, 0, 0.4));
+}
+
+/* Modrinth Studios addition: flipped placement, toggled from script once the
+	trigger's actual position is known — see updatePopoverPlacement(). */
+.studio-color-swatch__popover--right {
+	left: auto;
+	right: 0;
+}
+
+.studio-color-swatch__popover--above {
+	top: auto;
+	bottom: calc(100% + 8px);
 }
 
 .studio-color-swatch__sv {

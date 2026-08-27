@@ -8,11 +8,21 @@ name: Modrinth Studios release
 # release with a `latest.json` that apps/app/tauri-release.conf.json points
 # the in-app updater at.
 #
+# The release is published to a SEPARATE PUBLIC repo (not this one) so
+# friends without GitHub access to this private repo can still download the
+# installer and the in-app updater can hit the release URLs unauthenticated
+# (GitHub doesn't support token auth on plain releases/download/... URLs, so
+# a private repo can't work here — see STUDIO.md for the full explanation).
+#
 # One-time setup (see STUDIO.md):
 #   - Add repo secrets TAURI_SIGNING_PRIVATE_KEY and
 #     TAURI_SIGNING_PRIVATE_KEY_PASSWORD (the keypair Claude generated when
 #     setting this up; ask for it again with `tauri signer generate` if lost
 #     — you'll also need to update the pubkey in tauri-release.conf.json).
+#   - Create the public releases-only repo and add a repo secret
+#     RELEASES_REPO_TOKEN (a token with write access to THAT repo — the
+#     default GITHUB_TOKEN below is scoped only to this repo and can't
+#     publish anywhere else). See STUDIO.md for exact steps.
 
 on:
   push:
@@ -66,16 +76,28 @@ jobs:
       - name: Build and publish
         uses: tauri-apps/tauri-action@v0
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # This has to be a PAT with write access to the releases repo, not
+          # the default secrets.GITHUB_TOKEN — that one is auto-scoped to
+          # *this* repo only and can't create releases anywhere else.
+          GITHUB_TOKEN: ${{ secrets.RELEASES_REPO_TOKEN }}
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         with:
           projectPath: apps/app
+          # Publish to the separate public releases-only repo instead of
+          # this (private) source repo — see the comment at the top of this
+          # file and STUDIO.md for why.
+          owner: speedzing
+          repo: modrinth-studios-releases
+          # The releases repo has no commit matching this tag (it's a
+          # different git history entirely), so tell the action which
+          # branch over there to hang the tag off of.
+          releaseCommitish: main
           tagName: ${{ github.ref_name }}
           releaseName: 'Modrinth Studios ${{ github.ref_name }}'
           releaseBody: |
-            Auto-built from ${{ github.sha }}. Friends running the app can update from
-            Settings once this release finishes publishing.
+            Auto-built from speedzing/modrinth-studios@${{ github.sha }}. Friends running the
+            app can update from Settings once this release finishes publishing.
           releaseDraft: false
           prerelease: false
           args: --config tauri-release.conf.json

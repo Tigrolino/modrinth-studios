@@ -384,7 +384,13 @@ fn main() {
                 // Modrinth Studios addition
                 "studio",
                 InlinedPlugin::new()
-                    .commands(&["studio_set_background_image", "studio_set_app_icon"])
+                    .commands(&[
+                        "studio_set_background_images",
+                        "studio_set_background_folder",
+                        "studio_set_background_videos",
+                        "studio_set_app_icon",
+                        "studio_set_splash_background",
+                    ])
                     .default_permission(
                         DefaultPermissionRule::AllowAllCommands,
                     ),
@@ -399,6 +405,19 @@ fn main() {
                         "replays_delete",
                         "replays_rename",
                         "replays_import",
+                        "replays_thumbnail",
+                    ])
+                    .default_permission(
+                        DefaultPermissionRule::AllowAllCommands,
+                    ),
+            )
+            .plugin(
+                // Modrinth Studios addition
+                "playtime-correction",
+                InlinedPlugin::new()
+                    .commands(&[
+                        "playtime_correction_get",
+                        "playtime_correction_set",
                     ])
                     .default_permission(
                         DefaultPermissionRule::AllowAllCommands,

@@ -174,6 +174,7 @@ import {
 	instanceHasReplaysQueryOptions,
 	instanceKeys,
 	instanceLinkedProjectQueryOptions,
+	instancePlaytimeCorrectionQueryOptions,
 	instanceProcessesQueryOptions,
 } from './query-options'
 import { createSharedInstanceContext, provideSharedInstance } from './shared-instance-context'
@@ -906,9 +907,24 @@ useAppEvent('process', (event) => {
 
 const icon = computed(() => getInstanceIconUrl(instance.value?.icon_path))
 
+// Modrinth Studios addition: manual playtime correction (see
+// PlaytimeCorrectionModal.vue / packages/app-lib/src/api/playtime_correction.rs).
+// Read through the same shared vue-query cache the settings modal writes to
+// on save, so this header total updates immediately when a correction is
+// set — without this, it only picked up the new value the next time the
+// instance page happened to remount.
+const playtimeCorrectionQuery = useQuery(
+	computed(() => ({
+		...instancePlaytimeCorrectionQueryOptions(instance.value?.id ?? ''),
+		enabled: !!instance.value?.id,
+	})),
+)
+
 const timePlayed = computed(() => {
 	return instance.value
-		? instance.value.recent_time_played + instance.value.submitted_time_played
+		? instance.value.recent_time_played +
+				instance.value.submitted_time_played +
+				(playtimeCorrectionQuery.data.value ?? 0)
 		: 0
 })
 

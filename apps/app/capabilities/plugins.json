@@ -115,6 +115,7 @@
 		"friends:default",
 		"replays:default",
 		"studio:default",
+		"playtime-correction:default",
 		"worlds:default"
 	]
 }

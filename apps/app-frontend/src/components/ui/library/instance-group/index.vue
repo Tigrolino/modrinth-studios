@@ -339,6 +339,38 @@ function stopInstanceGridResizeObserver() {
 	instanceGridResizeObserver?.disconnect()
 }
 
+// Modrinth Studios addition: this ResizeObserver (pre-existing — it drives
+// the accordion's open/close height animation) used to write to
+// `instanceGridHeight` — a reactive ref — on *every single* callback,
+// including every intermediate frame of a window drag-resize or our
+// sidebar's push animation. Each of those writes re-renders this component,
+// and the card grid below is a `<TransitionGroup>`, which re-measures every
+// tracked child's position on every one of this component's re-renders (not
+// just when the v-for list itself changes) and replays its `move-class`
+// transition toward wherever a child's position currently is. Since the
+// grid's responsive `auto-fill` columns really are shifting position
+// throughout an active resize, that kept re-triggering the move-transition
+// many times a second — each restart interrupting the last, which is the
+// "wobble" — on both the sidebar push *and* plain window resize (neither has
+// anything to do with the other; both just reflow this same grid).
+//
+// An earlier version of this fix tried to suppress just the `move-class`
+// itself while resizing, by swapping it to an empty string — that doesn't
+// actually work: Vue's TransitionGroup still runs its full FLIP cycle
+// (snapshotting a `transform` on each moved element and expecting a
+// `transitionend` to clean it back up) regardless of whether `move-class`
+// resolves to a real class, and `classList.add('')` on an empty class name
+// either no-ops or throws depending on the browser — either way there's
+// often no transition left to actually *end*, so the cleanup that removes
+// the class and clears the snapshot transform never runs, which can leave
+// cards stuck with a stale offset. Fixing it at the actual source instead:
+// only *commit* the measured height into the reactive ref once resizing has
+// gone quiet for a bit, so this component doesn't re-render — and
+// TransitionGroup doesn't re-measure anything — at all while a resize is
+// still actively happening. `move-class` goes back to being a plain,
+// unconditional string; there's nothing left for it to fight.
+let instanceGridResizeSettleTimeout: ReturnType<typeof setTimeout> | undefined
+
 function startInstanceGridResizeObserver() {
 	stopInstanceGridResizeObserver()
 	instanceGridHeight.value = undefined
@@ -351,14 +383,22 @@ function startInstanceGridResizeObserver() {
 		instanceGridHeight.value = gridContent.getBoundingClientRect().height
 		instanceGridResizeObserver = new ResizeObserver(() => {
 			if (!gridContent.isConnected) return
-			instanceGridHeight.value = gridContent.getBoundingClientRect().height
+			if (instanceGridResizeSettleTimeout) clearTimeout(instanceGridResizeSettleTimeout)
+			instanceGridResizeSettleTimeout = setTimeout(() => {
+				instanceGridResizeSettleTimeout = undefined
+				if (!gridContent.isConnected) return
+				instanceGridHeight.value = gridContent.getBoundingClientRect().height
+			}, 120)
 		})
 		instanceGridResizeObserver.observe(gridContent)
 	}, INSTANCE_GRID_OBSERVER_ACTIVATION_DELAY)
 }
 
 onActivated(startInstanceGridResizeObserver)
-onDeactivated(stopInstanceGridResizeObserver)
+onDeactivated(() => {
+	stopInstanceGridResizeObserver()
+	if (instanceGridResizeSettleTimeout) clearTimeout(instanceGridResizeSettleTimeout)
+})
 onMounted(startInstanceGridResizeObserver)
 </script>
 
@@ -480,9 +520,28 @@ onMounted(startInstanceGridResizeObserver)
 						tag="section"
 						class="grid min-h-[45px] w-full gap-3 overflow-y-auto scroll-smooth"
 						:class="
+							/*
+								Modrinth Studios addition: these used to be
+								`minmax(<min>,1fr)` — the `1fr` is what made every card
+								stretch to fill whatever space was left over in the row,
+								edge to edge. That stretching is continuous as the
+								container's width changes, so during any resize (window
+								drag or the sidebar push) cards were visibly growing
+								the whole time, then snapping smaller the instant the
+								grid fit one more column and had to redistribute the
+								row among more of them — nothing was animating/lagging
+								(the transition-all fix from before was real and still
+								correct, just not the whole story); this was the grid
+								doing exactly what `1fr` tells it to do. Dropping the
+								`1fr` pins every card to a fixed size — only the
+								*column count* changes on resize now, not each card's
+								own width, so there's nothing left to visibly grow.
+								Trade-off: rows can end with a bit of empty space on the
+								right instead of always filling edge to edge.
+							*/
 							compactMode
-								? 'grid-cols-[repeat(auto-fill,minmax(min(15rem,100%),1fr))]'
-								: 'grid-cols-[repeat(auto-fill,minmax(min(10rem,100%),1fr))] max-xl:grid-cols-[repeat(auto-fill,minmax(min(8rem,100%),1fr))]'
+								? 'grid-cols-[repeat(auto-fill,min(15rem,100%))]'
+								: 'grid-cols-[repeat(auto-fill,min(10rem,100%))] max-xl:grid-cols-[repeat(auto-fill,min(8rem,100%))]'
 						"
 						move-class="transition-transform duration-200 ease-out motion-reduce:transition-none"
 						enter-active-class="transition-[opacity,transform] duration-[150ms] ease-out motion-reduce:transition-none"

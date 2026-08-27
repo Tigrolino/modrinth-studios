@@ -19,6 +19,7 @@ pub fn init<R: Runtime>() -> tauri::plugin::TauriPlugin<R> {
             replays_delete,
             replays_rename,
             replays_import,
+            replays_thumbnail,
         ])
         .build()
 }
@@ -69,4 +70,17 @@ pub async fn replays_import(
     let instance = get_full_path(instance_id).await?;
     replays::import_replay(&instance, source_path).await?;
     Ok(())
+}
+
+/// Returns a `data:` URL for the replay's embedded thumbnail, or `None` if
+/// it doesn't have one. Deliberately separate from `replays_list` — see the
+/// comment on `get_replay_thumbnail` for why.
+#[tauri::command]
+pub async fn replays_thumbnail(
+    instance_id: &str,
+    kind: ReplayKind,
+    file_name: &str,
+) -> Result<Option<String>> {
+    let instance = get_full_path(instance_id).await?;
+    Ok(replays::get_replay_thumbnail(&instance, kind, file_name).await?)
 }

@@ -90,6 +90,7 @@ import PromotionWrapper from '@/components/ui/PromotionWrapper.vue'
 import QuickInstanceSwitcher from '@/components/ui/QuickInstanceSwitcher.vue'
 import SharedInstanceInviteHandler from '@/components/ui/shared-instances/shared-instance-invite-handler/index.vue'
 import SplashScreen from '@/components/ui/SplashScreen.vue'
+import StudioVideoBackground from '@/components/ui/StudioVideoBackground.vue'
 import SurveyPopup from '@/components/ui/SurveyPopup.vue'
 import WindowControls from '@/components/ui/WindowControls.vue'
 import { useCheckDisableMouseover } from '@/composables/macCssFix.js'
@@ -222,11 +223,31 @@ let credentialsRefreshId = 0
 // decoupled now: our own toggle starts closed and is controlled only by
 // this ref, independent of that account-synced setting.
 const sidebarToggled = ref(false)
-// Modrinth Studios: the sidebar toggle button used to only fade in on
-// hover (plus a separate hover strip along the window edge when closed).
-// After several rounds it was still unreliable/unverifiable, so this was
-// simplified to a plain always-visible button — the same as stock Modrinth,
-// just defaulting to closed (see the studio migration in packages/app-lib).
+// Modrinth Studios: hover-to-reveal toggle. The button fades in while the
+// sidebar is open (so it's always easy to find and close again) or while
+// hovering either the button's own corner or a thin invisible strip along
+// the right edge of the window (only present while closed, so it doesn't
+// sit on top of the sidebar itself once open). A short grace period on
+// `mouseleave` (instead of hiding immediately) is what makes moving the
+// mouse from the edge strip to the button itself feel reliable — the
+// earlier version of this hid instantly on leave, which made the button
+// disappear before the cursor actually reached it.
+const sidebarHovering = ref(false)
+let sidebarHoverLeaveTimeout = null
+function onSidebarHoverEnter() {
+	if (sidebarHoverLeaveTimeout) {
+		clearTimeout(sidebarHoverLeaveTimeout)
+		sidebarHoverLeaveTimeout = null
+	}
+	sidebarHovering.value = true
+}
+function onSidebarHoverLeave() {
+	if (sidebarHoverLeaveTimeout) clearTimeout(sidebarHoverLeaveTimeout)
+	sidebarHoverLeaveTimeout = setTimeout(() => {
+		sidebarHovering.value = false
+		sidebarHoverLeaveTimeout = null
+	}, 200)
+}
 // --- end Modrinth Studios ---
 const forceSidebar = computed(
 	() =>
@@ -235,6 +256,93 @@ const forceSidebar = computed(
 		route.path.startsWith('/user'),
 )
 const sidebarVisible = computed(() => sidebarToggled.value || forceSidebar.value)
+
+// Modrinth Studios addition: see the comment on `.sidebar-default-content--shown`
+// below in <style> for the full explanation. In short: replaces a pure-CSS
+// `:empty` check (which flashed the default "news" sidebar during route
+// transitions) with the same check, debounced so a momentary empty gap
+// doesn't count. NOTE: this alone isn't enough for pages like Browse, whose
+// filter sidebar populates from an API call *after* the page has already
+// mounted (Suspense/onSuspensePending only covers the page's own setup, not
+// that later fetch) — that gap can run well past any reasonable debounce.
+// The template's `!forceSidebar` check is what actually rules the news
+// panel out on those routes, unconditionally; this debounce just smooths
+// over genuinely-fast transitions on routes forceSidebar doesn't cover.
+const sidebarTeleportTargetEl = ref(null)
+const sidebarTeleportEmpty = ref(true)
+let sidebarTeleportEmptyTimeout = null
+let sidebarTeleportObserver = null
+let sidebarTeleportInitialized = false
+// While true, updateSidebarTeleportEmpty() (called by the MutationObserver
+// below whenever the teleport target's contents change) is ignored. Set by
+// onSuspensePending() the instant a page starts loading — the old page's
+// content gets torn down as part of that, which would otherwise look like
+// "genuinely empty" and start the reveal timer below mid-navigation. Only
+// onSuspenseResolve() is allowed to clear it, once the new page has actually
+// finished mounting (and teleporting its own sidebar content, if it has any).
+let sidebarTeleportSuppressed = false
+
+function suppressSidebarTeleportEmpty() {
+	sidebarTeleportSuppressed = true
+	if (sidebarTeleportEmptyTimeout) {
+		clearTimeout(sidebarTeleportEmptyTimeout)
+		sidebarTeleportEmptyTimeout = null
+	}
+	sidebarTeleportEmpty.value = false
+}
+
+function updateSidebarTeleportEmpty() {
+	if (sidebarTeleportSuppressed) return
+
+	const empty = !sidebarTeleportTargetEl.value || sidebarTeleportTargetEl.value.childElementCount === 0
+
+	if (sidebarTeleportEmptyTimeout) {
+		clearTimeout(sidebarTeleportEmptyTimeout)
+		sidebarTeleportEmptyTimeout = null
+	}
+
+	if (!sidebarTeleportInitialized) {
+		// Reflect the true initial state immediately — only debounce
+		// *later* transitions, so the very first render (before any route
+		// transition has had a chance to cause a flash) isn't delayed.
+		sidebarTeleportInitialized = true
+		sidebarTeleportEmpty.value = empty
+		return
+	}
+
+	if (empty) {
+		sidebarTeleportEmptyTimeout = setTimeout(() => {
+			sidebarTeleportEmpty.value = true
+		}, 200)
+	} else {
+		// Hide the default content the instant real content shows up —
+		// only the "becoming empty" direction needs debouncing.
+		sidebarTeleportEmpty.value = false
+	}
+}
+
+// Watching the template ref (rather than onMounted) matters here: the
+// element this is attached to only exists once `stateInitialized` flips to
+// true elsewhere in the template (it's behind a `v-if`), which happens
+// after this component's own onMounted has already fired.
+watch(
+	sidebarTeleportTargetEl,
+	(el) => {
+		sidebarTeleportObserver?.disconnect()
+		sidebarTeleportObserver = null
+		if (!el) return
+		updateSidebarTeleportEmpty()
+		sidebarTeleportObserver = new MutationObserver(updateSidebarTeleportEmpty)
+		sidebarTeleportObserver.observe(el, { childList: true })
+	},
+	{ immediate: true },
+)
+
+onUnmounted(() => {
+	sidebarTeleportObserver?.disconnect()
+	if (sidebarTeleportEmptyTimeout) clearTimeout(sidebarTeleportEmptyTimeout)
+	if (sidebarHoverLeaveTimeout) clearTimeout(sidebarHoverLeaveTimeout)
+})
 const hostingRouteActive = computed(() => route.path.startsWith('/hosting'))
 const hostingUpdateRequired = computed(
 	() =>
@@ -825,6 +933,16 @@ function onSuspensePending() {
 	suspensePending = true
 	if (suspenseToken) loading.end(suspenseToken)
 	suspenseToken = loading.begin()
+	// Modrinth Studios addition: a new page is loading and hasn't mounted
+	// yet, so the old page's teleported sidebar content is gone and the new
+	// page's hasn't arrived. A fixed debounce (see updateSidebarTeleportEmpty)
+	// only covers fast/synchronous swaps — a page with an async setup (e.g.
+	// one that fetches data before it can render, like Discover) can stay
+	// "pending" far longer than that, which was showing the default news
+	// panel for the whole loading period. Suppress it unconditionally for as
+	// long as Suspense says a page is actually loading, however long that
+	// takes, instead of guessing a timeout.
+	suppressSidebarTeleportEmpty()
 }
 
 function onSuspenseResolve() {
@@ -836,6 +954,13 @@ function onSuspenseResolve() {
 		loading.end(routerToken)
 		routerToken = null
 	}
+	// The new page has mounted now, so re-check for real: if it teleported
+	// its own sidebar content, this is a no-op (content's already there,
+	// captured by the MutationObserver); if it doesn't use a sidebar at all,
+	// clearing the suppression is what actually allows the default news
+	// panel to show again.
+	sidebarTeleportSuppressed = false
+	updateSidebarTeleportEmpty()
 }
 
 const queryClient = useQueryClient()
@@ -1739,6 +1864,7 @@ provideAppUpdateDownloadProgress(appUpdateDownload)
 
 <template>
 	<SplashScreen v-if="!stateFailed" ref="splashScreen" data-tauri-drag-region />
+	<StudioVideoBackground />
 	<div id="teleports"></div>
 	<div
 		v-if="stateInitialized"
@@ -1934,16 +2060,6 @@ provideAppUpdateDownloadProgress(appUpdateDownload)
 				<Breadcrumbs />
 			</div>
 			<section data-tauri-drag-region class="flex shrink-0 ml-auto items-center">
-				<IconButton
-					v-if="!forceSidebar"
-					:type="sidebarToggled ? 'base' : 'quiet'"
-					:label="formatMessage(messages.nextImage)"
-					class="mr-3"
-					:class="{ 'rotate-180': !sidebarToggled }"
-					@click="sidebarToggled = !sidebarToggled"
-				>
-					<RightArrowIcon />
-				</IconButton>
 				<div class="flex mr-3">
 					<Suspense>
 						<AppActionBar />
@@ -1961,6 +2077,30 @@ provideAppUpdateDownloadProgress(appUpdateDownload)
 			'disable-advanced-rendering': !appTheme.advancedRendering,
 		}"
 	>
+		<!-- Modrinth Studios addition: the sidebar's toggle control — a small
+			tab that peeks out from whatever the current content/sidebar
+			boundary is (the window's right edge when closed, the sidebar's
+			own left edge once open) and only fully appears on hover. The
+			outer zone is a wider invisible hover target so the tab is easy to
+			find without having to land a pixel-precise hover on the sliver
+			that's actually visible at rest. -->
+		<div
+			v-if="!forceSidebar"
+			class="sidebar-edge-zone"
+			:class="{ 'sidebar-edge-zone--open': sidebarVisible }"
+			@mouseenter="onSidebarHoverEnter"
+			@mouseleave="onSidebarHoverLeave"
+		>
+			<button
+				type="button"
+				class="sidebar-edge-tab"
+				:class="{ 'sidebar-edge-tab--shown': sidebarHovering || sidebarVisible }"
+				:aria-label="formatMessage(messages.nextImage)"
+				@click="sidebarToggled = !sidebarToggled"
+			>
+				<RightArrowIcon :class="{ 'rotate-180': !sidebarToggled }" />
+			</button>
+		</div>
 		<div class="app-viewport flex-grow router-view">
 			<SurveyPopup />
 			<div
@@ -2031,8 +2171,18 @@ provideAppUpdateDownloadProgress(appUpdateDownload)
 					@login-minecraft="accounts?.login()"
 					@login-modrinth="signIn"
 				/>
-				<div id="sidebar-teleport-target" class="sidebar-teleport-content"></div>
-				<div class="sidebar-default-content" :class="{ 'sidebar-enabled': sidebarVisible }">
+				<div
+					id="sidebar-teleport-target"
+					ref="sidebarTeleportTargetEl"
+					class="sidebar-teleport-content"
+				></div>
+				<div
+					class="sidebar-default-content"
+					:class="{
+						'sidebar-enabled': sidebarVisible,
+						'sidebar-default-content--shown': sidebarTeleportEmpty && !forceSidebar,
+					}"
+				>
 					<div
 						v-show="hasLoggedIntoMinecraft"
 						class="p-4 border-0 border-b-[1px] border-[--brand-gradient-border] border-solid"
@@ -2199,7 +2349,13 @@ provideAppUpdateDownloadProgress(appUpdateDownload)
 
 	display: grid;
 	grid-template-columns: 1fr 0px;
-	// transition: grid-template-columns 0.4s ease-in-out;
+
+	// Modrinth Studios addition: smooth sidebar open/close. Uses a slight
+	// overshoot-free "ease-out" feel rather than a linear one, matching the
+	// app's other panel transitions.
+	@media (prefers-reduced-motion: no-preference) {
+		transition: grid-template-columns 0.32s cubic-bezier(0.16, 1, 0.3, 1);
+	}
 
 	&.sidebar-enabled {
 		grid-template-columns: 1fr 300px;
@@ -2267,11 +2423,84 @@ provideAppUpdateDownloadProgress(appUpdateDownload)
 }
 
 .app-viewport {
-	flex-grow: 1;
+	width: 100%;
 	height: 100%;
 	overflow: auto;
 	overflow-x: hidden;
 	scrollbar-gutter: stable;
+}
+
+// Modrinth Studios addition: the sidebar toggle. `.sidebar-edge-zone` is a
+// wide-ish invisible hover target that always sits right at the current
+// content/sidebar boundary (0 when closed, 300px in once open — the same
+// 0.32s easing as the sidebar's own push, so the whole zone rides along
+// with that edge instead of snapping). `.sidebar-edge-tab` is the actual
+// small visible handle inside it, anchored to the zone's outer edge so it
+// pokes out right at that boundary; it stays hidden (faded + slid off) until
+// the zone is hovered, or permanently shown while the sidebar is open so
+// there's always an obvious way to close it again.
+.sidebar-edge-zone {
+	position: absolute;
+	top: 0;
+	bottom: 0;
+	right: 0;
+	width: 28px;
+	z-index: 6;
+	display: flex;
+	align-items: center;
+	justify-content: flex-end;
+
+	@media (prefers-reduced-motion: no-preference) {
+		transition: right 0.32s cubic-bezier(0.16, 1, 0.3, 1);
+	}
+
+	&.sidebar-edge-zone--open {
+		right: 300px;
+	}
+}
+
+.sidebar-edge-tab {
+	appearance: none;
+	border: none;
+	margin: 0;
+	padding: 0;
+	cursor: pointer;
+	width: 20px;
+	height: 56px;
+	border-radius: var(--radius-md) 0 0 var(--radius-md);
+	background-color: var(--color-raised-bg);
+	box-shadow: -2px 0 8px rgba(0, 0, 0, 0.15);
+	color: var(--color-secondary);
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	opacity: 0;
+	transform: translateX(100%);
+	pointer-events: none;
+
+	@media (prefers-reduced-motion: no-preference) {
+		transition:
+			opacity 0.15s ease,
+			transform 0.15s ease,
+			background-color 0.15s ease,
+			color 0.15s ease;
+	}
+
+	&:hover {
+		background-color: var(--color-button-bg);
+		color: var(--color-contrast);
+	}
+
+	svg {
+		width: 14px;
+		height: 14px;
+	}
+
+	&.sidebar-edge-tab--shown {
+		opacity: 1;
+		transform: translateX(0);
+		pointer-events: auto;
+	}
 }
 
 .app-contents::before {
@@ -2298,7 +2527,21 @@ provideAppUpdateDownloadProgress(appUpdateDownload)
 	display: none;
 }
 
-.sidebar-teleport-content:empty + .sidebar-default-content.sidebar-enabled {
+/* Modrinth Studios addition: this used to be `.sidebar-teleport-content:empty
+ * + .sidebar-default-content.sidebar-enabled { display: contents }` — pure
+ * CSS reacting to the teleport target being empty. Problem: navigating
+ * between two pages that both populate the sidebar (e.g. Browse -> a
+ * project page) unmounts the old page's teleported content before the new
+ * page mounts and teleports its own, so the target is briefly, genuinely
+ * empty mid-navigation. On most pages that gap is a single frame, handled
+ * by the `sidebarTeleportEmpty` debounce in <script setup>. On Browse
+ * specifically, the filter sidebar populates from an API call that can take
+ * a while — the gap is neither brief nor a fixed length, so this class also
+ * requires `!forceSidebar` (see the template): on Browse/project/user
+ * routes, this default "news" panel is ruled out unconditionally, and the
+ * sidebar is just left blank until the real content teleports in, rather
+ * than showing unrelated content while it loads. */
+.sidebar-default-content--shown.sidebar-enabled {
 	display: contents;
 }
 

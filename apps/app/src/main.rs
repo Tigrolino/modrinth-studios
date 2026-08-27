@@ -263,6 +263,7 @@ fn main() {
         .plugin(api::ads::init())
         .plugin(api::friends::init())
         // Modrinth Studios additions
+        .plugin(api::playtime_correction::init())
         .plugin(api::replays::init())
         .plugin(api::studio::init())
         .plugin(api::worlds::init())

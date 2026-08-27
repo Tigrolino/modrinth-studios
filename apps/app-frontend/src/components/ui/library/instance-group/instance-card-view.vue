@@ -25,8 +25,25 @@ const versionRef = ref<HTMLElement | null>(null)
 </script>
 
 <template>
+	<!-- Modrinth Studios addition: this used to be `transition-all`, which
+		(as its name says) transitions *every* animatable property that
+		changes on this element — including its own `width`, since that's set
+		by the grid's responsive `auto-fill`/`minmax` column sizing in the
+		parent, not by us. During any resize (window drag *or* the sidebar's
+		push animation), that width is changing continuously, many times a
+		second — so the card's actual rendered box was perpetually chasing a
+		150ms-lagged, constantly-moving target instead of just tracking the
+		grid directly, which is exactly what reads as a springy "jiggle"
+		rather than a clean resize. This was never about Vue re-rendering or
+		the TransitionGroup move animation at all (two earlier, wrong guesses
+		at this same bug) — narrowing the transition to only the properties
+		that are actually meant to animate here (hover/selection color,
+		border, brightness, and the click/drag scale transform) leaves the
+		card's layout box itself untouched by any transition, so it just
+		tracks the grid's real size instantly, same as every other element on
+		the page. -->
 	<div
-		class="relative flex w-full min-w-0 select-none overflow-clip border border-solid bg-surface-3 text-left transition-all"
+		class="relative flex w-full min-w-0 select-none overflow-clip border border-solid bg-surface-3 text-left transition-[color,background-color,border-color,filter,transform] duration-150 ease-in-out"
 		:class="{
 			'flex-row items-center justify-start gap-2.5 rounded-xl p-2.5': compactMode,
 			'flex-col items-start justify-end gap-3 rounded-[20px] p-3': !compactMode,
