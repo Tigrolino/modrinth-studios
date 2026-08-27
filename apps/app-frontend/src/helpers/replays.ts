@@ -19,6 +19,8 @@ export interface Replay {
 	minecraftVersion?: string | null
 	serverName?: string | null
 	singleplayer?: boolean | null
+	/** Flashback-only — see the comment on `Replay::world_name` in replays.rs. */
+	worldName?: string | null
 }
 
 export async function hasReplays(instanceId: string): Promise<boolean> {
@@ -53,4 +55,17 @@ export async function renameReplay(
 
 export async function importReplay(instanceId: string, sourcePath: string): Promise<void> {
 	return await invoke('plugin:replays|replays_import', { instanceId, sourcePath })
+}
+
+/**
+ * Lazily fetches a replay's embedded thumbnail as a `data:` URL. Not
+ * included on `Replay` from `listReplays` — see the comment on
+ * `get_replay_thumbnail` in replays.rs for why this is a separate call.
+ */
+export async function getReplayThumbnail(
+	instanceId: string,
+	kind: ReplayKind,
+	fileName: string,
+): Promise<string | null> {
+	return await invoke('plugin:replays|replays_thumbnail', { instanceId, kind, fileName })
 }

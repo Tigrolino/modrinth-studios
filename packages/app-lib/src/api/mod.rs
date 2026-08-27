@@ -11,6 +11,8 @@ pub mod minecraft_skins;
 pub mod mr_auth;
 pub mod onboarding_checklist;
 pub mod pack;
+// Modrinth Studios addition, see packages/app-lib/src/api/playtime_correction.rs
+pub mod playtime_correction;
 pub mod process;
 // Modrinth Studios addition, see packages/app-lib/src/api/replays.rs
 pub mod replays;

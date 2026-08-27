@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import {
+	ClockIcon,
 	CopyIcon,
 	EditIcon,
 	PaletteIcon,
@@ -17,18 +18,20 @@ import {
 	TeleportOverflowMenu,
 	useVIntl,
 } from '@modrinth/ui'
-import { useQueryClient } from '@tanstack/vue-query'
+import { useQuery, useQueryClient } from '@tanstack/vue-query'
 import { open } from '@tauri-apps/plugin-dialog'
 import { computed, type Ref, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 
 import IconEditorModal from '@/components/ui/instance_settings/icon-editor-modal/index.vue'
+import PlaytimeCorrectionModal from '@/components/ui/instance_settings/PlaytimeCorrectionModal.vue'
 import ConfirmDeleteInstanceModal from '@/components/ui/modal/ConfirmDeleteInstanceModal.vue'
 import { trackEvent } from '@/helpers/analytics'
 import { install_duplicate_instance } from '@/helpers/install'
 import { edit, edit_icon, getInstanceIconUrl, remove } from '@/helpers/instance'
 import type { GameInstance, InstanceIconConfig } from '@/helpers/types'
 
+import { instancePlaytimeCorrectionQueryOptions } from '../../query-options'
 import { injectInstanceSettings } from './instance-settings-context'
 
 const { handleError } = injectNotificationManager()
@@ -38,8 +41,40 @@ const queryClient = useQueryClient()
 
 const deleteConfirmModal = ref()
 const iconEditorModal = ref<InstanceType<typeof IconEditorModal> | null>(null)
+const playtimeCorrectionModal = ref<InstanceType<typeof PlaytimeCorrectionModal> | null>(null)
 
 const { instance } = injectInstanceSettings()
+
+// Modrinth Studios addition: manual playtime correction (see
+// PlaytimeCorrectionModal.vue). Kept as a separate value from
+// `submitted_time_played`/`recent_time_played` — the real Modrinth-tracked
+// total — and only combined with it for display. Read through the shared
+// vue-query cache (rather than fetching independently) so saving a new value
+// in the modal updates this display immediately, instead of only on the next
+// time this component happens to mount.
+const playtimeCorrectionQuery = useQuery(
+	computed(() => instancePlaytimeCorrectionQueryOptions(instance.value.id)),
+)
+const correctionSeconds = computed(() => playtimeCorrectionQuery.data.value ?? 0)
+
+const modrinthPlaytimeSeconds = computed(
+	() => instance.value.recent_time_played + instance.value.submitted_time_played,
+)
+
+function formatTotalPlaytime(seconds: number): string {
+	const totalMinutes = Math.floor(seconds / 60)
+	const hours = Math.floor(totalMinutes / 60)
+	const minutes = totalMinutes % 60
+	if (hours <= 0 && minutes <= 0) return '0h'
+	return minutes > 0 ? `${hours}h ${minutes}m` : `${hours}h`
+}
+
+function formatCorrection(seconds: number): string {
+	const hours = Math.round((seconds / 3600) * 10) / 10
+	if (hours === 0) return '0h'
+	return hours > 0 ? `+${hours}h` : `${hours}h`
+}
+
 type ReleaseChannel = GameInstance['update_channel']
 const releaseChannelOptions: ReleaseChannel[] = ['release', 'beta', 'alpha']
 
@@ -289,6 +324,27 @@ const messages = defineMessages({
 		id: 'instance.settings.tabs.general.deleting.button',
 		defaultMessage: 'Deleting...',
 	},
+	playtimeCorrectionHeading: {
+		id: 'instance.settings.tabs.general.playtime-correction.heading',
+		defaultMessage: 'Playtime correction',
+	},
+	playtimeCorrectionSectionDescription: {
+		id: 'instance.settings.tabs.general.playtime-correction.section-description',
+		defaultMessage:
+			"Credit hours from another launcher (like Prism) that Modrinth never tracked. Kept separate from Modrinth's own count, and only added to it for display.",
+	},
+	modrinthPlaytime: {
+		id: 'instance.settings.tabs.general.playtime-correction.modrinth-playtime',
+		defaultMessage: 'Modrinth playtime: {hours}',
+	},
+	correctedPlaytime: {
+		id: 'instance.settings.tabs.general.playtime-correction.corrected-playtime',
+		defaultMessage: 'Corrected playtime: {hours}',
+	},
+	playtimeCorrectionButton: {
+		id: 'instance.settings.tabs.general.playtime-correction.button',
+		defaultMessage: 'Playtime correction',
+	},
 })
 </script>
 
@@ -304,6 +360,7 @@ const messages = defineMessages({
 		:config="iconConfig"
 		@saved="onGeneratedIconSaved"
 	/>
+	<PlaytimeCorrectionModal ref="playtimeCorrectionModal" :instance-id="instance.id" />
 	<div class="block">
 		<div class="float-end ml-10 relative group w-fit">
 			<div class="flex flex-col gap-1">
@@ -408,6 +465,26 @@ const messages = defineMessages({
 			/>
 			<p class="m-0">
 				{{ formatReleaseChannelDescription(selectedReleaseChannel) }}
+			</p>
+		</div>
+
+		<div class="flex flex-col gap-2.5 mt-6">
+			<h2 class="m-0 text-lg font-semibold text-contrast block">
+				{{ formatMessage(messages.playtimeCorrectionHeading) }}
+			</h2>
+			<div class="flex flex-col gap-0.5 text-sm text-secondary">
+				<span>
+					{{ formatMessage(messages.modrinthPlaytime, { hours: formatTotalPlaytime(modrinthPlaytimeSeconds) }) }}
+				</span>
+				<span>
+					{{ formatMessage(messages.correctedPlaytime, { hours: formatCorrection(correctionSeconds) }) }}
+				</span>
+			</div>
+			<Button type="outlined" class="w-fit" @click="playtimeCorrectionModal?.show()">
+				<ClockIcon /> {{ formatMessage(messages.playtimeCorrectionButton) }}
+			</Button>
+			<p class="m-0">
+				{{ formatMessage(messages.playtimeCorrectionSectionDescription) }}
 			</p>
 		</div>
 

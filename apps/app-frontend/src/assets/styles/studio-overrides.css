@@ -21,17 +21,30 @@
 	 * no visible effect. Instead, stack a second background-image layer (a
 	 * flat-color gradient acting as a tint) on top of the real one; layers
 	 * listed first paint on top. This also doubles as a "darken the image"
-	 * control, since tinting toward the app's (dark-themed) background color
-	 * naturally dims it. */
+	 * control. Blends toward pure `black`, not `var(--color-bg)` — the app's
+	 * own dark-theme background is dark but usually isn't literal black, which
+	 * capped how dark this could ever get; some images still looked "kinda
+	 * bright" even with the slider maxed out. Blending toward true black
+	 * instead means 100% overlay always reaches an actually fully-black,
+	 * completely-obscured image, regardless of how dark the current theme's
+	 * background color happens to be. */
 	background-image:
 		linear-gradient(
-			color-mix(in srgb, var(--color-bg) calc(var(--studio-bg-overlay-alpha, 0) * 100%), transparent),
-			color-mix(in srgb, var(--color-bg) calc(var(--studio-bg-overlay-alpha, 0) * 100%), transparent)
+			color-mix(in srgb, black calc(var(--studio-bg-overlay-alpha, 0) * 100%), transparent),
+			color-mix(in srgb, black calc(var(--studio-bg-overlay-alpha, 0) * 100%), transparent)
 		),
 		var(--studio-bg-image, none) !important;
 	background-size: cover !important;
 	background-position: center !important;
-	background-color: var(--color-bg) !important;
+	/* Modrinth Studios addition: transparent while Video mode is active
+	 * (see --studio-app-bg-color in use-studio-appearance.ts's
+	 * applyBackgroundVars()), so the real <video> element fixed behind the
+	 * whole app (StudioVideoBackground.vue) shows through — a CSS
+	 * background-image can't play video, so that's the only way to get
+	 * actual video pixels here. The darken/tint overlay gradient above still
+	 * paints on top regardless, since it's stacked as its own layer above
+	 * this background-color. */
+	background-color: var(--studio-app-bg-color, var(--color-bg)) !important;
 }
 
 .modal-body {
@@ -74,6 +87,80 @@ svg.avatar,
 .modal-body,
 .xterm-viewport {
 	backdrop-filter: var(--studio-glass-blur, none) !important;
+}
+
+/* TabbedModal.vue's tab "badge" (e.g. Settings' Language tab shows a "Beta"
+ * pill) is styled with `bg-brand-highlight text-brand-green` — an
+ * accent-tied background (--color-brand-highlight) mixed with a literal
+ * green text color (--color-green). That means with "keep update buttons
+ * green" on, this unrelated badge stayed stuck green even though its
+ * background was already following the accent color. Force the text to
+ * follow the accent too, regardless of that toggle — --color-brand is
+ * always accent-tied (see ACCENT_PROPERTIES), unlike --color-green which
+ * `preserveUpdateGreen` can opt out of.
+ *
+ * `--studio-accent-safe-text` (falls back to --color-brand when unset) is
+ * what actually keeps this readable: colored text over a translucent tint of
+ * that same color reads fine for any normal accent, but not for one dark
+ * enough to double as text — see the comment above ACCENT_PROPERTIES in
+ * use-studio-appearance.ts for the full reasoning. */
+.bg-brand-highlight.text-brand-green {
+	color: var(--studio-accent-safe-text, var(--color-brand)) !important;
+}
+
+/* Combobox.vue (used for dropdowns like the Browse page's "Sort by") marks
+ * its selected option with hardcoded `bg-highlight-green`/`text-green`
+ * classes — a literal green, independent of `preserveUpdateGreen` (same
+ * category of issue as the Beta badge above: a "this is selected" indicator
+ * that happens to reuse the semantic green color, not something actually
+ * tied to updates). Scoped to Combobox's own dropdown list
+ * (`.combobox-options-scrollbar`, unique to this component) rather than
+ * overriding `bg-highlight-green`/`text-green` everywhere — those classes
+ * are also used for unrelated things elsewhere (Tabs.vue's active tab,
+ * ServerPing.vue's online indicator, etc.) that should keep their own
+ * behavior. */
+.combobox-options-scrollbar .bg-highlight-green {
+	background-color: var(--color-brand-highlight) !important;
+}
+.combobox-options-scrollbar .text-green {
+	color: var(--studio-accent-safe-text, var(--color-brand)) !important;
+}
+
+/* Tabs.vue (the filter/category pill row on Browse/Discover, e.g. "All /
+ * Mods / Resource Packs") marks its active tab the exact same way as
+ * Combobox above — `bg-highlight-green`/`text-green`, a translucent tint
+ * with literal-green text/icon on top — and breaks the same way once the
+ * accent is dark enough to double as invisible text. Scoped to
+ * `[role="tablist"]`, the ARIA role Tabs.vue's own root always has, rather
+ * than a dedicated class, since this component doesn't have one of its own
+ * to hook. */
+[role='tablist'] .text-green {
+	color: var(--studio-accent-safe-text, var(--color-brand)) !important;
+}
+
+/* Toggle.vue's "on" thumb is hardcoded to `bg-black/90` — a reasonable
+ * default when the track (`bg-brand`) is a normal, usually-bright accent
+ * color, but that hardcoded black becomes an invisible black-on-black thumb
+ * once the accent itself is dark. Only takes effect in that case (falls back
+ * to the original black otherwise, via the same --studio-accent-safe-text
+ * pattern as everywhere else on this page). */
+button[role='switch'].bg-brand span.bg-black\/90 {
+	background-color: var(--studio-accent-safe-text, rgba(0, 0, 0, 0.9)) !important;
+}
+
+/* Modrinth Studios addition: while a custom background is active, the color
+ * theme is force-locked to Dark (see applyThemeLock() in
+ * use-studio-appearance.ts) — light/oled/retro were never going to render
+ * correctly with translucent, custom-background-aware surfaces, since the
+ * surface-darkening/tint math and light theme's own solid-selected-state
+ * colors actively fight each other. Rather than leave a picker up that leads
+ * to a broken result, hide the whole "Color theme" section (title,
+ * description, swatches, and the sync-across-devices toggle all live in the
+ * same <section> in packages/ui's appearance-settings layout.vue) while
+ * `studio-theme-locked` is set on <html>. `:has()` lets this target that
+ * section from the outside without editing the shared package. */
+html.studio-theme-locked section:has(.theme-options) {
+	display: none !important;
 }
 
 /* The Logs tab (BaseTerminal.vue) renders via xterm.js onto its own canvas,

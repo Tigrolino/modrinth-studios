@@ -3,6 +3,7 @@ import { queryOptions } from '@tanstack/vue-query'
 import { get_project_v3 } from '@/helpers/cache.js'
 import { get as getInstance } from '@/helpers/instance'
 import { loadInstanceContentData } from '@/helpers/instance-content'
+import { getPlaytimeCorrection } from '@/helpers/playtime-correction'
 import { get_by_instance_id } from '@/helpers/process'
 import { hasReplays, listReplays } from '@/helpers/replays'
 import { refreshWorlds } from '@/helpers/worlds'
@@ -26,6 +27,7 @@ export const instanceKeys = {
 	// Modrinth Studios addition
 	replays: (instanceId: string) => ['replays', instanceId] as const,
 	hasReplays: (instanceId: string) => ['replays-exist', instanceId] as const,
+	playtimeCorrection: (instanceId: string) => ['playtime-correction', instanceId] as const,
 	linkedProject: (projectId: string) => ['project', 'v3', projectId] as const,
 	sharedEligibility: (userId: string | null | undefined) =>
 		['shared-instance-eligibility', userId] as const,
@@ -98,5 +100,19 @@ export function instanceReplaysQueryOptions(instanceId: string) {
 		queryKey: instanceKeys.replays(instanceId),
 		queryFn: () => listReplays(instanceId),
 		staleTime: 0,
+	})
+}
+
+// Modrinth Studios addition. A shared vue-query cache entry (rather than each
+// component fetching independently) so saving a correction in
+// PlaytimeCorrectionModal.vue can push the new value straight into every
+// place that shows it (the settings page and the instance header's playtime
+// badge) via `setQueryData`, instead of each one only refreshing on its own
+// next mount.
+export function instancePlaytimeCorrectionQueryOptions(instanceId: string) {
+	return queryOptions({
+		queryKey: instanceKeys.playtimeCorrection(instanceId),
+		queryFn: () => getPlaytimeCorrection(instanceId),
+		staleTime: 30_000,
 	})
 }

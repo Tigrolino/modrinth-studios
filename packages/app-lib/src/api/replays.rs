@@ -60,6 +60,13 @@ pub struct Replay {
     pub minecraft_version: Option<String>,
     pub server_name: Option<String>,
     pub singleplayer: Option<bool>,
+    /// Flashback-only. Flashback's `metadata.json` (see its `FlashbackMeta`
+    /// class) has no `serverName`/`singleplayer` fields at all — it never
+    /// records that distinction — so guessing one from the other fields used
+    /// to be flat-out wrong. `world_name` is the actual field it does write
+    /// (the recorded world/server's display name), so surface that verbatim
+    /// instead of pretending we know singleplayer/multiplayer status.
+    pub world_name: Option<String>,
 }
 
 /// Cheap existence check so the frontend can decide whether to show the
@@ -136,6 +143,7 @@ pub async fn list_replays(instance: &Path) -> Result<Vec<Replay>> {
                 minecraft_version: None,
                 server_name: None,
                 singleplayer: None,
+                world_name: None,
             };
 
             entries.push((path, replay));
@@ -196,6 +204,13 @@ fn apply_metadata_json(replay: &mut Replay, bytes: &[u8]) {
         return;
     };
 
+    // `duration`/`date`/`mcversion`/`serverName`/`customServerName`/
+    // `singleplayer` below are ReplayMod-only — confirmed against
+    // ReplayStudio's `ReplayMetaData.java` (the library ReplayMod itself is
+    // built on). Flashback's `metadata.json` (confirmed against its own
+    // `FlashbackMeta.java`) never has any of these; it uses `world_name`
+    // instead (handled separately below), so these all naturally stay `None`
+    // for Flashback replays rather than being guessed.
     if let Some(duration) = value.get("duration").and_then(|v| v.as_u64()) {
         replay.duration_ms = Some(duration);
     }
@@ -230,6 +245,99 @@ fn apply_metadata_json(replay: &mut Replay, bytes: &[u8]) {
             replay.name = name.to_string();
         }
     }
+
+    // Flashback-only fields (see FlashbackMeta.java's toJson()).
+    if let Some(world_name) = value.get("world_name").and_then(|v| v.as_str()) {
+        if !world_name.is_empty() {
+            replay.world_name = Some(world_name.to_string());
+        }
+    }
+    if replay.duration_ms.is_none() {
+        if let Some(total_ticks) = value.get("total_ticks").and_then(|v| v.as_u64()) {
+            // Flashback stores tick count, not a millisecond duration. This
+            // assumes a steady 20 ticks/sec, which is the normal case but
+            // won't be exactly right if the recording was ever paused or the
+            // game's tick rate was altered mid-recording — an approximation,
+            // not the same guarantee ReplayMod's own `duration` field gives.
+            replay.duration_ms = Some(total_ticks * 50);
+        }
+    }
+}
+
+/// Reads whichever thumbnail entry the replay's zip actually has, returning
+/// raw image bytes plus a best-guess MIME type. Both formats are confirmed
+/// against their respective mods' own source:
+///   - Flashback (`ReplayExporter.java`) embeds `icon.png` on a
+///     best-effort basis (only written if the recorder captured one).
+///   - ReplayMod (`AbstractReplayFile.java`) writes `thumb.jpg`; very old
+///     replays may instead have a legacy `thumb` entry, optionally prefixed
+///     with a short "magic number" header that must be stripped first.
+fn read_zip_thumbnail(
+    path: &Path,
+    kind: ReplayKind,
+) -> std::io::Result<Option<(Vec<u8>, &'static str)>> {
+    let file = std::fs::File::open(path)?;
+    let mut archive = zip::ZipArchive::new(file).map_err(|e| {
+        std::io::Error::new(std::io::ErrorKind::InvalidData, e)
+    })?;
+
+    match kind {
+        ReplayKind::Flashback => {
+            if let Ok(mut entry) = archive.by_name("icon.png") {
+                let mut buf = Vec::new();
+                entry.read_to_end(&mut buf)?;
+                return Ok(Some((buf, "image/png")));
+            }
+        }
+        ReplayKind::ReplayMod => {
+            if let Ok(mut entry) = archive.by_name("thumb.jpg") {
+                let mut buf = Vec::new();
+                entry.read_to_end(&mut buf)?;
+                return Ok(Some((buf, "image/jpeg")));
+            }
+            if let Ok(mut entry) = archive.by_name("thumb") {
+                let mut buf = Vec::new();
+                entry.read_to_end(&mut buf)?;
+                // Legacy entries may be prefixed with a 7-byte Fibonacci
+                // "magic number" header (0,1,1,2,3,5,8) — strip it if present.
+                const MAGIC: [u8; 7] = [0, 1, 1, 2, 3, 5, 8];
+                if buf.starts_with(&MAGIC) {
+                    buf.drain(..MAGIC.len());
+                }
+                return Ok(Some((buf, "image/jpeg")));
+            }
+        }
+    }
+
+    Ok(None)
+}
+
+/// Lazily fetches one replay's thumbnail as a data URL, rather than bundling
+/// image bytes into every entry from `list_replays` — with hundreds of
+/// replays, eagerly decoding + shipping every thumbnail up front would bring
+/// back the exact loading-time problem the metadata-only bulk load was built
+/// to avoid. The frontend calls this per-row once it's actually rendered.
+pub async fn get_replay_thumbnail(
+    instance: &Path,
+    kind: ReplayKind,
+    file_name: &str,
+) -> Result<Option<String>> {
+    let path = safe_join(&kind.folder(instance), file_name)?;
+    let result =
+        tokio::task::spawn_blocking(move || read_zip_thumbnail(&path, kind))
+            .await
+            .map_err(|e| {
+                ErrorKind::OtherError(format!("thumbnail task panicked: {e}"))
+            })?
+            .ok();
+
+    Ok(result.flatten().map(|(bytes, mime)| {
+        use base64::Engine;
+        format!(
+            "data:{mime};base64,{}",
+            base64::engine::general_purpose::STANDARD.encode(bytes)
+        )
+    }))
 }
 
 pub async fn delete_replay(

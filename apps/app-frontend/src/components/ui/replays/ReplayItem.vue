@@ -15,11 +15,13 @@ import {
 	useFormatDateTime,
 	useVIntl,
 } from '@modrinth/ui'
+import { onMounted, ref } from 'vue'
 
-import type { Replay } from '@/helpers/replays'
+import { getReplayThumbnail, type Replay } from '@/helpers/replays'
 
 const props = defineProps<{
 	replay: Replay
+	instanceId: string
 }>()
 
 const emit = defineEmits<{
@@ -30,6 +32,23 @@ const emit = defineEmits<{
 
 const { formatMessage } = useVIntl()
 const formatDateTime = useFormatDateTime({ timeStyle: 'short', dateStyle: 'medium' })
+
+// Modrinth Studios addition: fetched lazily per-row instead of coming back
+// with the rest of the replay's fields from `listReplays` — see the comment
+// on `get_replay_thumbnail` in replays.rs for why bundling image bytes into
+// that bulk call isn't a good idea with hundreds of replays. `undefined`
+// while loading (shows the fallback icon), `null` once confirmed the replay
+// has no embedded thumbnail (also shows the fallback icon, just without
+// retrying), a data: URL once loaded.
+const thumbnail = ref<string | null | undefined>(undefined)
+
+onMounted(async () => {
+	thumbnail.value = await getReplayThumbnail(
+		props.instanceId,
+		props.replay.kind,
+		props.replay.fileName,
+	).catch(() => null)
+})
 
 const messages = defineMessages({
 	moreOptions: {
@@ -77,14 +96,22 @@ function formatFileSize(bytes: number): string {
 		class="clickable-card grid grid-cols-[auto_minmax(0,3fr)_minmax(0,4fr)_auto] items-center gap-2 p-3 bg-bg-raised border border-solid border-surface-4 rounded-[20px] transition-[filter] ease-out min-h-20"
 	>
 		<div
-			class="flex items-center justify-center size-12 shrink-0 !rounded-[14px]"
+			class="flex items-center justify-center size-12 shrink-0 overflow-hidden !rounded-[14px]"
 			:class="
-				replay.kind === 'flashback'
-					? 'bg-[color-mix(in_srgb,var(--color-purple)_18%,transparent)] text-purple'
-					: 'bg-brand-highlight text-brand'
+				thumbnail
+					? 'bg-surface-4'
+					: replay.kind === 'flashback'
+						? 'bg-[color-mix(in_srgb,var(--color-purple)_18%,transparent)] text-purple'
+						: 'bg-brand-highlight text-brand'
 			"
 		>
-			<VideoIcon class="size-6" />
+			<img
+				v-if="thumbnail"
+				:src="thumbnail"
+				alt=""
+				class="size-full object-cover"
+			/>
+			<VideoIcon v-else class="size-6" />
 		</div>
 		<div class="flex flex-col justify-center gap-0.5 h-full min-w-0">
 			<div class="flex items-center gap-1.5">
@@ -105,19 +132,40 @@ function formatFileSize(bytes: number): string {
 			</div>
 		</div>
 		<div class="font-semibold flex items-center gap-1 justify-center text-center text-secondary">
-			<span class="truncate">
-				{{
-					replay.serverName ??
-					(replay.singleplayer !== false
-						? formatMessage(messages.singleplayer)
-						: formatMessage(messages.multiplayer))
-				}}
-			</span>
-			<template v-if="replay.durationMs">
+			<!--
+				Modrinth Studios: this used to default to "Singleplayer" any time
+				`replay.singleplayer` wasn't explicitly `false` — which included
+				`undefined`/`null`, i.e. every replay whose metadata just didn't
+				have that field at all. That was *always* the case for Flashback
+				replays: confirmed against Flashback's own `FlashbackMeta.java`,
+				its metadata.json has no `singleplayer`/`serverName` fields at
+				all — it never records that distinction, it's not just sometimes
+				missing. So "unknown" was rendering as "confirmed singleplayer"
+				for every single Flashback replay, which is exactly backwards for
+				anyone who mostly plays on servers.
+
+				What Flashback's metadata does have is `world_name` (the
+				recorded world/server's own display name) — show that instead of
+				guessing. For ReplayMod, `serverName`/`singleplayer` are real,
+				confirmed fields (via ReplayStudio's `ReplayMetaData.java`), so
+				that guess is legitimate there and is kept as a fallback.
+			-->
+			<template v-if="replay.serverName || replay.worldName || typeof replay.singleplayer === 'boolean'">
+				<span class="truncate">
+					{{
+						replay.serverName ??
+						replay.worldName ??
+						(replay.singleplayer
+							? formatMessage(messages.singleplayer)
+							: formatMessage(messages.multiplayer))
+					}}
+				</span>
 				<BulletDivider />
-				<span class="shrink-0 font-normal">{{ formatDuration(replay.durationMs) }}</span>
 			</template>
-			<BulletDivider />
+			<template v-if="replay.durationMs">
+				<span class="shrink-0 font-normal">{{ formatDuration(replay.durationMs) }}</span>
+				<BulletDivider />
+			</template>
 			<span class="shrink-0 font-normal">{{ formatFileSize(replay.size) }}</span>
 		</div>
 		<div class="flex gap-1 justify-end">

@@ -33,6 +33,7 @@
 					v-for="replay in filteredReplays"
 					:key="`${replay.kind}-${replay.fileName}`"
 					:replay="replay"
+					:instance-id="instance.id"
 					@open-folder="openFolder(replay)"
 					@rename="startRename(replay)"
 					@delete="promptDelete(replay)"
@@ -139,7 +140,8 @@ const filteredReplays = computed(() => {
 		(replay) =>
 			replay.name.toLowerCase().includes(query) ||
 			replay.fileName.toLowerCase().includes(query) ||
-			(replay.serverName?.toLowerCase().includes(query) ?? false),
+			(replay.serverName?.toLowerCase().includes(query) ?? false) ||
+			(replay.worldName?.toLowerCase().includes(query) ?? false),
 	)
 })
 
