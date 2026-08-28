@@ -134,6 +134,29 @@ fn parse_server_address_inner(
     Ok((host, port.unwrap_or(25565)))
 }
 
+// Modrinth Studios addition: SIMULTANEOUS_DNS_QUERIES is a single global
+// semaphore shared by every server ping the app ever makes (recently-played
+// cards on Home, the Worlds tab, adding/editing a server, etc.), for the
+// entire lifetime of the process. hickory-resolver's default TokioResolver
+// does carry its own per-query timeout in the common case, but that's an
+// upstream implementation detail we don't control, not a guarantee — some
+// network conditions (captive portals, certain VPN/firewall setups that
+// silently swallow outbound UDP rather than rejecting it) can make a DNS
+// query hang far past whatever the resolver's internal retry logic assumes.
+// Before this fix, a single such hang would hold one of only 24 permits
+// FOREVER (the `_permit` guard only ever drops once the function it's
+// borrowed into returns, and a hung `.await` never returns). Repeat that on
+// the same flaky server enough times — e.g. periodically re-pinging a
+// recently-played server from the Home page over a long play session — and
+// the semaphore eventually reaches zero free permits, at which point *every*
+// server ping anywhere in the app (not just the original flaky one) blocks
+// forever waiting for a permit that will never come back, with no way out
+// short of restarting the app. Wrapping the lookup itself in a hard timeout,
+// mirroring the exact pattern `util/server_ping.rs`'s SERVER_STATUS_TIMEOUT
+// already uses for the ping itself, guarantees the permit is always released
+// within a bounded time no matter how badly the network misbehaves.
+const DNS_LOOKUP_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(5);
+
 pub async fn resolve_server_address(
     host: &str,
     port: u16,
@@ -149,23 +172,32 @@ pub async fn resolve_server_address(
 
     let _permit = SIMULTANEOUS_DNS_QUERIES.acquire().await?;
     let resolver = hickory_resolver::TokioResolver::builder_tokio()?.build();
-    Ok(
-        match resolver.srv_lookup(format!("_minecraft._tcp.{host}")).await {
-            Err(e)
-                if e.proto()
-                    .as_ref()
-                    .is_some_and(|x| x.kind().is_no_records_found()) =>
-            {
-                None
-            }
-            Err(e) => return Err(e.into()),
-            Ok(lookup) => lookup
-                .into_iter()
-                .next()
-                .map(|r| (r.target().to_string(), r.port())),
-        }
-        .unwrap_or_else(|| (host.to_owned(), port)),
+    let lookup_result = tokio::time::timeout(
+        DNS_LOOKUP_TIMEOUT,
+        resolver.srv_lookup(format!("_minecraft._tcp.{host}")),
     )
+    .await;
+    Ok(match lookup_result {
+        // Timed out — treat the same as "no SRV record found" below: fall
+        // back to the address the user actually entered rather than
+        // propagating an error for what's a fairly routine occurrence (some
+        // networks are just slow/flaky), while still always releasing the
+        // permit above on the way out.
+        Err(_timed_out) => None,
+        Ok(Err(e))
+            if e.proto()
+                .as_ref()
+                .is_some_and(|x| x.kind().is_no_records_found()) =>
+        {
+            None
+        }
+        Ok(Err(e)) => return Err(e.into()),
+        Ok(Ok(lookup)) => lookup
+            .into_iter()
+            .next()
+            .map(|r| (r.target().to_string(), r.port())),
+    }
+    .unwrap_or_else(|| (host.to_owned(), port)))
 }
 
 #[cfg(test)]
