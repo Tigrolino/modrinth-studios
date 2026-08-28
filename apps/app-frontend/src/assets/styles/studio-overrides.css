@@ -165,10 +165,29 @@ html.studio-theme-locked section:has(.theme-options) {
 
 /* The Logs tab (BaseTerminal.vue) renders via xterm.js onto its own canvas,
  * which paints an opaque background completely independent of any of the
- * CSS above — see the comment on buildTerminalTheme() in
- * packages/ui/src/composables/terminal.ts for why that canvas is now told to
- * paint a transparent background instead, letting `.xterm-viewport`'s own
- * (already correctly translucent, via --surface-2 in SURFACE_PROPERTIES)
- * CSS background-color show through underneath it. Only one terminal is
- * ever on screen at a time, so it's safe to blur directly like the sidebar
- * and modals, unlike the long content lists above. */
+ * CSS above. `.xterm-viewport`'s own background-color (translucent, via
+ * --surface-2 in SURFACE_PROPERTIES) and the backdrop-filter blur below it
+ * both work correctly on their own — the blur here is why a custom
+ * background looks soft/frosted behind the terminal's edges and scrollbar
+ * gutter. Only one terminal is ever on screen at a time, so it's safe to
+ * blur directly like the sidebar and modals, unlike the long content lists
+ * above.
+ *
+ * That's the backdrop, though — it doesn't make what xterm actually paints
+ * see-through. xterm's theme-color parser hard-rejects any non-fully-opaque
+ * color (confirmed by reading its bundled source — see the comment on
+ * buildTerminalTheme() in packages/ui/src/composables/terminal.ts for the
+ * exact mechanism), so there's no way to get a translucent fill out of xterm
+ * itself. Fading `.xterm-screen` — the element xterm paints all its canvas
+ * layers into — with a plain CSS `opacity` instead achieves the same visual
+ * result from the outside: the whole rendered terminal (background fill and
+ * text together, as one flat unit) blends with the blurred backdrop behind
+ * it. This is genuinely how every other translucent terminal (Windows
+ * Terminal, iTerm2, etc.) handles this same limitation, not a shortcut
+ * unique to this fork. Scoped to `.studio-theme-locked` (set on <html>
+ * exactly when a custom background is active — see applyThemeLock() in
+ * use-studio-appearance.ts) so the terminal stays fully opaque, exactly as
+ * before, in the default look. */
+html.studio-theme-locked .xterm-screen {
+	opacity: 0.75;
+}

@@ -290,6 +290,27 @@ Then tag + push a release (see below) so everyone's app picks it up.
       see-through instead. If a similar long, densely-repeated list gets this treatment in the
       future, give it the same exception rather than adding it to the blur selector list in
       `studio-overrides.css`.
+    - **The Logs tab (BaseTerminal.vue) needed a genuinely different fix from every other surface
+      here**, because it doesn't render through CSS at all — it's xterm.js painting onto its own
+      `<canvas>`. `.xterm-viewport`'s CSS background-color and backdrop-filter blur (both wired up
+      the same way as everything else above) work fine on their own, but an earlier attempt to also
+      make xterm's own canvas paint a see-through background — passing the literal string
+      `'transparent'` as its theme color — silently did nothing, and stayed that way through a
+      second look before the actual mechanism was found: reading the bundled `@xterm/xterm` source
+      directly turned up its theme-color parser (`css.toColor`), which draws every theme color onto
+      a scratch canvas and explicitly **throws** unless the alpha it reads back is exactly 255 — it
+      hard-rejects any non-fully-opaque color, including the word `'transparent'` itself (which
+      doesn't appear anywhere in xterm's source at all) and any `rgba()`/`#rrggbbaa` with partial
+      alpha. There is no way to get xterm's own canvas fill to be genuinely translucent. The actual
+      fix: keep xterm's theme background a plain opaque hex (`buildTerminalTheme()` in
+      `packages/ui/src/composables/terminal.ts`), and instead fade `.xterm-screen` — the element
+      xterm paints all of its canvas layers into — with a flat CSS `opacity: 0.75` while a custom
+      background is active (`html.studio-theme-locked .xterm-screen` in `studio-overrides.css`).
+      That blends the whole rendered terminal, background fill and text together as one unit, over
+      `.xterm-viewport`'s already-blurred backdrop sitting behind it — the same approach every other
+      translucent terminal (Windows Terminal, iTerm2, etc.) uses for this exact limitation, not a
+      shortcut unique to this fork. One consequence worth knowing: text is very slightly translucent
+      too as a result, same trade-off those apps make.
   - "Darken/tint strength" (`backgroundOverlay`, on the image/gradient itself, separate from
     surface darkness above) blends toward pure `black`, not `var(--color-bg)` — the app's own
     dark-theme background is dark but usually not literal black, which used to cap how dark the
