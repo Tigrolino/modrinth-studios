@@ -1145,28 +1145,50 @@ async fn linked_modpack_ids_for_instance(
     Ok(linked_modpack_ids(&link))
 }
 
+// Modrinth Studios addition: some launchers (observed from Prism Launcher
+// imports) can leave `ManagedPackID`/`ManagedPackVersionID` present in an
+// instance's config but blank — e.g. `ManagedPackID=` with nothing after the
+// `=` — rather than omitting the keys entirely. That deserializes to
+// `Some("")`, not `None`, so every branch below used to treat it exactly like
+// a real link and try to look up a project with an empty ID, which always
+// "succeeds" at parsing but never finds a project — surfacing to the user as
+// a permanent "Linked modpack project  not found" error (note the blank
+// spot) on an otherwise perfectly fine imported instance, with no in-app way
+// to clear it. Filtering out blank IDs here, in the one place every
+// `InstanceLink` variant funnels through before a lookup is even attempted,
+// means an instance like that is correctly treated as having no modpack link
+// at all (same as if the keys had been absent), regardless of which import
+// path let the blank value through.
+fn non_empty(id: &str) -> Option<&str> {
+    let trimmed = id.trim();
+    if trimmed.is_empty() { None } else { Some(trimmed) }
+}
+
 fn linked_modpack_ids(link: &InstanceLink) -> Option<(String, String)> {
-    match link {
+    let (project_id, version_id) = match link {
         InstanceLink::ModrinthModpack {
             project_id,
             version_id,
-        } => Some((project_id.clone(), version_id.clone())),
+        } => (project_id.as_str(), version_id.as_str()),
         InstanceLink::ServerProjectModpack {
             content_project_id,
             content_version_id,
             ..
-        } => Some((content_project_id.clone(), content_version_id.clone())),
+        } => (content_project_id.as_str(), content_version_id.as_str()),
         InstanceLink::ImportedModpack {
             project_id: Some(project_id),
             version_id: Some(version_id),
             ..
-        } => Some((project_id.clone(), version_id.clone())),
+        } => (project_id.as_str(), version_id.as_str()),
         InstanceLink::SharedInstance {
             modpack_project_id: Some(project_id),
             modpack_version_id: Some(version_id),
-        } => Some((project_id.clone(), version_id.clone())),
-        _ => None,
-    }
+        } => (project_id.as_str(), version_id.as_str()),
+        _ => return None,
+    };
+    let project_id = non_empty(project_id)?;
+    let version_id = non_empty(version_id)?;
+    Some((project_id.to_string(), version_id.to_string()))
 }
 
 fn linked_modpack_source_kind(
