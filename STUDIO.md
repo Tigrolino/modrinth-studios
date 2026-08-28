@@ -311,6 +311,15 @@ Then tag + push a release (see below) so everyone's app picks it up.
       translucent terminal (Windows Terminal, iTerm2, etc.) uses for this exact limitation, not a
       shortcut unique to this fork. One consequence worth knowing: text is very slightly translucent
       too as a result, same trade-off those apps make.
+    - Even with all of the above wired up, the effect was barely visible in practice — the real
+      remaining culprit was double-layering. `BaseTerminal.vue`'s own outer frame (the rounded panel
+      around the whole Logs tab) is a plain `bg-surface-2` div, and `.xterm-viewport` — the element
+      actually carrying the translucent background + blur — sits nested *inside* it. Both resolved
+      to the same `--surface-2` color-mix(), so the background image was showing through two stacked
+      ~75%-opaque layers rather than one, compounding to roughly 94% opaque overall — visually almost
+      indistinguishable from fully solid. Fixed by giving that outer frame a dedicated
+      `studio-terminal-frame` class and zeroing out just its own background while a custom background
+      is active, leaving `.xterm-viewport`'s single layer to do the actual work.
   - "Darken/tint strength" (`backgroundOverlay`, on the image/gradient itself, separate from
     surface darkness above) blends toward pure `black`, not `var(--color-bg)` — the app's own
     dark-theme background is dark but usually not literal black, which used to cap how dark the
