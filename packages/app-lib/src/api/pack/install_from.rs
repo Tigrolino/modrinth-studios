@@ -566,11 +566,29 @@ pub async fn set_instance_information(
     } else {
         None
     };
-    let pack_link = match (&description.project_id, &description.version_id) {
+    // Modrinth Studios addition: some launchers (observed importing from
+    // Prism) can supply a project/version ID that's present but blank (e.g.
+    // an empty `ManagedPackID=` in Prism's instance.cfg deserializes to
+    // `Some("")`, not `None`). Treating that as a real link produced an
+    // `InstanceLink::ModrinthModpack` pointing at an empty project ID, which
+    // permanently surfaced as an "Linked modpack project  not found" error
+    // any time the content list tried to resolve it — filtering blanks out
+    // here (falling through to the unmanaged/imported branches below, same
+    // as if the IDs had never been provided at all) stops that link from
+    // ever being created in the first place. See the matching guard in
+    // `list_content.rs`'s `linked_modpack_ids()` for the same fix applied to
+    // instances that were already imported with a blank link before this.
+    let non_blank = |s: &Option<String>| -> Option<String> {
+        s.as_deref().map(str::trim).filter(|s| !s.is_empty()).map(String::from)
+    };
+    let pack_link = match (
+        non_blank(&description.project_id),
+        non_blank(&description.version_id),
+    ) {
         (Some(project_id), Some(version_id)) => {
             Some(InstanceLink::ModrinthModpack {
-                project_id: project_id.clone(),
-                version_id: version_id.clone(),
+                project_id,
+                version_id,
             })
         }
         _ if description.source_filename.is_some() => {

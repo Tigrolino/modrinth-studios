@@ -371,6 +371,22 @@ Then tag + push a release (see below) so everyone's app picks it up.
     ships, capturing a Task Manager dump of the process at the time (Details tab → right-click
     `Modrinth Studio.exe` → Create dump file) before restarting would make the next investigation
     far more conclusive than static code reading alone.
+  - **Fixed a permanent "Linked modpack project  not found" error (note the blank spot) on
+    instances imported from Prism Launcher** — a known issue in stock Modrinth App too, not
+    something this fork introduced, but fixed here anyway since there's no reason to inherit it.
+    Prism's `instance.cfg` can have `ManagedPackID`/`ManagedPackVersionID` keys present but blank
+    (`ManagedPackID=` with nothing after the `=`), which deserializes to `Some("")`, not `None`.
+    Every place that checked "is there a linked modpack?" only tested `Some(...)`, so a blank ID
+    passed that check exactly like a real one and got turned into an
+    `InstanceLink::ModrinthModpack` pointing at an empty project ID — permanently, since there was
+    no in-app way to clear it, and every attempt to resolve it (for the Content tab, update checks,
+    etc.) correctly failed to find a project with an empty ID and surfaced this error forever after.
+    Fixed in two places: `api/pack/install_from.rs` now discards a blank project/version ID before
+    ever constructing the link (so new imports can't get into this state), and — more importantly for
+    anyone who already hit this — `state/instances/commands/list_content.rs`'s `linked_modpack_ids()`
+    (the single choke point every `InstanceLink` variant funnels through before a lookup is even
+    attempted) now treats a blank ID as "no link at all," which repairs existing already-imported
+    instances automatically on next launch, with no reimport needed.
 
 ## Releasing an update
 
