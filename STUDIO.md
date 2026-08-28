@@ -347,6 +347,30 @@ Then tag + push a release (see below) so everyone's app picks it up.
     alongside the normal accent vars in `use-studio-appearance.ts`) exists so a component like
     that can restore the accent with `.my-component.dark { --color-brand: var(--studio-brand-override, var(--color-green)); }`.
     See the comment above `SplashScreen.vue`'s `.splash-screen.dark` rule for the full story.
+  - **Fixed a whole-app freeze that only surfaced after long play sessions and needed a restart**
+    (`packages/app-lib/src/api/server_address.rs`, `resolve_server_address`). Every server ping the
+    app makes anywhere — recently-played cards on Home, the Worlds tab, adding/editing a server —
+    funnels through a single global `Semaphore::const_new(24)` that caps how many DNS lookups can be
+    in flight at once. The DNS lookup itself (`resolver.srv_lookup(...)`) had no timeout of its own,
+    only relying on hickory-resolver's internal default — which is usually fine, but isn't a hard
+    guarantee under every network condition (a captive portal or a VPN/firewall setup that silently
+    swallows outbound UDP rather than rejecting it can make a single query hang far longer than
+    that). A permit is only released once the `.await` holding it returns, so a lookup that hangs
+    forever leaks one of the 24 permits forever. Ping the same flaky server enough times over a long
+    session (e.g. it keeps showing up on Home and getting re-pinged) and the semaphore eventually
+    hits zero free permits — at which point *every* server ping anywhere in the app, not just the
+    original flaky one, blocks forever waiting for a permit that will never come back. Nothing else
+    in the app was found to depend on that same stuck resource, so this wouldn't necessarily freeze
+    unrelated UI on its own — but it's a real, unbounded resource leak that exactly matches "worked
+    fine for a while, then needed a restart," so it's fixed here regardless: the lookup is now
+    wrapped in the same `tokio::time::timeout` pattern `util/server_ping.rs`'s own
+    `SERVER_STATUS_TIMEOUT` already uses for the ping step, so the permit is always released within 5
+    seconds no matter how badly the network misbehaves, treating a timeout the same as "no SRV
+    record found" (fall back to the address as typed) rather than erroring. This was investigated
+    but not confirmed against an actual reproduction/crash dump — if a full freeze recurs after this
+    ships, capturing a Task Manager dump of the process at the time (Details tab → right-click
+    `Modrinth Studio.exe` → Create dump file) before restarting would make the next investigation
+    far more conclusive than static code reading alone.
 
 ## Releasing an update
 
