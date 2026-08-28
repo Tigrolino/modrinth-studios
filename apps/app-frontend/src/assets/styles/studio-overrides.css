@@ -191,3 +191,23 @@ html.studio-theme-locked section:has(.theme-options) {
 html.studio-theme-locked .xterm-screen {
 	opacity: 0.75;
 }
+
+/* Modrinth Studios addition: BaseTerminal.vue's own outer frame (the rounded
+ * panel around the whole Logs tab) is a plain `bg-surface-2` div, and
+ * `.xterm-viewport` — the element actually carrying the translucent
+ * background + blur above — sits nested INSIDE it. Both were resolving to
+ * the exact same `--surface-2` color-mix() value, so the background image
+ * was showing through two stacked ~75%-opaque layers rather than one,
+ * compounding to roughly 94% opaque overall (1 - 0.25 × 0.25) — visually
+ * almost indistinguishable from fully solid, which is why this still looked
+ * basically unchanged even with everything above wired up correctly. Zeroing
+ * out just the outer frame's own background while a custom background is
+ * active leaves `.xterm-viewport`'s single translucent, blurred layer as the
+ * only surface doing the work, matching how every other single-surface panel
+ * (sidebar, modals, cards) in this file looks. `studio-terminal-frame` is a
+ * dedicated class added specifically for this hook, rather than targeting
+ * `.bg-surface-2` directly, since that class is also used elsewhere (e.g.
+ * ContentCardTable's zebra-striped rows) where this override must not apply. */
+html.studio-theme-locked .studio-terminal-frame {
+	background-color: transparent !important;
+}
