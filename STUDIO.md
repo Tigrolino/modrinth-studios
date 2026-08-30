@@ -1379,6 +1379,28 @@ Then tag + push a release (see below) so everyone's app picks it up.
 4. Everyone running the app gets the update prompt automatically (Modrinth's built-in updater,
    pointed at `speedzing/modrinth-studios-releases` releases instead of Modrinth's own servers).
 
+### Windows update install mode
+
+`apps/app/tauri-release.conf.json`'s `plugins.updater.windows.installMode` controls how the NSIS
+installer runs when "Reload to update" installs the downloaded update on exit
+(`apps/app/src/main.rs`'s `RunEvent::Exit` handler calls `update.install(data)`, then `app.restart()`
+if the person asked to reload). This was `"quiet"` (fully invisible, no window at all) through
+0.1.4, and at least one person's "Reload to update" just closed the app with no relaunch and no
+error dialog — reinstalling the `.exe` manually fixed it. Nothing in the app's own logs pointed at
+why (see below), and a fully invisible installer with no UI at all is a known rough edge for NSIS
+quiet-mode installs on Windows (easy for it to fail silently, or for antivirus/SmartScreen to
+quietly interfere with a background process that never shows a window) — so this was changed to
+`"passive"`: still no clicking required, but it shows a small progress window while it runs, which
+both sidesteps that class of silent failure and makes a real failure visible instead of just
+vanishing. This only affects updates built *after* the change ships — it can't retroactively fix
+anyone already stuck on a version where "Reload to update" is dead; they still need to grab the
+latest installer manually and run it once.
+
+If it still fails, the launcher's own logs are the next thing to check —
+`%APPDATA%\ModrinthApp\launcher_logs\session_<timestamp>.log` (most recent one from before the
+failed update), search for `Pending update install`. `Ok` vs the exact error on `Err` narrows it
+down a lot faster than guessing.
+
 ### Why releases live in a separate public repo
 
 The source stays in this private repo, but release *artifacts* (the installer, `latest.json`,
