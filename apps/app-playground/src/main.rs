@@ -2,6 +2,15 @@
     all(not(debug_assertions), target_os = "windows"),
     windows_subsystem = "windows"
 )]
+// Modrinth Studios fix: this playground binary's main() awaits a long chain
+// of async calls in sequence, and the compiler's type-checker walks the
+// resulting nested Future type to compute its stack layout — deep enough
+// here to blow past rustc's default query-recursion limit ("queries
+// overflow the depth limit!") on at least one contributor's toolchain.
+// Bumping the limit just lets that one check go deeper; it's a compile-time
+// safeguard against runaway recursive queries, not a runtime limit, so this
+// has no effect on the actual app.
+#![recursion_limit = "256"]
 
 use enumset::EnumSet;
 use theseus::prelude::*;
