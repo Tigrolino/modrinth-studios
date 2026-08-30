@@ -19,6 +19,7 @@ import { previewSplashScreen } from '@/composables/use-splash-preview'
 import {
 	setStudioBackgroundFolder,
 	setStudioBackgroundImages,
+	setStudioBackgroundVideoFolder,
 	setStudioBackgroundVideos,
 	setStudioSplashBackground,
 	setStudioWindowIcon,
@@ -105,6 +106,12 @@ async function pickBackgroundVideos() {
 	const paths = Array.isArray(result) ? result : [result]
 	if (paths.length === 0) return
 	await setStudioBackgroundVideos(paths).catch(handleError)
+}
+
+async function pickBackgroundVideoFolder() {
+	const result = await open({ directory: true }).catch(() => null)
+	if (!result || typeof result !== 'string') return
+	await setStudioBackgroundVideoFolder(result).catch(handleError)
 }
 
 function rotationIntervalLabel(interval: StudioBackgroundRotationInterval): string {
@@ -199,6 +206,14 @@ async function resetAppIcon() {
 				<Toggle id="studio-preserve-update-green" v-model="state.preserveUpdateGreen" />
 			</div>
 
+			<div
+				v-if="state.accentColor && !state.windowIconPath"
+				class="flex items-center justify-between gap-4"
+			>
+				<h3 class="m-0 text-lg font-semibold text-contrast">Tint the app icon with the accent color</h3>
+				<Toggle id="studio-tint-icon-with-accent" v-model="state.tintDefaultIconWithAccent" />
+			</div>
+
 			<div>
 				<h3 class="m-0 text-lg font-semibold text-contrast">Background</h3>
 				<p v-if="state.backgroundMode !== 'default'" class="m-0 mb-2 text-sm text-secondary">
@@ -281,6 +296,7 @@ async function resetAppIcon() {
 				<div v-else-if="state.backgroundMode === 'video'" class="flex flex-col gap-3 mt-3">
 					<div class="flex items-center gap-2 flex-wrap">
 						<Button type="outlined" @click="pickBackgroundVideos">Choose video(s)...</Button>
+						<Button type="outlined" @click="pickBackgroundVideoFolder">Choose folder...</Button>
 						<span
 							v-if="state.backgroundVideoPaths.length === 1"
 							class="text-sm text-secondary truncate"
@@ -334,6 +350,17 @@ async function resetAppIcon() {
 				<h3 class="m-0 text-lg font-semibold text-contrast">Surface darkness</h3>
 				<div class="mt-3 max-w-sm">
 					<Slider v-model="state.surfaceDarkness" :min="0" :max="100" :step="5" unit="%" />
+				</div>
+			</div>
+
+			<div v-if="state.backgroundMode !== 'default'">
+				<h3 class="m-0 text-lg font-semibold text-contrast">Blur strength</h3>
+				<p class="m-0 mb-3 text-sm text-secondary">
+					The frosted-glass blur behind the sidebar, modals, and other panels. 0 turns it off for a
+					plain translucent look with no blur.
+				</p>
+				<div class="mt-3 max-w-sm">
+					<Slider v-model="state.glassBlurStrength" :min="0" :max="20" :step="1" unit="px" />
 				</div>
 			</div>
 

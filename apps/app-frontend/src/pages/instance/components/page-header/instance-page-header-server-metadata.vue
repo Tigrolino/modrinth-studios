@@ -20,12 +20,19 @@
 		>
 			{{ playtimeLabel }}
 		</PageHeaderMetadataItem>
+		<PageHeaderMetadataItem
+			v-if="showInstanceStorageUsage && storageSizeLabel"
+			:icon="DatabaseIcon"
+			tooltip="Storage used"
+		>
+			{{ storageSizeLabel }}
+		</PageHeaderMetadataItem>
 	</PageHeaderMetadata>
 </template>
 
 <script setup lang="ts">
 import type { Labrinth } from '@modrinth/api-client'
-import { TimerIcon } from '@modrinth/assets'
+import { DatabaseIcon, TimerIcon } from '@modrinth/assets'
 import {
 	PageHeaderMetadata,
 	PageHeaderMetadataItem,
@@ -42,5 +49,8 @@ defineProps<{
 	minecraftServer?: Labrinth.Projects.v3.Project['minecraft_server']
 	showInstancePlayTime?: boolean
 	playtimeLabel?: string
+	// Modrinth Studios addition, see StorageSettings.vue
+	showInstanceStorageUsage?: boolean
+	storageSizeLabel?: string
 }>()
 </script>

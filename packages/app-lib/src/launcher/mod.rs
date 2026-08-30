@@ -796,6 +796,12 @@ pub async fn launch_minecraft(
     post_exit_hook: Option<String>,
     context: &InstanceLaunchContext,
     mut quick_play_type: QuickPlayType,
+    // Modrinth Studios addition: lets a caller deliberately launch a second,
+    // independent process for an instance that's already running (see
+    // "Launch another instance" in the instance page's overflow menu) —
+    // the check right below this parameter's doc comment is the one that
+    // would otherwise always refuse a second launch.
+    allow_multiple: bool,
 ) -> crate::Result<ProcessMetadata> {
     let instance = &context.instance;
     let content_set = &context.applied_content_set;
@@ -926,13 +932,21 @@ pub async fn launch_minecraft(
 
     // Check if instance has a running process, and reject running the command if it does
     // Done late so a quick double call doesn't launch two instances
-    let existing_processes = process::get_by_instance_id(&instance.id).await?;
-    if let Some(process) = existing_processes.first() {
-        return Err(crate::ErrorKind::LauncherError(format!(
-            "Instance {} is already running as process {}",
-            instance.id, process.uuid
-        ))
-        .as_error());
+    //
+    // Modrinth Studios addition: `allow_multiple` bypasses this — set only by
+    // the deliberate "Launch another instance" action, never by the normal
+    // Play button (which still can't be double-clicked into launching twice
+    // by accident, exactly as this comment originally described).
+    if !allow_multiple {
+        let existing_processes =
+            process::get_by_instance_id(&instance.id).await?;
+        if let Some(process) = existing_processes.first() {
+            return Err(crate::ErrorKind::LauncherError(format!(
+                "Instance {} is already running as process {}",
+                instance.id, process.uuid
+            ))
+            .as_error());
+        }
     }
 
     let natives_dir = state.directories.version_natives_dir(&version_jar);
@@ -1121,9 +1135,22 @@ pub async fn launch_minecraft(
         }
     }
 
+    // Modrinth Studios addition: builds the full context (loader/version
+    // are already on hand here from the launch context, no need to look
+    // them back up) so the customizable Discord Rich Presence settings
+    // (`crate::api::discord_rpc`) can fill them into "Detailed"/"Custom"
+    // mode templates. See `state::discord::DiscordGuard::set_instance_activity`.
     let _ = state
         .discord_rpc
-        .set_activity(&format!("Playing {}", instance.name), true)
+        .set_instance_activity(
+            &crate::state::DiscordActivityContext {
+                instance_name: instance.name.clone(),
+                loader: content_set.loader.as_str().to_string(),
+                game_version: content_set.game_version.clone(),
+            },
+            Utc::now(),
+            true,
+        )
         .await;
 
     let _ = state

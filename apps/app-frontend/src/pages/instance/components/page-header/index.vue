@@ -34,6 +34,8 @@
 				:minecraft-server="minecraftServer"
 				:show-instance-play-time="showInstancePlayTime"
 				:playtime-label="playtimeLabel ?? formatMessage(messages.neverPlayed)"
+				:show-instance-storage-usage="showInstanceStorageUsage"
+				:storage-size-label="storageSizeLabel"
 			/>
 			<PageHeaderMetadata v-else>
 				<PageHeaderMetadataItem
@@ -49,6 +51,13 @@
 					tooltip="Total playtime"
 				>
 					{{ playtimeLabel }}
+				</PageHeaderMetadataItem>
+				<PageHeaderMetadataItem
+					v-if="showInstanceStorageUsage && storageSizeLabel"
+					:icon="DatabaseIcon"
+					tooltip="Storage used"
+				>
+					{{ storageSizeLabel }}
 				</PageHeaderMetadataItem>
 				<PageHeaderMetadataTimeItem
 					v-if="instance.last_played"
@@ -74,6 +83,19 @@
 				>
 					{{ formatMessage(commonMessages.installingLabel) }}
 				</Button>
+				<SplitButton
+					v-else-if="playing && processes.length > 1"
+					type="colored"
+					color="red"
+					size="xl"
+					:options="stopOptions"
+					:menu-label="formatMessage(messages.stopIndividual)"
+					:disabled="stopping"
+					@click="emit('stop')"
+				>
+					<StopCircleIcon />
+					{{ stopping ? formatMessage(messages.stopping) : formatMessage(messages.stopAll) }}
+				</SplitButton>
 				<Button
 					v-else-if="playing"
 					type="colored"
@@ -165,9 +187,11 @@
 import type { Labrinth } from '@modrinth/api-client'
 import {
 	ClockIcon,
+	DatabaseIcon,
 	DownloadIcon,
 	ExternalIcon,
 	FolderOpenIcon,
+	LayersIcon,
 	LockIcon,
 	MoreVerticalIcon,
 	PackageIcon,
@@ -193,6 +217,7 @@ import {
 	PageHeaderMetadataTimeItem,
 	type ServerLoader,
 	TagIcon,
+	useRelativeTime,
 	useVIntl,
 } from '@modrinth/ui'
 import { computed } from 'vue'
@@ -217,6 +242,24 @@ const messages = defineMessages({
 	launchInstance: {
 		id: 'instance.action.launch-instance',
 		defaultMessage: 'Launch instance',
+	},
+	// Modrinth Studios addition: launching the same instance a second time,
+	// see the multi-launch feature in layout.vue / process.js.
+	launchAnother: {
+		id: 'instance.action.launch-another',
+		defaultMessage: 'Launch another instance',
+	},
+	stopAll: {
+		id: 'instance.action.stop-all',
+		defaultMessage: 'Stop all',
+	},
+	stopIndividual: {
+		id: 'instance.action.stop-individual',
+		defaultMessage: 'Stop an individual instance',
+	},
+	stopOne: {
+		id: 'instance.action.stop-one',
+		defaultMessage: 'Window {number} · started {time}',
 	},
 	moreActions: {
 		id: 'instance.action.more-actions',
@@ -267,9 +310,16 @@ const props = withDefaults(
 		isServerInstance?: boolean
 		showInstancePlayTime?: boolean
 		timePlayed?: number
+		// Modrinth Studios addition, see StorageSettings.vue
+		showInstanceStorageUsage?: boolean
+		storageSizeLabel?: string
 		playing?: boolean
 		loading?: boolean
 		stopping?: boolean
+		// Modrinth Studios addition: every process currently running for this
+		// instance (length > 1 once "Launch another instance" has been used) —
+		// see startAnotherInstance()/stopOneProcess() in layout.vue.
+		processes?: { uuid: string; start_time: string }[]
 		loadingServerPing?: boolean
 		playersOnline?: number
 		statusOnline?: boolean
@@ -281,9 +331,12 @@ const props = withDefaults(
 		isServerInstance: false,
 		showInstancePlayTime: false,
 		timePlayed: 0,
+		showInstanceStorageUsage: false,
+		storageSizeLabel: undefined,
 		playing: false,
 		loading: false,
 		stopping: false,
+		processes: () => [],
 		loadingServerPing: false,
 		playersOnline: undefined,
 		statusOnline: false,
@@ -296,6 +349,8 @@ const emit = defineEmits<{
 	repair: []
 	stop: []
 	play: []
+	playAnother: []
+	stopOne: [uuid: string]
 	playServer: []
 	settings: []
 	openFolder: []
@@ -313,6 +368,7 @@ const installingStages = [
 ]
 
 const { formatMessage } = useVIntl()
+const formatRelativeTime = useRelativeTime()
 
 const isInstalling = computed(() => installingStages.includes(props.instance.install_stage))
 const loaderDisplayName = computed(() => formatLoaderLabel(props.instance.loader) as ServerLoader)
@@ -352,6 +408,20 @@ const serverPlayOptions = computed<OverflowMenuOption[]>(() => [
 		action: () => emit('play'),
 	},
 ])
+// Modrinth Studios addition: one "stop just this window" entry per running
+// process, shown in the Stop All split-button's dropdown.
+const stopOptions = computed<OverflowMenuOption[]>(() =>
+	props.processes.map((process, index) => ({
+		id: process.uuid,
+		label: formatMessage(messages.stopOne, {
+			number: index + 1,
+			time: formatRelativeTime(process.start_time),
+		}),
+		icon: StopCircleIcon,
+		tone: 'red',
+		action: () => emit('stopOne', process.uuid),
+	})),
+)
 const moreActions = computed<OverflowMenuOption[]>(() => {
 	const actions: OverflowMenuOption[] = [
 		{
@@ -361,6 +431,17 @@ const moreActions = computed<OverflowMenuOption[]>(() => {
 			action: () => emit('openFolder'),
 		},
 	]
+
+	// Modrinth Studios addition: a second, independent launch of this
+	// instance — only relevant once one is already running.
+	if (props.playing && !props.instance.quarantined) {
+		actions.unshift({
+			id: 'launch-another',
+			label: formatMessage(messages.launchAnother),
+			icon: LayersIcon,
+			action: () => emit('playAnother'),
+		})
+	}
 
 	if (!props.instance.quarantined) {
 		actions.push(

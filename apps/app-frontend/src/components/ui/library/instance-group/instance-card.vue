@@ -69,6 +69,35 @@ const emit = defineEmits<{
 }>()
 
 const instanceCardElement = ref<InstanceType<typeof InstanceCardView> | null>(null)
+// Modrinth Studios addition: `@dnd-kit/vue`'s `useDraggable` resolves a
+// component ref like `instanceCardElement` down to `.$el` internally, and if
+// `.$el` isn't a real mounted DOM node at the exact instant it reads it
+// (a brief window around mount, a KeepAlive reactivation, or a hot-reload),
+// its own fallback logic hands the raw component object back instead of
+// `undefined` — its internal accessibility check then crashes trying to read
+// `.tagName` off that object ("Cannot read properties of undefined (reading
+// 'toLowerCase')" inside dnd-kit's `isFocusable`). That crash is an unhandled
+// promise rejection inside dnd-kit's own reactive effect system, and once it
+// fires it can cascade into breaking Vue's own render/patch cycle for a good
+// chunk of the Library page — not just this card's dragging, but nearby
+// accordions no longer responding to clicks either. Doing our own `.$el`
+// extraction here and only ever handing dnd-kit a real element (never the
+// bare component instance) closes that hole regardless of timing.
+//
+// Deliberately checking `nodeType === 1` here rather than
+// `instanceof HTMLElement`: an `instanceof` check tests the object's
+// prototype chain against *this specific script context's* `HTMLElement`
+// global, and a perfectly real, working DOM element handed across a realm
+// boundary (a different window/webview context, a devtools bridge, certain
+// Vue internals) can fail that check despite being completely valid — which
+// would silently make this computed always return `undefined` and disable
+// dragging entirely, with no error at all to point at why. `nodeType` is a
+// plain data property every real DOM node has regardless of which realm's
+// constructor it was created with, so it can't false-negative that way.
+const instanceCardDomElement = computed(() => {
+	const el = instanceCardElement.value?.$el
+	return el && typeof el === 'object' && el.nodeType === 1 ? el : undefined
+})
 const playing = ref(false)
 const loading = ref(false)
 const currentEvent = ref<ProcessEvent | null>(null)
@@ -111,7 +140,7 @@ const holdingShift = computed(() => keys.shift.value)
 const isPartOfActiveDrag = computed(() => activeDraggedInstanceKeys.value.has(selectionKey.value))
 const { isDragging } = useDraggable({
 	id: computed(() => `instance:${props.instanceGroupId}:${props.instance.id}`),
-	element: instanceCardElement,
+	element: instanceCardDomElement,
 	disabled: computed(() => displayState.value.group !== 'Group'),
 	sensors: instanceCardSensors,
 	data: computed(() => ({

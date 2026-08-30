@@ -19,7 +19,8 @@ import {
 } from '@modrinth/ui'
 import type { PlatformTag } from '@modrinth/utils'
 import { useQuery, useQueryClient } from '@tanstack/vue-query'
-import { computed, nextTick, ref, watch } from 'vue'
+import { computed, nextTick, onMounted, ref, watch } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 
 import { get_project_v3 } from '@/helpers/cache'
 import { get_linked_modpack_info, getInstanceIconUrl } from '@/helpers/instance'
@@ -184,6 +185,29 @@ function show(tabIndex?: number) {
 		nextTick(() => tabbedModal.value?.setTab(tabIndex))
 	}
 }
+
+// Modrinth Studios addition: lets other pages (currently just Settings >
+// Storage's "Open instance settings" row menu) deep link straight into this
+// modal via a `?studioOpenSettings=1` query param, rather than settings only
+// ever being reachable by clicking the button on the instance page itself.
+// Checked here — in this component's own `onMounted` — rather than from a
+// watcher up in the parent `layout.vue` (which used to need `instance` to
+// become truthy before this component even mounts): a parent-side watcher
+// fires as soon as `instance` changes, which could still run before this
+// component (and its own `tabbedModal` ref) had actually finished mounting,
+// silently swallowing the very first deep link and needing a second attempt
+// to work. `onMounted` on the component the ref actually belongs to has no
+// such gap — it's the timing Vue itself guarantees `tabbedModal.value` is
+// already set by.
+const route = useRoute()
+const router = useRouter()
+onMounted(() => {
+	if (!route.query.studioOpenSettings) return
+	show(0)
+	const rest = { ...route.query }
+	delete rest.studioOpenSettings
+	router.replace({ query: rest })
+})
 
 defineExpose({ show, hide })
 </script>

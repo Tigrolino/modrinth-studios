@@ -18,7 +18,6 @@ export function getCssVar(name: string, fallback: string): string {
 }
 
 function buildTerminalTheme() {
-	const surface2 = getCssVar('--surface-2', '#1d1f23')
 	const surface5 = getCssVar('--surface-5', '#42444a')
 	const textDefault = getCssVar('--color-text-default', '#b0bac5')
 	const textTertiary = getCssVar('--color-text-tertiary', '#96a2b0')
@@ -30,45 +29,36 @@ function buildTerminalTheme() {
 	const purple = getCssVar('--color-purple', '#bc3fbc')
 
 	return {
-		// Modrinth Studios: this used to be the literal string 'transparent',
-		// on the theory that xterm would just paint nothing and let
-		// `.xterm-viewport`'s own (correctly translucent) CSS background show
-		// through underneath. That didn't actually work, and digging into the
-		// bundled @xterm/xterm source explains why: its theme-color parser
-		// (`css.toColor`) draws every theme color onto a scratch 1x1 canvas
-		// via `ctx.fillStyle = <value>; ctx.fillRect(...)`, reads the pixel
-		// back with `getImageData`, and explicitly THROWS
-		// ("Unsupported css format") unless the alpha channel it reads back
-		// is exactly 255 — i.e. xterm hard-rejects ANY non-fully-opaque color
-		// for a theme value, including the literal word 'transparent' (which
-		// doesn't appear anywhere at all in xterm's source — grepped the
-		// whole bundle to confirm) and any rgba()/#rrggbbaa with partial
-		// alpha too. There's no theme-level way to make xterm's own canvas
-		// paint see-through pixels; it always fills the whole cell with a
-		// fully opaque color no matter what CSS says about the canvas
-		// element itself. Also deliberately NOT `surface2` here (unlike every
-		// other color below) for the same reason: Studios' custom background
-		// feature can override --surface-2 to a `color-mix(...)` expression,
-		// which likewise reads back as non-opaque and would hit this exact
-		// same throw — so this stays a plain hardcoded opaque hex, matching
-		// the surface2 fallback already used elsewhere in this function,
-		// regardless of what --surface-2 currently resolves to. The actual
-		// "translucent terminal" effect now happens one level up instead:
-		// `.xterm-screen` (the element xterm paints all of its canvas layers
-		// into) gets a CSS `opacity` applied while a custom background is
-		// active (see `.studio-theme-locked .xterm-screen` in
-		// studio-overrides.css) — fading the whole rendered surface,
-		// including text, as one flat unit. That's the standard way every
-		// other translucent-terminal implementation (Windows Terminal,
-		// iTerm2, etc.) handles this same limitation, and it composites
-		// correctly over `.xterm-viewport`'s own already-blurred, already-
-		// translucent background sitting right behind it.
+		// Modrinth Studios: `background`, `cursorAccent`, and `black` are all
+		// hardcoded to this opaque hex rather than reading `--surface-2` (like
+		// every other color below does), even though --surface-2 normally
+		// resolves to this exact value. That's deliberate: while a custom
+		// background is active, Studios' custom-background feature overrides
+		// --surface-2 to a `color-mix(...)` expression instead of a plain hex,
+		// and xterm's own theme-color parser (`css.toColor`, confirmed by
+		// reading the bundled @xterm/xterm source) draws every theme color onto
+		// a scratch canvas and explicitly THROWS ("Unsupported css format")
+		// unless the alpha it reads back is exactly 255 — i.e. it hard-rejects
+		// any non-fully-opaque color, color-mix() included. `background` was
+		// the first one caught (an earlier attempt at a translucent terminal —
+		// since abandoned, see studio-overrides.css — used the literal string
+		// 'transparent' here, which hit this same throw). `black` was a
+		// second, less obvious case of the exact same bug: it's xterm's ANSI
+		// color 40/100, which `colorize()` in console-filtering.ts uses
+		// explicitly for error/warn log lines (`\x1b[31;40m`/`\x1b[33;40m` —
+		// red/yellow foreground on ANSI "black" background, with `\x1b[K`
+		// painting the rest of the row in it). With `--surface-2` unparseable,
+		// every error/warn line's background silently fell back to whatever
+		// xterm treats an unparseable theme color as, visibly mismatched from
+		// the terminal's own plain background right next to it — the actual
+		// bug report this fixed. All three are hardcoded now so none of them
+		// can ever hit this again, regardless of what --surface-2 resolves to.
 		background: '#1d1f23',
 		foreground: textDefault,
 		cursor: textDefault,
-		cursorAccent: surface2,
+		cursorAccent: '#1d1f23',
 		selectionBackground: 'rgba(128, 128, 128, 0.3)',
-		black: surface2,
+		black: '#1d1f23',
 		red,
 		green,
 		yellow: orange,

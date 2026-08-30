@@ -118,6 +118,11 @@ pub(crate) async fn create_instance(
         .await?;
         tx.commit().await?;
 
+        // Modrinth Studios addition: see reconcile_instance_paths.rs — this
+        // is what lets a later external rename of this folder be traced
+        // back to this instance instead of just breaking it.
+        super::write_instance_marker(&full_path, &instance.id).await;
+
         crate::state::instances::watcher::watch_instance_folder(
             &instance.id,
             &instance.path,
@@ -137,7 +142,11 @@ pub(crate) async fn create_instance(
     result
 }
 
-async fn resolve_instance_path(
+// Modrinth Studios addition: visibility widened from private to pub(crate)
+// so rename_instance_folder.rs can reuse the exact same sanitize +
+// collision-avoidance logic for the in-app rename-folder-to-match-name
+// feature, rather than a second, potentially-diverging copy of it.
+pub(crate) async fn resolve_instance_path(
     name: &str,
     path: Option<&str>,
     state: &State,

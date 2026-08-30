@@ -12,6 +12,7 @@ import { createApp } from 'vue'
 
 import App from '@/App.vue'
 import {
+	applyAccentIconTint,
 	applyStudioAppearance,
 	applyStudioWindowIcon,
 	initializeStudioBackgroundRotation,
@@ -25,6 +26,9 @@ import router from '@/routes'
 // opacity / window icon as early as possible.
 applyStudioAppearance()
 void applyStudioWindowIcon()
+// Only actually does anything if a custom accent is active and no fully
+// custom icon has been picked — see the function's own comment.
+void applyAccentIconTint()
 // Separate from applyStudioAppearance() on purpose — that also re-runs on
 // things like a theme change, which must never count as a new "session" for
 // "once per session" background rotation. See the function's own comment.

@@ -93,7 +93,8 @@
 				"minWidth": 1100,
 				"visible": false,
 				"zoomHotkeysEnabled": false,
-				"decorations": false
+				"decorations": false,
+				"backgroundColor": "#16181c"
 			}
 		],
 		"security": {

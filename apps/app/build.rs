@@ -388,8 +388,15 @@ fn main() {
                         "studio_set_background_images",
                         "studio_set_background_folder",
                         "studio_set_background_videos",
+                        "studio_set_background_video_folder",
                         "studio_set_app_icon",
                         "studio_set_splash_background",
+                        "studio_set_generated_app_icon",
+                        "studio_apply_pinned_icon",
+                        "studio_instance_storage_usage",
+                        "studio_instance_storage_usage_single",
+                        "studio_shared_folder_storage_usage",
+                        "studio_system_storage_overview",
                     ])
                     .default_permission(
                         DefaultPermissionRule::AllowAllCommands,
@@ -418,6 +425,35 @@ fn main() {
                     .commands(&[
                         "playtime_correction_get",
                         "playtime_correction_set",
+                    ])
+                    .default_permission(
+                        DefaultPermissionRule::AllowAllCommands,
+                    ),
+            )
+            .plugin(
+                // Modrinth Studios addition
+                "discord-rpc",
+                InlinedPlugin::new()
+                    .commands(&[
+                        "discord_rpc_get_settings",
+                        "discord_rpc_set_settings",
+                    ])
+                    .default_permission(
+                        DefaultPermissionRule::AllowAllCommands,
+                    ),
+            )
+            .plugin(
+                // Modrinth Studios addition
+                "shared-profile",
+                InlinedPlugin::new()
+                    .commands(&[
+                        "shared_profile_list",
+                        "shared_profile_create",
+                        "shared_profile_rename",
+                        "shared_profile_update_items",
+                        "shared_profile_delete",
+                        "shared_profile_get_for_instance",
+                        "shared_profile_set_for_instance",
                     ])
                     .default_permission(
                         DefaultPermissionRule::AllowAllCommands,

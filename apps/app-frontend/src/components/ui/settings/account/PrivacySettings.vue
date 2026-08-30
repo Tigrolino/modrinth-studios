@@ -13,11 +13,17 @@ import { ref, watch } from 'vue'
 import { open_ads_consent_preferences } from '@/helpers/ads.js'
 import { optInAnalytics, optOutAnalytics } from '@/helpers/analytics'
 import { get, set } from '@/helpers/settings.ts'
+// Modrinth Studios addition: customizable Discord Rich Presence, see
+// helpers/discord-rpc.ts and packages/app-lib/src/api/discord_rpc.rs.
+import DiscordRpcSettingsModal from './DiscordRpcSettingsModal.vue'
 
 const { formatMessage } = useVIntl()
 const { handleError } = injectNotificationManager()
 const { adConsentAvailable } = injectPageContext()
 const settings = ref(await get())
+
+// Modrinth Studios addition: see DiscordRpcSettingsModal.vue.
+const discordRpcModal = ref<InstanceType<typeof DiscordRpcSettingsModal>>()
 
 const messages = defineMessages({
 	adsConsentTitle: {
@@ -50,6 +56,11 @@ const messages = defineMessages({
 		id: 'app.settings.privacy.discord-rich-presence.description',
 		defaultMessage:
 			'Show Modrinth Studio as your current activity on Discord. This does not affect Rich Presence added to instances by mods. Requires an app restart.',
+	},
+	// Modrinth Studios addition.
+	discordRichPresenceCustomize: {
+		id: 'app.settings.privacy.discord-rich-presence.customize',
+		defaultMessage: 'Customize',
 	},
 })
 
@@ -109,6 +120,15 @@ watch(
 				{{ formatMessage(messages.discordRichPresenceDescription) }}
 			</p>
 		</div>
-		<Toggle id="disable-discord-rpc" v-model="settings.discord_rpc" />
+		<div class="flex items-center gap-3 shrink-0">
+			<Button v-if="settings.discord_rpc" @click="discordRpcModal?.show()">
+				<Settings2Icon aria-hidden="true" />
+				{{ formatMessage(messages.discordRichPresenceCustomize) }}
+			</Button>
+			<Toggle id="disable-discord-rpc" v-model="settings.discord_rpc" />
+		</div>
 	</div>
+
+	<!-- Modrinth Studios addition -->
+	<DiscordRpcSettingsModal ref="discordRpcModal" />
 </template>

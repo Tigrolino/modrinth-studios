@@ -273,6 +273,45 @@ pub(crate) async fn watch_instance_folder(
         .insert(instance_path.to_string(), instance_id.to_string());
 }
 
+/// Modrinth Studios addition: the counterpart to `watch_instance_folder()`
+/// above, used by the in-app rename-folder-to-match-name feature (see
+/// `rename_instance_folder.rs`). On Windows, `notify`'s directory watch
+/// holds an open handle on every path it watches for as long as the app is
+/// running — which is, incidentally, also *why* an instance's folder can't
+/// be renamed externally in Explorer while the app is open at all (nothing
+/// to do with which page is showing). We can't do anything about that for
+/// an external rename, but for one done *through* the app, we control both
+/// ends: drop the watch here first, rename the folder, then
+/// `watch_instance_folder()` the new location. Best-effort — a path that
+/// was never actually being watched (e.g. an optional subfolder that didn't
+/// exist) just fails its own `unwatch()` call silently, which is fine.
+pub(crate) async fn unwatch_instance_folder(
+    // Kept for symmetry with watch_instance_folder()'s signature above (and
+    // in case a future caller needs it for logging) — the instance_ids map
+    // below is keyed by folder path, not id, so this isn't read.
+    _instance_id: &str,
+    instance_path: &str,
+    watcher: &FileWatcher,
+    dirs: &DirectoryInfo,
+) {
+    let full_instance_path = dirs.instances_dir().join(instance_path);
+
+    let mut to_unwatch: Vec<std::path::PathBuf> = ProjectType::iterator()
+        .map(|x| x.get_folder())
+        .chain(["crash-reports", "saves", CONFIG_DIRECTORY])
+        .map(|sub_path| full_instance_path.join(sub_path))
+        .collect();
+    to_unwatch.push(full_instance_path);
+
+    let mut debouncer = watcher.watcher.write().await;
+    for full_path in &to_unwatch {
+        let _ = debouncer.watcher().unwatch(full_path);
+    }
+    drop(debouncer);
+
+    watcher.instance_ids.write().await.remove(instance_path);
+}
+
 fn crash_task(instance_id: String) {
     tokio::task::spawn(async move {
         let res = async {

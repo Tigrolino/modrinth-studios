@@ -18,6 +18,8 @@ pub(crate) use self::commands::{
     create_instance, edit_instance, get_instance, get_instances_metadata,
     list_instances, refresh_all_instances, remove_instance,
 };
+pub(crate) use self::commands::reconcile_instance_paths;
+pub(crate) use self::commands::rename_instance_folder_for_name_change;
 pub(crate) use self::commands::{
     dependencies_to_content_items, get_content_projects,
     get_installed_project_ids_for_instance, get_instance_install_candidates,

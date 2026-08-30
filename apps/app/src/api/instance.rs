@@ -831,12 +831,24 @@ pub async fn instance_get_pack_export_candidates(
 pub async fn instance_run(
     instance_id: &str,
     server_address: Option<String>,
+    // Modrinth Studios addition: "Launch another instance" in the instance
+    // page's overflow menu passes `true` here — see
+    // theseus::launcher::launch_minecraft()'s doc comment on the
+    // same-named parameter. `Option` (rather than a plain `bool`) so the
+    // existing frontend call sites that don't pass this at all keep working
+    // unchanged, defaulting to the normal single-instance behavior.
+    allow_multiple: Option<bool>,
 ) -> Result<ProcessMetadata> {
     let quick_play = match server_address {
         Some(addr) => QuickPlayType::Server(ServerAddress::Unresolved(addr)),
         None => QuickPlayType::None,
     };
-    Ok(theseus::instance::run(instance_id, quick_play).await?)
+    Ok(theseus::instance::run(
+        instance_id,
+        quick_play,
+        allow_multiple.unwrap_or(false),
+    )
+    .await?)
 }
 
 #[tauri::command]

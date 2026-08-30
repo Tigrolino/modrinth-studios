@@ -378,8 +378,16 @@ export async function get_pack_export_candidates(
 export async function run(
 	instanceId: string,
 	serverAddress: string | null = null,
+	// Modrinth Studios addition: pass true to launch a second, independent
+	// process even if this instance already has one running — see
+	// "Launch another instance" in the instance page's overflow menu.
+	allowMultiple = false,
 ): Promise<unknown> {
-	return await invoke('plugin:instance|instance_run', { instanceId, serverAddress })
+	return await invoke('plugin:instance|instance_run', {
+		instanceId,
+		serverAddress,
+		allowMultiple,
+	})
 }
 
 export async function kill(instanceId: string): Promise<void> {

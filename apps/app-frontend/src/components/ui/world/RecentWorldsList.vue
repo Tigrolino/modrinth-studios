@@ -276,6 +276,7 @@ async function populateJumpBackIn() {
 
 	const items: JumpBackInItem[] = [...worldItems, ...instanceItems]
 	items.sort((a, b) => b.sort_time.diff(a.sort_time))
+
 	let newInstanceCount = 0
 	jumpBackInItems.value = items
 		.filter((item) => {

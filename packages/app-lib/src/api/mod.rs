@@ -1,5 +1,7 @@
 //! API for interacting with Theseus
 pub mod cache;
+// Modrinth Studios addition, see packages/app-lib/src/api/discord_rpc.rs
+pub mod discord_rpc;
 pub mod friends;
 pub mod handler;
 pub mod instance;
@@ -14,6 +16,8 @@ pub mod pack;
 // Modrinth Studios addition, see packages/app-lib/src/api/playtime_correction.rs
 pub mod playtime_correction;
 pub mod process;
+// Modrinth Studios addition, see packages/app-lib/src/api/shared_profile.rs
+pub mod shared_profile;
 // Modrinth Studios addition, see packages/app-lib/src/api/replays.rs
 pub mod replays;
 pub mod reports;

@@ -147,35 +147,70 @@ impl ProcessManager {
 
         let metadata = process.metadata.clone();
 
-        if !logs_folder.exists() {
-            tokio::fs::create_dir_all(&logs_folder)
-                .await
-                .map_err(|e| IOError::with_path(e, &logs_folder))?;
-        }
+        // Modrinth Studios fix: none of this launcher-log-file setup is
+        // allowed to fail the launch anymore. It used to `?`-propagate
+        // straight out of this function on any I/O error here (e.g. an
+        // instance folder name Windows won't resolve a sub-path under,
+        // such as one with a trailing space) — but by this point the actual
+        // Minecraft process has *already* been spawned above, so failing
+        // here only ever meant: the game launches anyway (untouched,
+        // running as an orphaned process Studio never registers), while the
+        // person gets a scary blocking "An error occurred" dialog for
+        // something that was never actually fatal, with the process
+        // tracking below (`self.processes.insert`, the `Launched` event,
+        // Discord RPC, etc.) silently skipped since the early `return
+        // Err(e)` never reached it. A launcher log is a nice-to-have for
+        // the in-app Logs tab, not something worth failing the launch over.
+        let logs_folder_ready = if logs_folder.exists() {
+            true
+        } else if let Err(e) = tokio::fs::create_dir_all(&logs_folder).await {
+            tracing::warn!(
+                "Failed to create logs folder for instance '{instance_path}': {}. Launcher logging will be unavailable for this session, but the game will still launch.",
+                IOError::with_path(e, &logs_folder)
+            );
+            false
+        } else {
+            true
+        };
 
         let log_path = logs_folder.join(LAUNCHER_LOG_PATH);
 
         clear_log_buffer(instance_id);
 
-        {
-            let mut log_file = OpenOptions::new()
+        if logs_folder_ready {
+            match OpenOptions::new()
                 .write(true)
                 .create(true)
                 .truncate(true)
                 .open(&log_path)
-                .map_err(|e| IOError::with_path(e, &log_path))?;
+            {
+                Ok(mut log_file) => {
+                    // Initialize with timestamp header
+                    let now = chrono::Local::now();
+                    let header_result = writeln!(
+                        log_file,
+                        "# Minecraft launcher log started at {}",
+                        now.format("%Y-%m-%d %H:%M:%S")
+                    )
+                    .and_then(|()| {
+                        writeln!(log_file, "# Instance: {instance_path} \n")
+                    })
+                    .and_then(|()| writeln!(log_file));
 
-            // Initialize with timestamp header
-            let now = chrono::Local::now();
-            writeln!(
-                log_file,
-                "# Minecraft launcher log started at {}",
-                now.format("%Y-%m-%d %H:%M:%S")
-            )
-            .map_err(|e| IOError::with_path(e, &log_path))?;
-            writeln!(log_file, "# Instance: {instance_path} \n")
-                .map_err(|e| IOError::with_path(e, &log_path))?;
-            writeln!(log_file).map_err(|e| IOError::with_path(e, &log_path))?;
+                    if let Err(e) = header_result {
+                        tracing::warn!(
+                            "Failed to write launcher log header for instance '{instance_path}': {}",
+                            IOError::with_path(e, &log_path)
+                        );
+                    }
+                }
+                Err(e) => {
+                    tracing::warn!(
+                        "Failed to open launcher log file for instance '{instance_path}': {}. Launcher logging will be unavailable for this session, but the game will still launch.",
+                        IOError::with_path(e, &log_path)
+                    );
+                }
+            }
         }
 
         if let Some(stdout) = stdout {

@@ -670,6 +670,67 @@ pub(crate) async fn update_instance_icon_config(
     Ok(())
 }
 
+// Modrinth Studios addition: used only by reconcile_instance_paths() to
+// follow an instance folder that was renamed outside the app — see that
+// module's doc comment. `path` is otherwise treated as fixed at creation
+// time everywhere else in this codebase.
+pub(crate) async fn update_instance_path(
+    instance_id: &str,
+    path: &str,
+    pool: &SqlitePool,
+) -> crate::Result<()> {
+    let modified = Utc::now().timestamp();
+    sqlx::query(
+        "
+		UPDATE instances
+		SET path = ?, modified = ?
+		WHERE id = ?
+		",
+    )
+    .bind(path)
+    .bind(modified)
+    .bind(instance_id)
+    .execute(pool)
+    .await?;
+
+    Ok(())
+}
+
+/// Modrinth Studios addition: same as `update_instance_path()` above, but
+/// also sets the display `name` in the same statement — used specifically
+/// by `reconcile_instance_paths()` when a folder was renamed externally
+/// (in Explorer). Renaming the folder is the one case where the person has
+/// made their intent about the *name* unambiguous too — they typed it
+/// directly into the folder name — so this keeps the two in sync in that
+/// direction, the same way editing the Name field in Settings keeps them in
+/// sync in the other direction (see `rename_instance_folder.rs`). A plain
+/// `update_instance_path()` alone would leave the display name stuck at
+/// whatever it was before the rename, which is exactly the "renamed it in
+/// Explorer but Modrinth still shows the old name" complaint this fixes.
+pub(crate) async fn update_instance_path_and_name(
+    instance_id: &str,
+    path: &str,
+    name: &str,
+    pool: &SqlitePool,
+) -> crate::Result<()> {
+    let modified = Utc::now().timestamp();
+    sqlx::query(
+        "
+		UPDATE instances
+		SET path = ?, name = ?, modified = ?
+		WHERE id = ?
+		",
+    )
+    .bind(path)
+    .bind(name)
+    .bind(modified)
+    .bind(instance_id)
+    .execute(pool)
+    .await?;
+
+    Ok(())
+}
+
 pub(crate) async fn update_instance_icon_if_empty(
     instance_id: &str,
     icon_path: &str,

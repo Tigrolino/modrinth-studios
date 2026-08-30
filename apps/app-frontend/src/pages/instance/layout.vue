@@ -35,9 +35,12 @@
 				:is-server-instance="isServerInstance"
 				:show-instance-play-time="showInstancePlayTime"
 				:time-played="timePlayed"
+				:show-instance-storage-usage="showInstanceStorageUsage"
+				:storage-size-label="storageSizeLabel"
 				:playing="playing"
 				:loading="loading"
 				:stopping="stopping"
+				:processes="runningProcesses"
 				:loading-server-ping="loadingServerPing"
 				:players-online="playersOnline"
 				:status-online="statusOnline"
@@ -46,6 +49,8 @@
 				@repair="() => repairInstance()"
 				@stop="() => stopInstance('InstancePage')"
 				@play="() => startInstance('InstancePage')"
+				@play-another="() => startAnotherInstance('InstancePage')"
+				@stop-one="(uuid) => stopOneProcess(uuid)"
 				@play-server="() => handlePlayServer()"
 				@settings="() => settingsModal?.show()"
 				@open-folder="() => instance && showInstanceInFolder(instance.id)"
@@ -137,6 +142,13 @@ import { useAppEvent } from '@/composables/use-app-event'
 import { useAppSettings } from '@/composables/use-app-settings.ts'
 import { handleSevereError } from '@/composables/use-error.js'
 import { useInstanceConsole } from '@/composables/useInstanceConsole'
+// Modrinth Studios addition, see StorageSettings.vue
+import { useStudioAppearance } from '@/composables/use-studio-appearance.ts'
+import {
+	fetchInstanceStorageUsageSingle,
+	formatStorageSize,
+	getCachedInstanceStorageUsage,
+} from '@/composables/use-studio-instance-storage.ts'
 import { trackEvent } from '@/helpers/analytics'
 import { toError } from '@/helpers/errors'
 import {
@@ -155,6 +167,9 @@ import {
 	remove,
 	run,
 } from '@/helpers/instance'
+// Modrinth Studios addition: per-process stop, used by the Stop All dropdown
+// (kill(instanceId) above stops every process; this stops just one window).
+import { kill as killProcess } from '@/helpers/process'
 import { useSharedInstanceErrors } from '@/helpers/shared-instance-errors'
 import type { GameInstance } from '@/helpers/types'
 import { createInstanceShortcut, showInstanceInFolder } from '@/helpers/utils.js'
@@ -225,6 +240,42 @@ watch(
 const appSettings = useAppSettings()
 const showInstancePlayTime = computed(() => appSettings.getFeatureFlag('show_instance_play_time'))
 
+// Modrinth Studios addition: instance storage size shown next to playtime,
+// gated by the toggle in Settings > Storage (StorageSettings.vue). The
+// underlying fetch measures every instance's folder (see
+// use-studio-instance-storage.ts), so it's only run when the toggle is on
+// and re-run whenever the displayed instance changes — not on every render.
+const studioAppearance = useStudioAppearance()
+const showInstanceStorageUsage = computed(() => studioAppearance.showInstanceStorageUsage)
+const instanceStorageBytes = ref(null)
+watch(
+	[() => displayedInstanceRoute.value.params.id, showInstanceStorageUsage],
+	async ([id, enabled]) => {
+		if (!enabled || !id) {
+			instanceStorageBytes.value = null
+			return
+		}
+		// Show a cached size (from a previous visit, or from having looked at
+		// Settings > Storage already) immediately rather than leaving this
+		// blank until the walk below finishes — this is what actually fixes
+		// the "shows up late/randomly" complaint, since a fresh walk still
+		// takes real time proportional to that instance's own size.
+		instanceStorageBytes.value = getCachedInstanceStorageUsage(id) ?? null
+		try {
+			const bytes = await fetchInstanceStorageUsageSingle(id)
+			// Bail if the displayed instance changed while this was in flight.
+			if (displayedInstanceRoute.value.params.id !== id) return
+			instanceStorageBytes.value = bytes
+		} catch (err) {
+			handleError(err)
+		}
+	},
+	{ immediate: true },
+)
+const storageSizeLabel = computed(() =>
+	instanceStorageBytes.value != null ? formatStorageSize(instanceStorageBytes.value) : undefined,
+)
+
 const online = useOnline()
 const offline = computed(() => !online.value)
 const instanceId = computed(() => String(displayedInstanceRoute.value.params.id ?? ''))
@@ -286,6 +337,16 @@ const processesQuery = useQuery(
 	})),
 )
 const playing = computed(() => (processesQuery.data.value?.length ?? 0) > 0)
+// Modrinth Studios addition: the real per-window process list (uuid +
+// start_time), for the Stop All dropdown — filters out the transient `true`
+// placeholders set below for instant optimistic UI between clicking Play and
+// the backend's 'launched' event confirming the real process.
+const runningProcesses = computed(() =>
+	(processesQuery.data.value ?? []).filter(
+		(entry): entry is { uuid: string; instance_id: string; start_time: string } =>
+			typeof entry === 'object' && entry !== null && 'uuid' in entry,
+	),
+)
 
 async function ensureCriticalContent(targetInstanceId: string) {
 	await queryClient.ensureQueryData(
@@ -558,7 +619,13 @@ const launchInstance = async (context: string) => {
 	loading.value = true
 	try {
 		await run(currentInstance.id)
-		queryClient.setQueryData(instanceKeys.processes(currentInstance.id), [true])
+		// Modrinth Studios note: append rather than replace — a concurrent
+		// "launch another instance" call may have already optimistically
+		// added its own placeholder here, and replacing would drop it.
+		queryClient.setQueryData(instanceKeys.processes(currentInstance.id), (old: unknown) => [
+			...(Array.isArray(old) ? old : []),
+			true,
+		])
 	} catch (err) {
 		handleSevereError(err, { instanceId: currentInstance.id })
 	}
@@ -569,6 +636,44 @@ const launchInstance = async (context: string) => {
 		loader: instance.value.loader,
 		game_version: instance.value.game_version,
 		source: context,
+	})
+}
+
+// Modrinth Studios addition: launch a second, independent copy of this
+// instance while one is already running — the "Launch another instance"
+// overflow menu option. Deliberately skips launchInstance()'s shared-instance
+// update-check/loading-button flow: those exist for the main Play button's
+// first launch, not this secondary action.
+const startAnotherInstance = async (context: string) => {
+	if (!instance.value || instance.value.quarantined) return
+	const currentInstance = instance.value
+	try {
+		await run(currentInstance.id, null, true)
+		queryClient.setQueryData(instanceKeys.processes(currentInstance.id), (old: unknown) => [
+			...(Array.isArray(old) ? old : []),
+			true,
+		])
+	} catch (err) {
+		handleSevereError(err, { instanceId: currentInstance.id })
+		return
+	}
+
+	trackEvent('InstanceStart', {
+		loader: currentInstance.loader,
+		game_version: currentInstance.game_version,
+		source: context,
+	})
+}
+
+// Modrinth Studios addition: stop just one running window, from the Stop All
+// dropdown — distinct from stopInstance() below, which stops all of them.
+const stopOneProcess = async (uuid: string) => {
+	const currentInstance = instance.value
+	if (!currentInstance) return
+	await killProcess(uuid).catch((error) => handleError(toError(error)))
+	await queryClient.invalidateQueries({
+		queryKey: instanceKeys.processes(currentInstance.id),
+		exact: true,
 	})
 }
 
@@ -901,7 +1006,13 @@ useAppEvent('process', (event) => {
 		useInstanceConsole(event.instance_id).invalidate()
 		void queryClient.invalidateQueries({ queryKey: instanceKeys.logs(event.instance_id) })
 	} else if (event.event === 'launched') {
-		queryClient.setQueryData(instanceKeys.processes(event.instance_id), [true])
+		// Modrinth Studios note: invalidate (refetch the real list) rather than
+		// overwriting with a placeholder — with multi-launch, a second launch's
+		// 'launched' event must not stomp the first process still in the cache.
+		void queryClient.invalidateQueries({
+			queryKey: instanceKeys.processes(event.instance_id),
+			exact: true,
+		})
 	}
 })
 

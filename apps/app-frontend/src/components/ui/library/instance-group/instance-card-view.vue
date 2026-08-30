@@ -22,26 +22,40 @@ const compactMode = computed(() => appSettings.getFeatureFlag('compact_instance_
 
 const nameRef = ref<HTMLElement | null>(null)
 const versionRef = ref<HTMLElement | null>(null)
+
+// Modrinth Studios addition: the root `<div>` below uses a narrowed
+// `transition-[...]` list instead of `transition-all`, which (as its name
+// says) transitions *every* animatable property that changes on the
+// element — including its own `width`, since that's set by the grid's
+// responsive `auto-fill`/`minmax` column sizing in the parent, not by us.
+// During any resize (window drag *or* the sidebar's push animation), that
+// width is changing continuously, many times a second — so the card's
+// actual rendered box was perpetually chasing a 150ms-lagged,
+// constantly-moving target instead of just tracking the grid directly,
+// which is exactly what reads as a springy "jiggle" rather than a clean
+// resize. This was never about Vue re-rendering or the TransitionGroup move
+// animation at all (two earlier, wrong guesses at this same bug) —
+// narrowing the transition to only the properties that are actually meant
+// to animate here (hover/selection color, border, brightness, and the
+// click/drag scale transform) leaves the card's layout box itself untouched
+// by any transition, so it just tracks the grid's real size instantly, same
+// as every other element on the page.
+//
+// This comment used to live directly inside <template>, right above the
+// root <div> — turns out that's exactly what was silently breaking card
+// dragging: with this comment there, `InstanceCardView`'s compiled render
+// produced more than one root node (an empty placeholder alongside the real
+// div), so Vue's own `$el`/`subTree.el` for this component pointed at that
+// empty placeholder instead of the actual element. `instance-card.vue`'s
+// `useDraggable` hands dnd-kit exactly that `$el`, so dnd-kit was being
+// handed a non-element every time — with no error, since a placeholder text
+// node is still a valid enough object to pass around, it just isn't
+// draggable. Moved here since a `<script>`-level comment can never affect
+// the compiled template, whatever the root cause in Vue/the compiler
+// actually was.
 </script>
 
 <template>
-	<!-- Modrinth Studios addition: this used to be `transition-all`, which
-		(as its name says) transitions *every* animatable property that
-		changes on this element — including its own `width`, since that's set
-		by the grid's responsive `auto-fill`/`minmax` column sizing in the
-		parent, not by us. During any resize (window drag *or* the sidebar's
-		push animation), that width is changing continuously, many times a
-		second — so the card's actual rendered box was perpetually chasing a
-		150ms-lagged, constantly-moving target instead of just tracking the
-		grid directly, which is exactly what reads as a springy "jiggle"
-		rather than a clean resize. This was never about Vue re-rendering or
-		the TransitionGroup move animation at all (two earlier, wrong guesses
-		at this same bug) — narrowing the transition to only the properties
-		that are actually meant to animate here (hover/selection color,
-		border, brightness, and the click/drag scale transform) leaves the
-		card's layout box itself untouched by any transition, so it just
-		tracks the grid's real size instantly, same as every other element on
-		the page. -->
 	<div
 		class="relative flex w-full min-w-0 select-none overflow-clip border border-solid bg-surface-3 text-left transition-[color,background-color,border-color,filter,transform] duration-150 ease-in-out"
 		:class="{

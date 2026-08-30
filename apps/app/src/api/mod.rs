@@ -26,12 +26,17 @@ mod ads_occlusion_macos;
 #[cfg(windows)]
 mod ads_occlusion_windows;
 pub mod cache;
+// Modrinth Studios addition, see apps/app/src/api/discord_rpc.rs
+pub mod discord_rpc;
 pub mod files;
 pub mod friends;
 // Modrinth Studios additions, see apps/app/src/api/replays.rs and studio.rs
 pub mod playtime_correction;
 pub mod replays;
+pub mod shared_profile;
 pub mod studio;
+#[cfg(windows)]
+mod studio_pinned_icon_windows;
 pub mod worlds;
 
 mod oauth_utils;

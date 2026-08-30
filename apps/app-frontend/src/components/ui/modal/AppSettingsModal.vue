@@ -1,9 +1,11 @@
 <script setup lang="ts">
 import {
 	CoffeeIcon,
+	DatabaseIcon,
 	GameIcon,
 	GaugeIcon,
 	HeartHandshakeIcon,
+	InfoIcon,
 	LanguagesIcon,
 	ModrinthIcon,
 	PaintbrushIcon,
@@ -23,6 +25,7 @@ import {
 	useVIntl,
 } from '@modrinth/ui'
 import { getVersion } from '@tauri-apps/api/app'
+import { openUrl } from '@tauri-apps/plugin-opener'
 import { platform as getOsPlatform, version as getOsVersion } from '@tauri-apps/plugin-os'
 import { computed, provide, ref, watch } from 'vue'
 
@@ -36,6 +39,7 @@ import LanguageSettings from '@/components/ui/settings/display/LanguageSettings.
 import DefaultInstanceSettings from '@/components/ui/settings/instances/DefaultInstanceSettings.vue'
 import JavaSettings from '@/components/ui/settings/instances/JavaSettings.vue'
 import ResourceManagementSettings from '@/components/ui/settings/instances/ResourceManagementSettings.vue'
+import StorageSettings from '@/components/ui/settings/instances/StorageSettings.vue'
 import { useAppSettings } from '@/composables/use-app-settings.ts'
 import { get, set } from '@/helpers/settings.ts'
 import {
@@ -155,6 +159,16 @@ const tabs = [
 		icon: GaugeIcon,
 		content: ResourceManagementSettings,
 	},
+	{
+		// Modrinth Studios addition — see StorageSettings.vue
+		name: defineMessage({
+			id: 'app.settings.tabs.storage',
+			defaultMessage: 'Storage',
+		}),
+		category: tabCategories.instances,
+		icon: DatabaseIcon,
+		content: StorageSettings,
+	},
 ]
 
 const availableTabs = computed(() =>
@@ -231,6 +245,21 @@ const osPlatform = getOsPlatform()
 const osVersion = getOsVersion()
 const settings = ref(await get())
 
+// Modrinth Studios addition: the official Modrinth App doesn't publish a
+// simple version number to track against — its own package.json/Cargo.toml
+// always read "1.0.0-local" in source (a real version only gets stamped in
+// at their own release-build time, not committed to the repo), and
+// modrinth.com/app itself just calls it a rolling "Beta Release" with no
+// version shown. The one fact that's actually verifiable is the exact
+// upstream commit this fork last synced with — shown here (with a link to
+// it on GitHub) instead of a version number that doesn't really exist.
+// Update this pair whenever pulling newer upstream changes in.
+const UPSTREAM_BASE_COMMIT = 'e33ef5f25'
+const UPSTREAM_BASE_DATE = '2026-08-25'
+function openUpstreamCommit() {
+	void openUrl(`https://github.com/modrinth/code/commit/${UPSTREAM_BASE_COMMIT}`)
+}
+
 watch(
 	settings,
 	async () => {
@@ -271,6 +300,10 @@ const messages = defineMessages({
 	developerModeButtonLabel: {
 		id: 'app.settings.developer-mode-button.label',
 		defaultMessage: 'Toggle developer mode',
+	},
+	upstreamBase: {
+		id: 'app.settings.upstream-base',
+		defaultMessage: 'Based on Modrinth App @ {commit} ({date})',
 	},
 })
 </script>
@@ -334,6 +367,24 @@ const messages = defineMessages({
 							{{ osVersion }}
 						</p>
 					</div>
+					<button
+						v-tooltip="
+							formatMessage(messages.upstreamBase, {
+								commit: UPSTREAM_BASE_COMMIT,
+								date: UPSTREAM_BASE_DATE,
+							})
+						"
+						:aria-label="
+							formatMessage(messages.upstreamBase, {
+								commit: UPSTREAM_BASE_COMMIT,
+								date: UPSTREAM_BASE_DATE,
+							})
+						"
+						class="p-0 m-0 bg-transparent border-none cursor-pointer text-secondary hover:text-primary button-animation"
+						@click="openUpstreamCommit"
+					>
+						<InfoIcon aria-hidden="true" class="w-4 h-4" />
+					</button>
 				</div>
 			</div>
 		</template>

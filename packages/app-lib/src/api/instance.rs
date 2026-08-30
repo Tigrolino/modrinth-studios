@@ -12,6 +12,8 @@ mod paths;
 mod projects;
 mod run;
 mod shared;
+// Modrinth Studios addition, see storage.rs
+mod storage;
 
 pub use self::content::{
     get_content_items, get_dependencies_as_content_items,
@@ -55,6 +57,13 @@ pub(crate) use self::shared::{
     CONFIG_BUNDLE_FILE_TYPE, CONFIG_DIRECTORY, CONFIG_FILE_EXTENSIONS,
     CONFIG_SYNC_ENABLED, MAX_CONFIG_BUNDLE_ENTRIES,
     read_bounded_config_bundle_entry,
+};
+// Modrinth Studios addition, see storage.rs
+pub use self::storage::{
+    InstanceStorageUsage, SharedFolderBreakdown, SharedFolderStorageUsage,
+    StorageBreakdown, SystemStorageOverview, instance_storage_usage,
+    instance_storage_usage_single, shared_folder_storage_usage,
+    system_storage_overview,
 };
 pub use self::shared::{
     SharedInstanceExternalFilePreview, SharedInstanceInstallPreview,

@@ -50,3 +50,15 @@ pub(crate) use self::shared_instance::{
     attach_shared_instance, clear_shared_instance, mark_shared_instance_stale,
     quarantine_shared_instance, set_shared_instance_sync_status,
 };
+
+// Modrinth Studios addition: keeps a renamed instance folder from breaking,
+// see reconcile_instance_paths.rs's own doc comment.
+mod reconcile_instance_paths;
+pub(crate) use self::reconcile_instance_paths::{
+    reconcile_instance_paths, write_instance_marker,
+};
+
+// Modrinth Studios addition: the other direction of the above — renaming an
+// instance in Modrinth renames its folder too. See rename_instance_folder.rs.
+mod rename_instance_folder;
+pub(crate) use self::rename_instance_folder::rename_instance_folder_for_name_change;
