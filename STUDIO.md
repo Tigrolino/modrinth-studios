@@ -1361,6 +1361,63 @@ Then tag + push a release (see below) so everyone's app picks it up.
   monorepo `v0.x.x` tag it lands closest to, though that tag versions the whole website+backend+app
   monorepo, not the desktop app specifically).
 
+## Pulling in upstream changes
+
+Studio last merged upstream at `v0.19.1` (commit `5d4759430`, 2026-08-27), 22 commits and ~495
+files past the original fork point (`e33ef5f25`). Note `origin/main` and `origin/prod` are not
+useful merge targets on their own — at least as of this merge, both had a history rewrite somewhere
+past our fork point (`git merge-base --is-ancestor e33ef5f25 origin/main` returns false), so a
+recent `v0.x.x` **tag** that *does* have our current base as an ancestor
+(`git merge-base --is-ancestor <our current UPSTREAM_BASE_COMMIT> <tag>`) is the reliable way to
+find the next real merge target, not just fetching the branch tip.
+
+Ten files conflicted on that merge, all resolvable by hand without needing to redo any Studio
+feature from scratch — worth knowing about since they'll likely conflict again next time too:
+
+- **`AppSettingsModal.vue`, `App.vue`, `instance/index.ts`, `instance/layout.vue`,
+  `page-header/index.vue`** conflicted only because Studio and upstream both added independent
+  tabs/imports/computeds near the same lines (Replays next to upstream's new Screenshots tab,
+  Discord RPC/Storage settings tabs next to upstream's Synced settings tab, etc.) — always safe to
+  keep both sides, just watch tab ordering (upstream's Screenshots splices in at index 2, before
+  Worlds; Replays pushes after Worlds, before Logs).
+- **`InstanceItem.vue`**: upstream's "menu refactor" (#7307) rewrote this whole card to open a
+  right-click `ContextMenu` instead of always-visible buttons, and renamed the shared option-list
+  type from `OverflowMenuOption` to `ButtonMenuOption` app-wide (also hit `page-header/index.vue`'s
+  Stop-All dropdown). Took upstream's structure wholesale; Studio's only actual change here was one
+  color token (`color="green"` → `color="brand"` on the Play button, matching `WorldItem.vue`'s
+  existing convention) — reapply that one-line swap onto whatever upstream's Play button looks like
+  next time, don't try to keep Studio's old pre-refactor card markup.
+- **`SplashScreen.vue`**: upstream made the splash screen properly light/dark theme-aware
+  (`${theme.active}-mode`, its own light cube art and tint colors via new `--splash-tint-top/
+  -bottom`, `--splash-overlay` variables in `variables.scss`). Studio still deliberately hardcodes
+  `class="splash-screen dark"` (documented in the file) so the splash looks the same regardless of
+  theme — `useTheme()` was intentionally not pulled in. Kept upstream's new CSS-variable structure
+  (cleaner than the old hardcoded rgba gradient) but override `--splash-tint-top` back to
+  `color-mix(in srgb, var(--color-brand) 45%, transparent)` on `.splash-screen.dark` so it still
+  follows the accent color instead of upstream's plain green. If Studio ever wants a real light-mode
+  splash, this hardcoding is the first thing to revisit.
+- **`MultiSelect.vue`**: same line Studio touched for the focus-ring clipping fix (#77) also got
+  touched by upstream's menu refactor, which moved the search input's spacing from the outer
+  container's `py-1.5` onto the `Input` itself (`wrapper-class="grow m-2"`, 8px margin all around) —
+  that already fixes the clipping on its own, so took upstream's side outright rather than doubling
+  up padding.
+- **`packages/app-lib/src/state/process.rs`**: NOT a real conflict — upstream's side of this hunk
+  was byte-for-byte identical to the pre-fork base; the conflict only fired because Studio's own fix
+  (#126, warn-and-continue instead of `?`-propagating launcher-log I/O errors so a locked log path
+  can't block the actual game launch) touched adjacent lines. Kept Studio's side entirely.
+- **`packages/app-lib/src/api/instance.rs`**: both sides just added a new `mod` line
+  (`storage`/`synced_options`) right next to each other — kept both.
+
+Also worth knowing: this merge revealed the official app dropped its old "Default game options" app
+settings tab (`GameIcon`, `DefaultInstanceSettings.vue`) in favor of a new "Synced settings" tab
+(`InstancesSyncedSettings.vue`) as part of a broader `instance-sync` feature (screenshots syncing
+across instances, `synced_options` on the instance record) — that tab and its whole `context-menu/`
+component folder were removed cleanly, no Studio code referenced either.
+
+After merging, remember to bump `UPSTREAM_BASE_COMMIT`/`UPSTREAM_BASE_DATE` in
+`AppSettingsModal.vue` to the new tag's commit — see the "Upstream base commit shown in Settings"
+entry above.
+
 ## Releasing an update
 
 1. Bump `version` in `apps/app-frontend/package.json` (that's what

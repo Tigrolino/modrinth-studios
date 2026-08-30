@@ -271,6 +271,9 @@ defineExpose({
 	openFolder,
 	addContent,
 	instance: props.instance,
+	get playing() {
+		return playing.value
+	},
 })
 
 useAppEvent('process', (event) => {

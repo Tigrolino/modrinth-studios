@@ -1,7 +1,13 @@
 <template>
 	<PageHeader :title="instance.name">
 		<template #leading>
-			<Avatar :src="iconSrc" :alt="instance.name" size="64px" :tint-by="instance.id" />
+			<Avatar
+				:src="iconSrc"
+				:alt="instance.name"
+				size="64px"
+				:tint-by="instance.id"
+				pad-transparent-corners
+			/>
 		</template>
 
 		<template v-if="instance.shared_instance || instance.quarantined" #badges>
@@ -205,10 +211,10 @@ import {
 import { Button, IconButton, SplitButton, TeleportOverflowMenu } from '@modrinth/ui'
 import {
 	Avatar,
+	type ButtonMenuOption,
 	commonMessages,
 	defineMessages,
 	formatLoaderLabel,
-	type OverflowMenuOption,
 	PageHeader,
 	PageHeaderActions,
 	PageHeaderBadgeItem,
@@ -400,7 +406,7 @@ const playtimeLabel = computed(() => {
 
 	return `${seconds} second${seconds === 1 ? '' : 's'}`
 })
-const serverPlayOptions = computed<OverflowMenuOption[]>(() => [
+const serverPlayOptions = computed<ButtonMenuOption[]>(() => [
 	{
 		id: 'launch_instance',
 		label: formatMessage(messages.launchInstance),
@@ -410,7 +416,7 @@ const serverPlayOptions = computed<OverflowMenuOption[]>(() => [
 ])
 // Modrinth Studios addition: one "stop just this window" entry per running
 // process, shown in the Stop All split-button's dropdown.
-const stopOptions = computed<OverflowMenuOption[]>(() =>
+const stopOptions = computed<ButtonMenuOption[]>(() =>
 	props.processes.map((process, index) => ({
 		id: process.uuid,
 		label: formatMessage(messages.stopOne, {
@@ -422,8 +428,8 @@ const stopOptions = computed<OverflowMenuOption[]>(() =>
 		action: () => emit('stopOne', process.uuid),
 	})),
 )
-const moreActions = computed<OverflowMenuOption[]>(() => {
-	const actions: OverflowMenuOption[] = [
+const moreActions = computed<ButtonMenuOption[]>(() => {
+	const actions: ButtonMenuOption[] = [
 		{
 			id: 'open-folder',
 			label: formatMessage(messages.openFolder),
