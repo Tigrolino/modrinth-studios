@@ -68,6 +68,23 @@ pub async fn edit(
     patch: EditInstance,
 ) -> crate::Result<InstanceMetadata> {
     let state = State::get().await?;
+
+    // Modrinth Studios addition: keep the on-disk folder name following the
+    // instance's display name — see rename_instance_folder.rs. Deliberately
+    // done *before* edit_instance() below, and its error (if any, e.g. the
+    // instance is running, or Windows refuses the rename) is propagated
+    // immediately without ever touching the database — so a failed folder
+    // rename can never leave the display name and the folder disagreeing
+    // with each other.
+    if let Some(new_name) = &patch.name {
+        crate::state::rename_instance_folder_for_name_change(
+            instance_id,
+            new_name,
+            &state,
+        )
+        .await?;
+    }
+
     crate::state::edit_instance(instance_id, patch, &state.pool).await?;
 
     let instance = crate::state::get_instance(instance_id, &state.pool)

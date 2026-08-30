@@ -35,7 +35,36 @@ async fn open_migrated_app_db(db_path: &Path) -> crate::Result<Pool<Sqlite>> {
         );
     }
 
-    sqlx::migrate!().run(&pool).await?;
+    // Modrinth Studios fix: strip any of Studio's own migration versions out
+    // of the legacy sqlx::migrate!()-tracked table *before* migrate!() runs
+    // and validates it — see studio_migrations.rs for the full why. Skipping
+    // this step (or running it after migrate!()) makes Studio's own
+    // migrator hit the exact "previously applied but is missing in the
+    // resolved migrations" error this fix exists to solve, just against
+    // itself instead of the official app.
+    super::studio_migrations::reconcile_legacy_rows(&pool).await?;
+
+    // Modrinth Studios fix: the shared AppData database may also have
+    // migrations applied by a *different build* of this same crate than the
+    // one currently running — e.g. the person's separate official Modrinth
+    // App install has since shipped upstream migrations Studio's own fork
+    // hasn't caught up to yet, and vice versa for the 5 Studio-only
+    // migrations `reconcile_legacy_rows` just cleared out above. By default
+    // sqlx::migrate!() hard-errors the moment `_sqlx_migrations` contains
+    // any row it doesn't resolve locally ("was previously applied but is
+    // missing in the resolved migrations") — `set_ignore_missing` tells it
+    // to tolerate that instead of refusing to start, which is exactly the
+    // documented use case for two applications sharing one database.
+    let mut migrator = sqlx::migrate!();
+    migrator.set_ignore_missing(true);
+    migrator.run(&pool).await?;
+
+    // Apply any of Studio's own schema additions that are still genuinely
+    // new (a fresh install, or a Studio migration added after this fix).
+    // Must run after the migrate!() call above, since some of Studio's
+    // migrations reference tables upstream's migrations create.
+    super::studio_migrations::apply_pending(&pool).await?;
+
     record_current_app_version(&pool).await?;
 
     if let Err(err) = stale_data_cleanup(&pool).await {

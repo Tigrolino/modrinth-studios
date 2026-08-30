@@ -97,7 +97,11 @@ import { useCheckDisableMouseover } from '@/composables/macCssFix.js'
 import { useAppEvent } from '@/composables/use-app-event'
 import { useAppSettings } from '@/composables/use-app-settings.ts'
 import { useError } from '@/composables/use-error.js'
-import { useStudioAppearance } from '@/composables/use-studio-appearance.ts'
+import {
+	applyAccentIconTint,
+	applyStudioWindowIcon,
+	useStudioAppearance,
+} from '@/composables/use-studio-appearance.ts'
 import { useTheme } from '@/composables/use-theme.ts'
 import { config } from '@/config'
 import {
@@ -554,6 +558,17 @@ const isDevEnvironment = ref(false)
 const stateInitialized = ref(false)
 
 const criticalErrorMessage = ref()
+// Modrinth Studios addition: these two banners had no way to dismiss —
+// Admonition already supports a dismiss button (`dismissible`/`@dismiss`),
+// it just wasn't turned on here. criticalErrorMessage is only ever set once
+// per session (a single fetch on mount, see below), so a plain dismissed
+// flag is enough for it. authUnreachable is a computed tied to a
+// periodically-refetching query and can flip true again later on a fresh
+// network blip — see the watcher below that clears its dismissal only when
+// a *new* occurrence starts, so dismissing doesn't permanently silence
+// future real ones.
+const criticalErrorDismissed = ref(false)
+const authUnreachableDismissed = ref(false)
 
 const isMaximized = ref(false)
 
@@ -576,6 +591,12 @@ const authUnreachable = computed(() => {
 		return true
 	}
 	return false
+})
+
+watch(authUnreachable, (isUnreachable, wasUnreachable) => {
+	if (isUnreachable && !wasUnreachable) {
+		authUnreachableDismissed.value = false
+	}
 })
 
 onMounted(async () => {
@@ -804,6 +825,18 @@ async function setupApp() {
 
 	await getCurrentWindow().onResized(async () => {
 		isMaximized.value = await getCurrentWindow().isMaximized()
+	})
+
+	// Modrinth Studios addition: safety net alongside the AppUserModelID fix
+	// in apps/app/src/main.rs's main() — re-applies whichever window icon
+	// should currently be showing (custom, or accent-tinted default; both
+	// are no-ops when they don't apply) every time the window regains focus,
+	// in case pinning the app to the taskbar or some other Windows Shell
+	// interaction ever silently resets it back to the exe's built-in icon.
+	await getCurrentWindow().onFocusChanged(({ payload: focused }) => {
+		if (!focused) return
+		void applyStudioWindowIcon()
+		void applyAccentIconTint()
 	})
 
 	if (telemetry) {
@@ -2127,10 +2160,13 @@ provideAppUpdateDownloadProgress(appUpdateDownload)
 				}"
 			></div>
 			<Admonition
-				v-if="criticalErrorMessage"
+				v-if="criticalErrorMessage && !criticalErrorDismissed"
 				type="critical"
 				:header="criticalErrorMessage.header"
 				class="m-6 mb-0"
+				dismissible
+				center-content
+				@dismiss="criticalErrorDismissed = true"
 			>
 				<div
 					class="markdown-body text-primary"
@@ -2138,10 +2174,13 @@ provideAppUpdateDownloadProgress(appUpdateDownload)
 				></div>
 			</Admonition>
 			<Admonition
-				v-if="authUnreachable"
+				v-if="authUnreachable && !authUnreachableDismissed"
 				type="warning"
 				:header="formatMessage(messages.authUnreachableHeader)"
 				class="m-6 mb-0"
+				dismissible
+				center-content
+				@dismiss="authUnreachableDismissed = true"
 			>
 				{{ formatMessage(messages.authUnreachableBody) }}
 			</Admonition>

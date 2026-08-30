@@ -214,7 +214,8 @@ pub async fn start_join_singleplayer_world(
     world: String,
 ) -> Result<ProcessMetadata> {
     let process =
-        instance::run(instance_id, QuickPlayType::Singleplayer(world)).await?;
+        instance::run(instance_id, QuickPlayType::Singleplayer(world), false)
+            .await?;
 
     Ok(process)
 }
@@ -227,6 +228,7 @@ pub async fn start_join_server(
     let process = instance::run(
         instance_id,
         QuickPlayType::Server(ServerAddress::Unresolved(address.to_owned())),
+        false,
     )
     .await?;
 

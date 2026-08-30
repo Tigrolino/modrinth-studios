@@ -186,6 +186,21 @@ impl DirectoryInfo {
         self.config_dir.join(CACHES_FOLDER_NAME)
     }
 
+    /// Modrinth Studios addition: root folder for shared Minecraft folders
+    /// (see api/shared_profile.rs) — each shared profile gets its own
+    /// subfolder here, holding the saves/config/resourcepacks/options.txt
+    /// that every instance using that profile links into instead of keeping
+    /// its own private copies.
+    #[inline]
+    pub fn shared_profiles_dir(&self) -> PathBuf {
+        self.config_dir.join("shared_profiles")
+    }
+
+    #[inline]
+    pub fn shared_profile_dir(&self, shared_profile_id: &str) -> PathBuf {
+        self.shared_profiles_dir().join(shared_profile_id)
+    }
+
     /// Get path from environment variable
     #[inline]
     fn env_path(name: &str) -> Option<PathBuf> {

@@ -49,6 +49,7 @@ pub use self::tunnel::*;
 
 pub mod db;
 pub(crate) mod db_backup;
+pub(crate) mod studio_migrations;
 mod mr_auth;
 
 pub use self::mr_auth::*;
@@ -146,6 +147,19 @@ impl State {
         }
 
         tokio::task::spawn(async move {
+            // Modrinth Studios addition: must run before
+            // watch_instances_init() below — it can correct an instance's
+            // tracked path (see reconcile_instance_paths.rs), and the
+            // watcher needs to be registered against the corrected path,
+            // not a stale one.
+            if let Err(e) =
+                instances::reconcile_instance_paths(state).await
+            {
+                tracing::error!(
+                    "Error reconciling renamed instance folders: {e}"
+                );
+            }
+
             instances::watcher::watch_instances_init(
                 &state.file_watcher,
                 &state.directories,

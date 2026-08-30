@@ -125,7 +125,7 @@
 					<div class="empty:hidden">
 						<div
 							v-if="searchable"
-							class="px-0 py-1.5 border-0 border-solid border-b border-b-surface-5 flex"
+							class="px-2 py-2 border-0 border-solid border-b border-b-surface-5 flex"
 						>
 							<Input
 								ref="searchInputRef"

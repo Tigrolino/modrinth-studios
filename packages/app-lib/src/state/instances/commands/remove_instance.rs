@@ -15,9 +15,51 @@ pub(crate) async fn remove_instance(
 
     delete_instance_row_and_locks(&instance.id, state).await?;
 
+    // Modrinth Studios fix: the instance is already gone from the database by
+    // this point — as far as the rest of the app (and the caller's
+    // `emit_instance(Removed)` right after this returns) is concerned, it no
+    // longer exists, full stop. Previously, a failure here (`?` on
+    // `remove_dir_all`) propagated straight up and skipped that emit
+    // entirely, which left a "ghost" card sitting in the Library — its DB row
+    // already deleted, so clicking it threw "Unknown instance", but with no
+    // event ever telling the frontend to refetch and drop it. It would only
+    // disappear once some unrelated event happened to trigger a refetch.
+    //
+    // The most common way to hit this on Windows is a file in the instance
+    // folder (a log file, a world's session.lock, a `.jar`) still being held
+    // open for a moment — by a just-exited game process, an antivirus scan,
+    // or a search indexer — right as the person deletes the instance. A few
+    // short retries absorb that transient case; if it's still stuck after
+    // that, we give up on the folder (logging it so it's at least
+    // discoverable) rather than resurrecting a "removed" instance by
+    // reporting failure.
     let path = state.directories.instances_dir().join(&instance.path);
     if path.exists() {
-        io::remove_dir_all(&path).await?;
+        const MAX_ATTEMPTS: u32 = 5;
+        let mut attempt = 0;
+        loop {
+            match io::remove_dir_all(&path).await {
+                Ok(()) => break,
+                Err(err) if attempt + 1 < MAX_ATTEMPTS => {
+                    attempt += 1;
+                    tracing::warn!(
+                        "Failed to remove instance folder '{}' (attempt {attempt}/{MAX_ATTEMPTS}): {err}. Retrying shortly.",
+                        path.display()
+                    );
+                    tokio::time::sleep(std::time::Duration::from_millis(
+                        400 * attempt as u64,
+                    ))
+                    .await;
+                }
+                Err(err) => {
+                    tracing::warn!(
+                        "Giving up removing instance folder '{}' for already-deleted instance '{instance_id}' after {MAX_ATTEMPTS} attempts: {err}. It may need to be deleted manually.",
+                        path.display()
+                    );
+                    break;
+                }
+            }
+        }
     }
 
     Ok(())

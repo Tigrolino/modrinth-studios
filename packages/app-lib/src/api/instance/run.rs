@@ -22,6 +22,11 @@ pub enum QuickPlayType {
 pub async fn run(
     instance_id: &str,
     quick_play_type: QuickPlayType,
+    // Modrinth Studios addition: see launch_minecraft()'s doc comment on the
+    // same-named parameter. `false` for every existing call site (the normal
+    // Play button) — only the new "Launch another instance" action passes
+    // `true`.
+    allow_multiple: bool,
 ) -> crate::Result<ProcessMetadata> {
     let state = State::get().await?;
     if crate::state::instances::adapters::sqlite::instance_rows::is_instance_quarantined(
@@ -45,7 +50,13 @@ pub async fn run(
         .await?
         .ok_or_else(|| crate::ErrorKind::NoCredentialsError.as_error())?;
 
-    run_credentials(instance_id, &default_account, quick_play_type).await
+    run_credentials(
+        instance_id,
+        &default_account,
+        quick_play_type,
+        allow_multiple,
+    )
+    .await
 }
 
 #[tracing::instrument(skip(credentials))]
@@ -53,6 +64,7 @@ async fn run_credentials(
     instance_id: &str,
     credentials: &Credentials,
     quick_play_type: QuickPlayType,
+    allow_multiple: bool,
 ) -> crate::Result<ProcessMetadata> {
     let state = State::get().await?;
     let settings = Settings::get(&state.pool).await?;
@@ -279,6 +291,7 @@ async fn run_credentials(
         post_exit_hook,
         &context,
         quick_play_type,
+        allow_multiple,
     )
     .await
 }

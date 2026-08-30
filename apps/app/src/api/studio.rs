@@ -1,6 +1,8 @@
-//! Modrinth Studios addition: small grab-bag of app-only commands that don't
-//! belong in `theseus` (app-lib) because they're purely cosmetic/runtime and
-//! specific to this fork, not general launcher functionality. New plugin
+//! Modrinth Studios addition: small grab-bag of app-only commands specific
+//! to this fork — mostly cosmetic/runtime (backgrounds, icons), plus the
+//! occasional thin Tauri wrapper (like the Storage page's usage command)
+//! for real `theseus` (app-lib) functionality that's fork-only and
+//! therefore doesn't belong in an upstream-shared API file. New plugin
 //! file, doesn't touch any upstream module.
 
 use crate::api::Result;
@@ -12,8 +14,15 @@ pub fn init<R: Runtime>() -> tauri::plugin::TauriPlugin<R> {
             studio_set_background_images,
             studio_set_background_folder,
             studio_set_background_videos,
+            studio_set_background_video_folder,
             studio_set_app_icon,
-            studio_set_splash_background
+            studio_set_splash_background,
+            studio_set_generated_app_icon,
+            studio_apply_pinned_icon,
+            studio_instance_storage_usage,
+            studio_instance_storage_usage_single,
+            studio_shared_folder_storage_usage,
+            studio_system_storage_overview
         ])
         .build()
 }
@@ -222,6 +231,35 @@ pub async fn studio_set_background_videos<R: Runtime>(
     copy_images_into(&batch_dir, &sources).await
 }
 
+/// Same idea as `studio_set_background_folder`, but for every video file
+/// found directly inside a user-picked folder (not recursive), copied into
+/// the video pool's own batch dir. Mirrors `studio_set_background_folder`'s
+/// "Choose folder..." convenience for the Video tab, which was previously
+/// missing (Video only had "Choose video(s)..." — picking every video out of
+/// a folder one at a time felt off compared to the Image tab).
+#[tauri::command]
+pub async fn studio_set_background_video_folder<R: Runtime>(
+    app: tauri::AppHandle<R>,
+    folder_path: String,
+) -> Result<Vec<String>> {
+    let folder = std::path::PathBuf::from(&folder_path);
+    let mut sources = Vec::new();
+    let mut entries = tokio::fs::read_dir(&folder).await?;
+    while let Some(entry) = entries.next_entry().await? {
+        let path = entry.path();
+        if path.is_file() && is_video_file(&path) {
+            sources.push(path);
+        }
+    }
+    if sources.is_empty() {
+        return Ok(Vec::new());
+    }
+    sources.sort();
+
+    let batch_dir = fresh_video_batch_dir(&app).await?;
+    copy_images_into(&batch_dir, &sources).await
+}
+
 /// Copies a user-picked app icon into `$APPCONFIG/studio/` and returns the
 /// destination path. Copying it (instead of using the originally-picked path
 /// directly) matters for two reasons: the original path is very likely
@@ -248,4 +286,126 @@ pub async fn studio_set_splash_background<R: Runtime>(
     source_path: String,
 ) -> Result<String> {
     copy_into_studio_dir(&app, &source_path, "splash-background").await
+}
+
+/// Writes a runtime-generated icon (the app's own ring mark recolored to the
+/// current accent color — see `applyAccentIconTint()` in
+/// `use-studio-appearance.ts`) to `$APPCONFIG/studio/` so it can be applied
+/// as the running window/taskbar icon via `setIcon()`.
+///
+/// Modrinth Studios addition: this used to always write the exact same
+/// filename (`generated-icon.png`), overwritten in place on every accent
+/// change. That's the same class of bug `copy_into_studio_dir` documents
+/// above (Windows/the webview can cache an icon by its file path, not just
+/// its bytes) — and on Windows it explains a real symptom: the tinted icon
+/// shows correctly in the title bar, alt-tab, and Task Manager (which all
+/// query the live window icon) but the taskbar button itself can keep
+/// showing a stale icon, because taskbar icon resolution is documented to
+/// cache more aggressively and by path. Giving each write a fresh filename
+/// (mirroring `copy_into_studio_dir`'s pattern, including its best-effort
+/// cleanup of earlier copies) guarantees there's nothing stale at the old
+/// path for anything to keep serving.
+#[tauri::command]
+pub async fn studio_set_generated_app_icon<R: Runtime>(
+    app: tauri::AppHandle<R>,
+    bytes: Vec<u8>,
+) -> Result<String> {
+    let config_dir = app.path().app_config_dir()?;
+    let studio_dir = config_dir.join("studio");
+    tokio::fs::create_dir_all(&studio_dir).await?;
+
+    let unique = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_millis())
+        .unwrap_or(0);
+    let dest = studio_dir.join(format!("generated-icon-{unique}.png"));
+    tokio::fs::write(&dest, &bytes).await?;
+
+    if let Ok(mut entries) = tokio::fs::read_dir(&studio_dir).await {
+        while let Ok(Some(entry)) = entries.next_entry().await {
+            let path = entry.path();
+            if path == dest {
+                continue;
+            }
+            let is_old_copy = path
+                .file_name()
+                .and_then(|n| n.to_str())
+                .is_some_and(|n| n.starts_with("generated-icon-"));
+            if is_old_copy {
+                let _ = tokio::fs::remove_file(&path).await;
+            }
+        }
+    }
+
+    Ok(dest.to_string_lossy().into_owned())
+}
+
+/// Modrinth Studios addition: applies `bytes` (a `.ico` file, see
+/// `wrapPngAsIco()` in `use-studio-appearance.ts`) as the icon for any
+/// taskbar-pinned or Start-menu shortcut pointing at this app, by editing
+/// the shortcut file(s) directly — see `studio_pinned_icon_windows.rs` for
+/// why that's needed (a pinned shortcut's icon is independent of whatever
+/// the running window sets for itself) and why it's safe (it never touches
+/// the installed exe, only the person's own shortcut files). No-op on
+/// platforms other than Windows, where this class of problem doesn't exist.
+#[tauri::command]
+pub async fn studio_apply_pinned_icon<R: Runtime>(
+    app: tauri::AppHandle<R>,
+    bytes: Vec<u8>,
+) -> Result<String> {
+    #[cfg(windows)]
+    {
+        let config_dir = app.path().app_config_dir()?;
+        let studio_dir = config_dir.join("studio");
+        let summary = crate::api::studio_pinned_icon_windows::apply_pinned_icon(&studio_dir, bytes)?;
+        Ok(summary)
+    }
+    #[cfg(not(windows))]
+    {
+        let _ = (app, bytes);
+        Ok("not windows, no-op".to_string())
+    }
+}
+
+/// Modrinth Studios addition: backs the Settings > Storage page — see
+/// `theseus::instance::instance_storage_usage()` for the actual disk-usage
+/// walk. Thin Tauri wrapper only; kept here rather than in the upstream
+/// `api/instance.rs` so this fork-only feature doesn't touch a file shared
+/// with upstream.
+#[tauri::command]
+pub async fn studio_instance_storage_usage()
+-> Result<Vec<theseus::instance::InstanceStorageUsage>> {
+    Ok(theseus::instance::instance_storage_usage().await?)
+}
+
+/// Modrinth Studios addition: backs the instance page header's "storage next
+/// to playtime" display (behind the toggle on Settings > Storage) — walks
+/// only the one instance asked for, instead of every instance like
+/// `studio_instance_storage_usage` above, so opening an instance page never
+/// pays for measuring unrelated instances. See
+/// `theseus::instance::instance_storage_usage_single()`.
+#[tauri::command]
+pub async fn studio_instance_storage_usage_single(
+    instance_id: String,
+) -> Result<Option<theseus::instance::InstanceStorageUsage>> {
+    Ok(theseus::instance::instance_storage_usage_single(&instance_id).await?)
+}
+
+/// Modrinth Studios addition: backs the Storage page's separate "shared
+/// folders" section — see `theseus::instance::shared_folder_storage_usage()`
+/// for why shared folders need their own listing instead of being folded
+/// into any single instance's number.
+#[tauri::command]
+pub async fn studio_shared_folder_storage_usage()
+-> Result<Vec<theseus::instance::SharedFolderStorageUsage>> {
+    Ok(theseus::instance::shared_folder_storage_usage().await?)
+}
+
+/// Modrinth Studios addition: backs the Storage page's Steam-style overview
+/// bar at the top — see `theseus::instance::system_storage_overview()` for
+/// how the segments are actually computed.
+#[tauri::command]
+pub async fn studio_system_storage_overview()
+-> Result<theseus::instance::SystemStorageOverview> {
+    Ok(theseus::instance::system_storage_overview().await?)
 }

@@ -114,6 +114,33 @@ async fn set_restart_after_pending_update(
 // if Tauri app is called with arguments, then those arguments will be treated as commands
 // ie: deep links or filepaths for .mrpacks
 fn main() {
+    // Modrinth Studios addition: fixes the runtime-applied window icon
+    // (custom icon, or the accent-tinted default — see
+    // applyAccentIconTint() in use-studio-appearance.ts) reverting to the
+    // exe's built-in default specifically once the app is pinned to the
+    // Windows taskbar. Windows groups a pinned shortcut and its running
+    // window into one combined taskbar button by "Application User Model
+    // ID" (AUMID); without an AUMID explicitly set, both the shortcut and
+    // the running process fall back to an *implicit* one derived from the
+    // exe's file path, and in practice that implicit identity is what
+    // pinning can key the combined button's icon off, ignoring whatever
+    // icon the running window set for itself via `setIcon()`/`WM_SETICON`.
+    // Explicitly claiming a stable, real AUMID for this process is the
+    // standard fix for that class of bug. Must run before any window is
+    // created — first thing in `main()`, on Windows only.
+    #[cfg(target_os = "windows")]
+    {
+        use windows::Win32::UI::Shell::SetCurrentProcessExplicitAppUserModelID;
+        use windows::core::PCWSTR;
+
+        let aumid: Vec<u16> = "ModrinthStudios.App\0".encode_utf16().collect();
+        if let Err(e) =
+            unsafe { SetCurrentProcessExplicitAppUserModelID(PCWSTR(aumid.as_ptr())) }
+        {
+            tracing::warn!("Failed to set AppUserModelID: {e}");
+        }
+    }
+
     #[cfg(feature = "export-app-events")]
     theseus::export_app_event_bindings(
         std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
@@ -263,8 +290,10 @@ fn main() {
         .plugin(api::ads::init())
         .plugin(api::friends::init())
         // Modrinth Studios additions
+        .plugin(api::discord_rpc::init())
         .plugin(api::playtime_correction::init())
         .plugin(api::replays::init())
+        .plugin(api::shared_profile::init())
         .plugin(api::studio::init())
         .plugin(api::worlds::init())
         .manage(PendingUpdateData::default())
