@@ -8,7 +8,7 @@ import {
 } from '@modrinth/ui'
 import { computed, inject, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 
-import { type ColorTheme, useTheme } from '@/composables/use-theme.ts'
+import { type ColorTheme, isDarkTheme, useTheme } from '@/composables/use-theme.ts'
 import { type AppSettings, get, set } from '@/helpers/settings.ts'
 import { getOS } from '@/helpers/utils'
 import { appSettingsModalContextKey } from '@/providers/app-settings-modal'
@@ -63,6 +63,9 @@ const { saved, current, changes, saving, hasChanges, reset, save } = useSavable(
 
 		await set(nextSettings)
 		settings.value = nextSettings
+		if (isDarkTheme(value.theme)) {
+			theme.preferredDark = value.theme
+		}
 		theme.preferred = value.theme
 		theme.syncAcrossDevices = value.syncAcrossDevices
 		theme.advancedRendering = value.advancedRendering
@@ -74,6 +77,10 @@ const themeOptions = computed(() =>
 		(option) =>
 			option !== 'retro' || settings.value.developer_mode || current.value.theme === 'retro',
 	),
+)
+
+const preferredDarkTheme = computed(() =>
+	isDarkTheme(current.value.theme) ? current.value.theme : theme.preferredDark,
 )
 
 function setTheme(value: ColorTheme): void {
@@ -129,7 +136,8 @@ provideAppearanceSettings({
 	theme: {
 		current: computed(() => current.value.theme),
 		options: themeOptions,
-		system: computed(() => theme.native),
+		system: computed(() => (theme.native === 'light' ? 'light' : preferredDarkTheme.value)),
+		preferredDark: preferredDarkTheme,
 		set: setTheme,
 		syncAcrossDevices: {
 			value: computed(() => current.value.syncAcrossDevices),

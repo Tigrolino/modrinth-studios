@@ -2,13 +2,13 @@
 import {
 	CoffeeIcon,
 	DatabaseIcon,
-	GameIcon,
 	GaugeIcon,
 	HeartHandshakeIcon,
 	InfoIcon,
 	LanguagesIcon,
 	ModrinthIcon,
 	PaintbrushIcon,
+	RefreshCwIcon,
 	Settings2Icon,
 	ShieldIcon,
 	ToggleRightIcon,
@@ -36,7 +36,7 @@ import AppearanceSettings from '@/components/ui/settings/display/AppearanceSetti
 import BehaviorSettings from '@/components/ui/settings/display/BehaviorSettings.vue'
 import FeatureFlagSettings from '@/components/ui/settings/display/FeatureFlagSettings.vue'
 import LanguageSettings from '@/components/ui/settings/display/LanguageSettings.vue'
-import DefaultInstanceSettings from '@/components/ui/settings/instances/DefaultInstanceSettings.vue'
+import InstancesSyncedSettings from '@/components/ui/settings/instances/InstancesSyncedSettings.vue'
 import JavaSettings from '@/components/ui/settings/instances/JavaSettings.vue'
 import ResourceManagementSettings from '@/components/ui/settings/instances/ResourceManagementSettings.vue'
 import StorageSettings from '@/components/ui/settings/instances/StorageSettings.vue'
@@ -134,12 +134,12 @@ const tabs = [
 	},
 	{
 		name: defineMessage({
-			id: 'app.settings.tabs.default-instance-options',
-			defaultMessage: 'Default game options',
+			id: 'app.settings.tabs.synced-options',
+			defaultMessage: 'Synced settings',
 		}),
 		category: tabCategories.instances,
-		icon: GameIcon,
-		content: DefaultInstanceSettings,
+		icon: RefreshCwIcon,
+		content: InstancesSyncedSettings,
 	},
 	{
 		name: defineMessage({
@@ -236,7 +236,27 @@ function showProfile(): void {
 	modal.value?.show()
 }
 
-defineExpose({ show, showProfile })
+function showFeatureFlags(): void {
+	const featureFlagsTabIndex = availableTabs.value.findIndex(
+		(tab) => tab.content === FeatureFlagSettings,
+	)
+	if (featureFlagsTabIndex >= 0) {
+		modal.value?.setTab(featureFlagsTabIndex)
+	}
+	modal.value?.show()
+}
+
+function showSyncedOptions(): void {
+	const syncedOptionsTabIndex = availableTabs.value.findIndex(
+		(tab) => tab.content === InstancesSyncedSettings,
+	)
+	if (syncedOptionsTabIndex >= 0) {
+		modal.value?.setTab(syncedOptionsTabIndex)
+	}
+	modal.value?.show()
+}
+
+defineExpose({ show, showProfile, showFeatureFlags, showSyncedOptions })
 
 const { progress, version: downloadingVersion } = injectAppUpdateDownloadProgress()
 
@@ -254,8 +274,8 @@ const settings = ref(await get())
 // upstream commit this fork last synced with — shown here (with a link to
 // it on GitHub) instead of a version number that doesn't really exist.
 // Update this pair whenever pulling newer upstream changes in.
-const UPSTREAM_BASE_COMMIT = 'e33ef5f25'
-const UPSTREAM_BASE_DATE = '2026-08-25'
+const UPSTREAM_BASE_COMMIT = '5d4759430'
+const UPSTREAM_BASE_DATE = '2026-08-27'
 function openUpstreamCommit() {
 	void openUrl(`https://github.com/modrinth/code/commit/${UPSTREAM_BASE_COMMIT}`)
 }

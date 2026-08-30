@@ -1,5 +1,11 @@
 <template>
 	<Transition name="splash-fade" @after-leave="onAfterLeave">
+		<!-- Modrinth Studios: upstream made this screen properly light/dark
+		     theme-aware (`${theme.active}-mode`, with its own light cube
+		     artwork and tint colors). Studio still hardcodes `dark` here on
+		     purpose — see the `.splash-screen.dark` rule below — so this
+		     screen looks the same regardless of the person's theme setting;
+		     `useTheme()` was intentionally not pulled in for that reason. -->
 		<div v-if="!doneLoading || splashPreviewActive" class="splash-screen dark">
 			<div class="app-logo-wrapper" data-tauri-drag-region>
 				<!--
@@ -184,6 +190,12 @@ useAppEvent('loading', (e) => {
 	position: fixed;
 	inset: 0;
 	z-index: 10000;
+
+	--splash-cube-image: url('@/assets/loading/cube.png');
+
+	&.light-mode {
+		--splash-cube-image: url('@/assets/loading/cube-light.webp');
+	}
 }
 
 // Modrinth Studios addition: this component hardcodes the `dark` class
@@ -200,6 +212,9 @@ useAppEvent('loading', (e) => {
 // theme rule.
 .splash-screen.dark {
 	--color-brand: var(--studio-brand-override, var(--color-green));
+	// See the comment on .gradient-bg's `background` above: keeps the top
+	// tint following the accent color instead of upstream's plain green.
+	--splash-tint-top: color-mix(in srgb, var(--color-brand) 45%, transparent);
 }
 
 .splash-fade-leave-active {
@@ -223,6 +238,7 @@ useAppEvent('loading', (e) => {
 	align-items: center;
 
 	gap: 1rem;
+	color: var(--color-contrast);
 
 	z-index: 9998;
 }
@@ -269,20 +285,17 @@ useAppEvent('loading', (e) => {
 	position: absolute;
 	height: 100vh;
 	width: 100vw;
-	// Modrinth Studios addition: this used to be a hardcoded green wash
-	// (rgba(66, 131, 92, ...)) regardless of the user's accent color. Now
-	// derived from --color-brand via color-mix so it follows the accent
-	// color like the rest of the app. --color-brand is already applied to
-	// the document root synchronously before this component ever mounts
-	// (see applyStudioAppearance() in main.js), so this is correct on the
-	// very first frame, not just after settings load.
+	// Modrinth Studios addition: --splash-tint-top used to be a hardcoded
+	// green wash (rgba(66, 131, 92, ...)) regardless of the user's accent
+	// color. Overridden below (see .splash-screen.dark) to derive from
+	// --color-brand via color-mix so it follows the accent color like the
+	// rest of the app. --color-brand is already applied to the document
+	// root synchronously before this component ever mounts (see
+	// applyStudioAppearance() in main.js), so this is correct on the very
+	// first frame, not just after settings load.
 	background:
-		linear-gradient(
-			180deg,
-			color-mix(in srgb, var(--color-brand) 45%, transparent) 0%,
-			rgba(17, 35, 43, 0.5) 97.29%
-		),
-		linear-gradient(0deg, rgba(22, 24, 28, 0.64), rgba(22, 24, 28, 0.64));
+		linear-gradient(180deg, var(--splash-tint-top) 0%, var(--splash-tint-bottom) 97.29%),
+		linear-gradient(0deg, var(--splash-overlay), var(--splash-overlay));
 	z-index: 9997;
 }
 
@@ -295,11 +308,19 @@ useAppEvent('loading', (e) => {
 
 	width: 180vw;
 	height: 180vh;
-	opacity: 0.8;
-	background: #16181c url('@/assets/loading/cube.png') center no-repeat;
-	background-size: contain;
+	background-color: var(--color-bg);
 
 	z-index: 9996;
+
+	&::after {
+		content: '';
+		position: absolute;
+		inset: 0;
+		background: var(--splash-cube-image) center no-repeat;
+		background-size: contain;
+		opacity: var(--splash-cube-opacity);
+		mix-blend-mode: var(--splash-cube-blend);
+	}
 }
 
 // Modrinth Studios addition: overrides .cube-bg's sizing (above) for the

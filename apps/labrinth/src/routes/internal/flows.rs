@@ -24,7 +24,6 @@ use crate::util::error::ApiContext as _;
 use crate::util::error::Context;
 use crate::util::ext::get_image_ext;
 use crate::util::img::upload_image_optimized;
-use crate::util::ip::client_ip;
 use crate::util::neverbounce::{check_email, email_check_error_generic};
 use crate::util::usercheck::{
     DecisionAction, check_email_gate, gate_block_error,
@@ -1545,7 +1544,7 @@ pub async fn create_oauth_account(
     };
 
     if let Some(email) = &user.email {
-        ensure_email_passes_gate(&req, email)
+        ensure_email_passes_gate(&redis, email)
             .await
             .wrap_api_err("validating email passes the signup gate")?;
     }
@@ -1904,10 +1903,10 @@ impl From<NewAccount> for AccountRegisterFlow {
 
 /// Runs the UserCheck gate, which covers both password and OAuth signups.
 async fn ensure_email_passes_gate(
-    req: &HttpRequest,
+    redis: &RedisPool,
     email: &str,
 ) -> Result<(), ApiError> {
-    let action = check_email_gate(email, client_ip(req).as_deref())
+    let action = check_email_gate(redis, email)
         .await
         .wrap_request_err("checking email address")?;
 
@@ -1919,12 +1918,12 @@ async fn ensure_email_passes_gate(
 }
 
 async fn ensure_email_is_usable(
-    req: &HttpRequest,
+    redis: &RedisPool,
     email: &str,
 ) -> Result<(), ApiError> {
-    ensure_email_passes_gate(req, email).await?;
+    ensure_email_passes_gate(redis, email).await?;
 
-    let result = check_email(email)
+    let result = check_email(redis, email)
         .await
         .wrap_request_err("checking email address")?;
 
@@ -2151,7 +2150,7 @@ pub async fn create_account_with_password(
         )));
     }
 
-    ensure_email_is_usable(&req, &new_account.email)
+    ensure_email_is_usable(&redis, &new_account.email)
         .await
         .wrap_api_err("validating email is usable")?;
 
@@ -3136,7 +3135,7 @@ pub async fn set_email(
         )));
     }
 
-    ensure_email_is_usable(&req, &email_address.email)
+    ensure_email_is_usable(&redis, &email_address.email)
         .await
         .wrap_api_err("validating email is usable")?;
 
