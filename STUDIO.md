@@ -844,6 +844,46 @@ Then tag + push a release (see below) so everyone's app picks it up.
     actual fix; the earlier failures were probably hitting a binary from a partial rebuild, before
     both the `.into()` compile fix and the retry logic had landed together.
 
+    **A second, more damaging bug in the same feature turned up later: it could misfire and rename
+    a brand new modpack instance out from under its own installation, failing the install
+    entirely** ("i tried downloading a modpack... it loaded for quite a while but after it finished
+    it just said no content", reproduced from an install-job error report showing `Failed while
+    resolving pack (internal_error): moving "Iron Frost (1)" to "Iron Frost (2)" ... Access is
+    denied (os error 5)`, at `packages/app-lib/src/util/io.rs:248`). Installing a modpack creates
+    the instance first (landing on whatever path `resolve_instance_path()` picks — `"Iron Frost"`,
+    or `"Iron Frost (1)"` if that plain name was already taken by something else), then, once the
+    pack's manifest is read, calls `edit()` with `name: Some("Iron Frost")` to apply its real
+    title — the exact same name the instance was already just given. `edit()`'s
+    rename-folder-on-name-change logic (added just above) re-runs `resolve_instance_path()` to
+    figure out the target folder, but that function's collision check (`path_available()`) had no
+    way to know "the folder that's already sitting at this exact candidate path is this very
+    instance's own current folder" — it just saw the folder physically existing and treated it as
+    taken, same as it would for any unrelated instance. So it always walked past the instance's own
+    correct path to the *next* one (`"Iron Frost (1)"` → `"Iron Frost (2)"`) and tried to rename
+    into it — a completely unnecessary move, since the name hadn't actually changed. Usually this
+    was merely wasteful; here it lost the race against the instance folder still being busy from
+    the install itself (the freshly-created folder's file watcher, and/or the pack extraction still
+    finishing up), Windows refused the rename with Access Denied, and — per this feature's own
+    "never let the name and the folder end up disagreeing" design — `edit()` propagated that as a
+    hard failure rather than silently keeping the mismatched name, which aborted the whole install
+    and rolled the instance back. Whatever "no content" the person saw was never actually a content
+    tab rendering issue — the instance behind it had already been deleted by the rollback by the
+    time they looked.
+    
+    Fixed at the root: `resolve_instance_path()` (and its `path_available()` helper) now take an
+    `exclude_instance_id: Option<&str>`, checked against the database (not the filesystem) first —
+    a path already owned by that exact instance is always available *to it*, regardless of what
+    physically exists there, since resolving back to a no-op is exactly the case that needs to work.
+    `create_instance()` passes `None` (a brand new instance can never collide with itself);
+    `rename_instance_folder_for_name_change()` passes the instance being renamed, so an edit that
+    doesn't actually change the effective name now correctly resolves back to that instance's
+    existing path and short-circuits via the pre-existing `if new_path == instance.path` check,
+    without ever attempting a rename — not "a rename that now succeeds," but no rename attempted at
+    all, which is the actually-correct outcome here. This could not be compile-checked in this
+    environment either; worth confirming with the exact repro (install a fresh modpack whose title
+    matches, or resolves via `resolve_instance_path`'s collision logic to, the name the instance was
+    already created with) before trusting it.
+
 - **Launching the same instance twice, and stopping one window at a time**: the Play button only
   ever launches one window of an instance — clicking it again while already running is a no-op
   (`launch_minecraft()` in `packages/app-lib/src/launcher/mod.rs` rejects any launch while a
@@ -934,66 +974,73 @@ Then tag + push a release (see below) so everyone's app picks it up.
   touching them and re-establishes them after, since the watcher itself holds those open the whole
   time the app runs.
 
-  **Joining never deletes real data — leaving now genuinely does, by explicit request.** Joining a
-  profile: if the shared copy doesn't exist yet, the instance's own real data (if any) *becomes*
-  the shared copy (moved, not copied) — the first instance to join effectively seeds it. If the
-  shared copy already exists and the instance *also* has its own real data, that data is renamed
-  to `<name>.pre-shared-backup` rather than discarded, then the instance links to the existing
-  shared copy.
+  **Nothing here ever deletes or overwrites real data, by explicit request — this went through two
+  reversals, so the history is worth knowing if this ever needs revisiting again.** The feature
+  originally copied shared content back to a private copy on leave, and hid an instance's
+  pre-existing data in a `.pre-shared-backup` on join if it conflicted with what was already
+  shared. A later request made leaving destructive instead (empty the item out locally) for
+  performance and simplicity, with a single "owner" instance exempted as a safety net. This was
+  then reversed again, back toward the original spirit but going further: **joining now actively
+  merges an instance's own data into the shared pool instead of just backing it up out of the way,
+  and leaving always restores a real copy for every instance, not just one designated owner.**
 
-  Leaving a profile — or turning off one item while staying in it — used to copy the shared
-  content back into a private copy at the instance's own path. The user explicitly asked for the
-  opposite: turning off "Use shared Minecraft folder" (or unchecking one item in Manage) now
-  **empties that item out locally instead** — an empty `saves`/`config`/`resourcepacks` folder, no
-  `options.txt`/`servers.dat` at all. The shared copy itself is never touched by a leave; it's
-  still sitting under `shared_profiles/<id>/` for as long as any other instance uses it or the
-  profile still exists, so leaving alone doesn't destroy anything — it just stops duplicating that
-  content back onto this one instance. Deleting a shared profile is the operation that actually
-  destroys the data: every member is detached first (the same empty-out described above), then the
-  shared folder itself is removed — **this is a real, unrecoverable deletion now**, not a safe
-  "give everyone their copy back" like it used to be. The UI's delete confirmation and description
-  say this plainly rather than leaving it to be discovered.
+  **Joining**: if the shared copy doesn't exist yet, the instance's own real data (if any)
+  *becomes* the shared copy (moved, not copied) — the first instance to join effectively seeds it.
+  If the shared copy already exists and the instance *also* has its own real data, what happens
+  next depends on whether the item is a "collection" (`LinkedItem::is_collection` in
+  `shared_profile.rs` — currently `saves` and `resourcepacks`, since a world folder or a resource
+  pack file is independently named and safe to have more than one of):
+  - **Collection items merge**: each of the instance's own top-level entries (a world folder, a
+    resource pack file) is moved into the shared copy (`merge_dir_contents`). If something with
+    that exact name is already there, the incoming entry is renamed instead — `World (2)`, `World
+    (3)`, and so on (`dedupe_path_for`) — never overwritten or dropped. Once linked, the instance
+    immediately sees the combined set: its own worlds plus whatever anyone else already added,
+    side by side. This is exactly the behavior that was requested: a world that only existed on one
+    profile shows up alongside the shared ones instead of disappearing into a backup file.
+  - **Everything else still backs up instead of merging**: `config`, plus the two hard-linked File
+    items (`options.txt`, `servers.dat`), fall back to the older behavior — the instance's copy is
+    renamed (never deleted) to `<name>.pre-shared-backup`, then it links to the existing shared
+    copy. A real merge doesn't make sense for these: a mod's config file always uses the same name
+    on purpose (merging by rename-on-conflict would just orphan half of it), and there's only ever
+    one `options.txt`/`servers.dat` to have, nothing to combine.
 
-  This also fixed a real, reported bug: the old copy-back-on-leave could take a very long time (or
-  appear to hang) for a large `saves`/`resourcepacks` folder, since leaving meant recursively
-  copying potentially gigabytes of world/resource-pack data before the operation could complete —
-  reported as "the delete button spinning for over a minute." Since leaving no longer copies
-  anything for most instances, detaching (and therefore deleting) is now just removing a
-  junction/hard link and creating an empty folder — fast regardless of how much data the shared
-  folder holds.
+  **Leaving** (turning an item off, leaving the profile entirely, or having the shared folder
+  deleted out from under the instance) now **always restores a real, private copy of whatever the
+  instance currently has access to** — never an empty folder, and no longer just for one exempted
+  "owner." `leave_item` (the module's only leave path now — the old empty-out `leave_item_empty`
+  and the owner-gated `restore_owner` flag threaded through `apply_profile_items`/
+  `reconcile_links` are both gone) does the copy-back for every member equally. Because restoring a
+  real copy needs the instance to be stopped to happen safely, every entry point that can trigger a
+  leave (`set_instance_shared_profile`, `update_shared_profile_items`, `delete_shared_profile`)
+  refuses outright if the relevant instance(s) are running, rather than silently skipping a
+  restore. `delete_shared_profile` in particular now checks *every* current member up front (not
+  just a designated owner, since everyone gets a real restore now) and refuses the whole deletion
+  naming the first running instance it finds, rather than best-effort skipping one and leaving it
+  pointing at a link whose target is about to disappear.
 
-  **The "master copy" exception**: right after the empty-out behavior above shipped, the user asked
-  for a safety net — one designated instance that never loses data no matter what happens to the
-  shared folder. `studio_shared_profiles.owner_instance_id` (new migration) records which instance
-  created a given shared folder — always the instance the "New shared folder" flow was used from,
-  since the frontend immediately joins that same instance right after creating it. That one
-  instance is the shared folder's "owner," and it's the sole exception to the empty-out behavior
-  above: detaching any item from it — leaving the profile, one item being turned off while it stays
-  a member, or the shared folder being deleted entirely — restores a real private copy
-  (`leave_item_restore`, the old copy-back logic, kept around for exactly this) instead of emptying
-  it out (`leave_item_empty`, everyone else). The `restore_owner` flag threaded through
-  `apply_profile_items`/`reconcile_links` decides which of the two runs, computed by each caller
-  from whether the instance being detached matches `owner_instance_id` on the profile it's being
-  detached *from* (not the one it's joining, if switching) — see `set_instance_shared_profile`'s
-  `is_owner_of_current` and `update_shared_profile_items`'s per-member `is_owner`.
+  `studio_shared_profiles.owner_instance_id` (added for the "master copy" exception, see below)
+  still exists and is still recorded when a shared folder is created, but no longer changes
+  join/leave behavior for that instance — it's kept purely as "who created this" bookkeeping, since
+  every member now gets the same never-lose-data guarantee. The migration and column weren't
+  reverted (no data/schema reason to), just the special-casing that used to key off it.
 
-  This means `delete_shared_profile` is no longer unconditionally destructive for everyone — the
-  owner (if the profile has one) gets its data back as a private copy first, then the shared folder
-  itself is removed; every other member still just loses the content as described above. Deletion
-  now also refuses outright, before touching anything, if the owner instance is currently running
-  — restoring its backup requires the same unwatch/relink dance as any other change, which isn't
-  safe to do out from under a live game session, and skipping the owner's restore silently would
-  defeat the entire point of the feature. `owner_instance_id` deliberately has no foreign-key
-  constraint (unlike `studio_instance_shared_profiles.instance_id`) — it's a best-effort pointer,
-  and the app already has to handle the owner instance no longer existing (deleted independently)
-  by just falling back to normal empty-out behavior, checked in application code rather than
-  enforced by the schema.
+  Deleting a shared profile is still the operation that removes the *shared* copy for good — that
+  part hasn't changed, and the UI's delete description says so — but per the above, every member
+  being detached as part of that deletion is left holding its own full private copy of what it
+  could see, not empty-handed. What's "genuinely destructive" now is narrower than it was: only the
+  shared copy itself, never any individual instance's access to its own data.
 
-  One nuance worth flagging: a shared folder created before this feature existed has
-  `owner_instance_id = NULL` and behaves exactly as before (empty-out for everyone, no exceptions)
-  — there's no way to retroactively assign an owner to an existing shared folder from the UI yet;
-  that'd be a reasonable follow-up (e.g. a "make this instance the owner" action in Manage) if
-  wanted.
+  One practical tradeoff worth knowing: restoring a real copy on every leave (rather than emptying
+  out) means detaching can again be slow, or appear to hang, for a large `saves`/`resourcepacks`
+  folder — recursively copying potentially gigabytes of world/resource-pack data takes real time,
+  and this is exactly what was previously reported as "the delete button spinning for over a
+  minute" back when leaving unconditionally restored a copy for everyone. That's the original
+  reason leaving was made destructive (empty-out) in the first place. This time the slowdown was
+  accepted deliberately in exchange for the never-lose-data guarantee — if a large shared folder's
+  leave/delete ever feels like it's hanging, that's expected now, not a bug — the UI should ideally
+  reflect real progress here as a future improvement (this is unrelated to the separate
+  data-safety bug described below, which was about a *different*, partial-failure problem on
+  join).
 
   **A real data-safety bug was found and fixed during testing, and it's worth explaining
   plainly.** The first version of this feature applied its four shared items (saves, config,
@@ -1048,8 +1095,13 @@ Then tag + push a release (see below) so everyone's app picks it up.
     mitigates the *consequences* regardless of which it turns out to be, but isn't a root-cause fix;
     a Windows long-path manifest change was deliberately not attempted blind without the ability to
     compile-verify it here. Note that the original failure was specifically in the *move-into-the-
-    shared-folder* step on join, which still exists — only the old copy-back-on-leave step (a
-    separate, unrelated code path) was removed by this update.
+    shared-folder* step on join (still exists, and — for collection items — now runs a
+    `merge_dir_contents` pass first, an extra per-entry move that could in principle hit the same
+    long-path issue on any individual entry; a failure there surfaces as this item's own recorded
+    failure, per the per-item redesign, rather than aborting the others). The copy-back-on-leave
+    step (`leave_item`, a separate code path) was removed by the update described just above this
+    bullet, then reintroduced for everyone by the later redesign documented earlier in this
+    section — so it's back, on both join and leave, not just join.
   - This intentionally only covers Settings → General, not the instance-creation flow itself. The
     creation UI (`CreationFlowModal`/`CreationFlowContextValue` in `packages/ui`) is a large,
     multi-flow-type component shared across instance creation, world creation, and server
@@ -1417,6 +1469,369 @@ component folder were removed cleanly, no Studio code referenced either.
 After merging, remember to bump `UPSTREAM_BASE_COMMIT`/`UPSTREAM_BASE_DATE` in
 `AppSettingsModal.vue` to the new tag's commit — see the "Upstream base commit shown in Settings"
 entry above.
+
+## Modpack install download speed
+
+"i just had to wait like 5 mins to download 200mb, i dont feel like thats normal even for my
+internet" — for a modpack specifically (not a regular single mod/dependency install). Found a real,
+concrete cause: `MODPACK_CONTENT_DOWNLOAD_CONCURRENCY` in
+`packages/app-lib/src/api/pack/install_mrpack.rs` hardcoded a 4-file concurrency cap on a modpack's
+content downloads (`loading_try_for_each_concurrent(..., Some(MODPACK_CONTENT_DOWNLOAD_CONCURRENCY),
+...)`), independent of and stricter than the general "max concurrent downloads" setting
+(`Settings::max_concurrent_downloads`, default 10 — the same one `state.fetch_semaphore` is sized
+from) that everything else in the app already respects. Regular mod/dependency installs
+(`api/instance/projects.rs`) have no such extra cap — they just use the shared semaphore directly —
+so this was specific to modpacks. For a pack made of many small-to-medium files against a CDN where
+per-connection throughput (not raw bandwidth) is the limiting factor — very common, since TLS/HTTP
+overhead dominates a small file's transfer time — only 4 files in flight at once caps total install
+speed well below what the connection could otherwise sustain, regardless of how fast that connection
+actually is. Raised the constant to 10, matching the app's general default instead of silently
+overriding it with a stricter one.
+
+Worth knowing this isn't wired to the *live* setting — it's still a plain constant, not a read of
+`Settings::max_concurrent_downloads` at install time — so someone who's turned their own
+concurrent-downloads preference below 10 in Settings won't have that respected here. Threading the
+real value down to `install_mrpack.rs` would be the correct long-term fix if that gap ever matters;
+raising the constant was the pragmatic fix for the immediate complaint. Also worth knowing this
+can't fully rule out the person's own connection or Modrinth's CDN being part of the story too —
+this fixes a real, confirmed app-side ceiling, but doesn't guarantee it's the *only* factor if
+downloads are still slow after this change.
+
+**Turned out the concurrency cap wasn't the dominant factor in the specific "5 min vs 20 sec"
+comparison that prompted this.** The person had been comparing the official Modrinth App against
+Studio launched via `pnpm tauri dev` — a dev build, compiled fully unoptimized (no LTO, no
+optimizations, debug assertions on). CPU-bound work done per downloaded file — SHA1 verification,
+manifest/version JSON parsing, zip extraction — runs 10-50x slower than a release build under that,
+which alone accounts for a gap that size with no code bug involved. Confirmed once they tried an
+actual `pnpm tauri build` output instead: much faster, as expected. The concurrency fix above is
+still real and worth keeping (it's a genuine ceiling below the app's own general default, regardless
+of build type), but it was not what produced the dramatic gap in that particular comparison — that
+was purely dev-vs-release. **Lesson for next time a performance complaint comes in: ask how the
+build was run before assuming the reported number reflects real-world (release-build) performance.**
+That build hadn't been made yet with any of this session's fixes in it (the shared-folder redesign,
+the modpack-install rename fix just above, or this concurrency bump) — a fresh release build is
+needed to actually test all three together before pushing.
+
+## Screenshots scroll lag and Replays freeze
+
+Two separate reported lag issues, both about large media collections, both fixed the same way in
+spirit: stop doing per-item work for every item that *exists* and only do it for the items actually
+near the viewport.
+
+**Replays tab freezing for ~5 seconds on open, on an instance with ~1000 recordings.** Root cause
+was two things compounding: `replays/index.vue` rendered every entry in `filteredReplays`
+unconditionally via a plain `v-for` — no virtualization at all, unlike the Screenshots grid — and
+each `ReplayItem` row independently calls `getReplayThumbnail(...)` inside its own `onMounted()`
+hook, which on the Rust side (`get_replay_thumbnail` in `replays.rs`) does a `spawn_blocking` zip
+read to extract an embedded thumbnail. With ~1000 replays that meant mounting all ~1000 rows at
+once and firing all ~1000 of their thumbnail-fetch IPC calls simultaneously — that's what froze the
+app: ~1000 concurrent Tauri IPC round-trips each doing a blocking zip-file read, all landing at the
+same moment.
+
+Fixed by virtualizing the list using the existing `useVirtualScroll` composable (`packages/ui/src/
+composables/virtual-scroll.ts`) — the same generic, fixed-item-height virtualizer `Table.vue`
+already uses, just applied here to a plain flex list instead of a table. `replays/index.vue` now
+renders only the rows within (plus a buffer around) the viewport, absolutely positioned via
+`translateY` at multiples of a fixed row height (88px — ReplayItem's card is `min-h-20` and doesn't
+grow with content, plus the 8px gap the old flex layout used), with the container height set to
+`totalHeight` so the scrollbar still reflects the full list. Now only a bounded number of rows
+(viewport-worth plus a 10-item buffer on each side) are ever mounted at once, regardless of how many
+replays an instance has — so it can never fire more than a small, fixed number of concurrent
+thumbnail fetches no matter the total count.
+
+**Screenshots tab scrolling laggy even a little bit, unlike Prism Launcher's screenshot tab.** This
+one was *not* a virtualization gap — `screenshots-page/index.vue` already had solid group-level and
+row-level virtualization for the grid (confirmed by reading it in full). The actual cause: every
+visible card's `<img>` pointed straight at the full-resolution original screenshot file via the
+Tauri asset protocol (`card.vue`, `screenshot.url`) — there was no thumbnail concept anywhere in the
+pipeline (`InstanceScreenshot` on the Rust side has no such field, and nothing in
+`operations.rs`/`reconciliation.rs` generates one). So every card the virtualizer mounted while
+scrolling had to decode a full, often multi-megapixel PNG just to show it shrunk down to a small
+grid tile — virtualization bounds *how many* cards are mounted at once, it does nothing about how
+expensive decoding each one is.
+
+Fixed by adding real thumbnail generation, in `packages/app-lib/src/api/instance/screenshots/
+operations.rs`: a new `get_screenshot_thumbnail(key)` decodes the source PNG, resizes it to fit
+within 480px on the long edge (`image::DynamicImage::resize`, `FilterType::Triangle`), flattens any
+alpha channel, and re-encodes as JPEG — then caches that to `caches_dir()/screenshot-thumbnails/
+<content_hash>.jpg`. Reuses the screenshot's `content_hash` (already computed during indexing, in
+`reconciliation.rs`) as the cache key rather than the file name or path, so an edited/replaced
+screenshot naturally gets a fresh thumbnail with no separate invalidation step — the file for the
+old content is just left unreferenced (the same tradeoff the instance-icon cache in `icon.rs`
+already makes, for the same reason; neither cleans up automatically). A cache hit is just a
+`try_exists` check; a cache miss does the decode/resize/encode once and never again for that exact
+content.
+
+This is deliberately generated *lazily*, one screenshot at a time, from a new
+`instance_get_screenshot_thumbnail` Tauri command that `card.vue` calls from its own `onMounted` —
+the same shape as how Replays already fetches its thumbnails per-row. That's normally the pattern to
+avoid (see the Replays freeze above), but it's safe specifically *because* the Screenshots grid
+really is already virtualized: only the handful of cards near the viewport ever mount and request a
+thumbnail at once, so this can never turn into hundreds of simultaneous requests the way the
+unvirtualized Replays list did. The alternative — generating every screenshot's thumbnail eagerly
+inside `list_screenshots` before returning the list at all — was deliberately rejected: on an
+instance with hundreds or thousands of existing screenshots, the first list call after this feature
+ships would have to decode+resize+encode all of them serially before showing anything, which just
+moves the freeze earlier instead of fixing it. `card.vue` also caches resolved thumbnail URLs (and
+"no thumbnail available" results) in a module-level map keyed by instance+file name, so a card that
+gets unmounted and remounted while scrolling — which happens constantly under virtualization —
+doesn't repeat the Tauri round-trip for a screenshot it's already resolved.
+
+Known rough edge, shared with the icon cache: neither the screenshot-thumbnail cache nor the icon
+cache ever prunes stale files for content that's been edited, moved, or deleted. Both just grow
+forever in `caches_dir()`. Not fixed here — flagging it in case cache size ever becomes a real
+complaint, at which point both caches probably want the same cleanup pass.
+
+Couldn't compile-check or run either fix in this sandbox (same limitation as everything else in this
+file) — `cargo check` and a frontend build/typecheck pass are still needed before either ships.
+
+**Follow-up: none of the above was actually the whole story.** Reported back after testing that
+Screenshots was "laggy every time, even on repeats" (the thumbnail cache should have made repeats
+instant) and that Replays still froze on click. Three more real things found:
+
+1. **`list_replays` itself had the exact same unbounded-concurrency problem as the frontend fix
+   above, just on the backend.** The Replays virtualization fix only bounds how many `ReplayItem`
+   rows mount at once — it does nothing for the initial `list_replays` call itself, which (in
+   `packages/app-lib/src/api/replays.rs`) fired one `spawn_blocking` per replay to read its zip
+   metadata and let *all* of them race with no limit. At ~1000 replays that's ~1000 zip archives
+   opened and inflated at the same instant, every time the tab opens — a real disk/CPU burst
+   severe enough to freeze the app on its own, entirely before any row ever renders, which is
+   exactly why the frontend virtualization fix didn't touch this symptom at all. Added
+   `REPLAY_METADATA_READ_CONCURRENCY = 16` and switched to `futures::stream::iter(...)
+   .buffer_unordered(16)`, the same bounded-concurrency pattern already used for screenshot source
+   scanning (`SCREENSHOT_SCAN_CONCURRENCY`) and the modpack download concurrency fix above.
+
+2. **The scroll gesture itself could be janky independent of any of this**, and it turns out
+   `useScrollViewport` (`packages/ui/src/composables/virtual-scroll.ts` — shared by every
+   virtualized list in the app: Screenshots, Replays, `Table.vue`, the skins list, `MultiSelect`,
+   `DropdownFilterBar`, `ContentCardTable`) ran its scroll handler directly off the native `scroll`
+   event with no throttling. That event can fire many times per animation frame during a fast
+   scroll, and each firing did a layout-forcing `getBoundingClientRect()` read plus a Vue ref write
+   that triggers the virtualizer to recompute — all synchronous work that can outpace what the
+   screen can ever present, which shows up as stutter *during the scroll gesture itself*,
+   regardless of how fast individual rows/images are. Coalesced it to at most once per animation
+   frame via `requestAnimationFrame`, matching the browser's own paint cadence. This is the one fix
+   in this whole entry that benefits literally every virtualized list in the app, not just these
+   two tabs.
+
+3. **Screenshot thumbnails were, per the "laggy every time" report, evidently never actually being
+   used** — every card falling back to `props.screenshot.url` (the full-resolution original) would
+   look exactly like this, since decoding the full image is exactly what was laggy before this
+   feature existed at all. The `card.vue` code that calls the new `instance_get_screenshot_thumbnail`
+   command was swallowing any invoke failure silently (`.catch(() => null)`), so if that command
+   wasn't actually available yet — e.g. a `pnpm tauri dev` session that hadn't recompiled/relaunched
+   the Rust side since this feature's Rust changes landed, which is the single most likely
+   explanation — nothing in the UI would ever indicate that; it would just silently look like the
+   fix didn't do anything. Changed the `.catch()` to log the failure (and the screenshot key) to the
+   console instead of swallowing it, so this is diagnosable from devtools next time instead of
+   looking identical to "the feature doesn't work." Also added `decoding="async"` to both the
+   Screenshots grid `<img>` and the Replays thumbnail `<img>` so image decode work — which can block
+   the main/compositor thread for a large image — never competes with the scroll gesture even once
+   images do start loading in.
+
+**Follow-up 2: the "stale backend" guess above was wrong — it was a real, permanent permissions gap.**
+The console log this pointed at did show up, but even after a genuine full restart
+(`Ctrl+C` + `pnpm app:dev`, not a hot reload) it kept failing with `instance.
+instance_get_screenshot_thumbnail not allowed. Command not found`. Restarting could never have fixed
+this: this app can't use Tauri's usual macro-based permission scanning (see the comment at the top of
+`apps/app/build.rs` — no automatic `#[tauri::command]` discovery), so every plugin hand-maintains a
+second, separate list of its own command names in `build.rs`'s `InlinedPlugin::new().commands(&[...])`
+— *in addition to* the `tauri::generate_handler!` list in `apps/app/src/api/instance.rs`. Registering
+a command in `generate_handler!` alone is not enough for Tauri's IPC layer to permit calling it; missing
+it from `build.rs`'s list produces exactly this error, permanently, regardless of restarts. Added
+`instance_get_screenshot_thumbnail` to the `instance` plugin's command list in `build.rs`. Lesson for
+next time a new command in this codebase gets rejected with "not allowed. Command not found": check
+`build.rs` first, not the dev server.
+
+**Follow-up 3: fixing the permission gap surfaced two more real, separate issues**, reported as
+"images take ages to load and are lowres" plus the scrolling still jumping — worth recording since
+they turned out to be unrelated to each other and to the rAF-throttle change from Follow-up 1 (which,
+per this investigation, was *not* the cause of the jumping and was left in place):
+
+1. **Lowres**: 480px (the original thumbnail max dimension) is too small once thumbnails actually
+   started rendering — the grid goes up to 4 columns on wide windows, and a card at that width can
+   render well past 480 CSS px; on top of that, any >1x-DPI display (most of them) needs that many
+   *device* pixels just to draw one CSS pixel crisply. Bumped `SCREENSHOT_THUMBNAIL_MAX_DIMENSION` to
+   960 in `operations.rs`, and — since the cache key was content-hash-only, with no dimension in it —
+   changed the cached filename to `<content_hash>-<max_dimension>.jpg` so this bump (and any future
+   one) can't end up silently serving the smaller cached file under the same name; the old 480px
+   files are just left unreferenced, same known tradeoff as everything else in this cache.
+
+2. **"Ages to load"**: likely just an honest cost of a debug build. `pnpm app:dev` builds every crate,
+   including `image` and its PNG/JPEG codecs, fully unoptimized — decode+resize+encode on a
+   multi-megapixel screenshot can be genuinely slow (10-50x slower than release is typical for
+   CPU-bound work like this). Added a `[profile.dev.package."*"] opt-level = 2` block to the
+   workspace `Cargo.toml`, alongside the existing `sqlx-macros` override — this optimizes every
+   *third-party* dependency (image codecs included) while leaving our own workspace crates at
+   opt-level 0, so this app's own incremental rebuilds stay just as fast; only the one-time build of
+   dependencies gets slower. Should make first-time thumbnail generation noticeably faster without
+   needing a full release build to test with. Once a screenshot's thumbnail is cached, later views are
+   just a `try_exists` check either way — this only affects the first time each screenshot is viewed.
+
+3. **The scrolling was still jumping, and it was never the rAF throttle.** Found the real cause by
+   actually reading `screenshots-page/group.vue`'s template: its `TransitionGroup` had a hardcoded,
+   always-on `move-class="transition-transform duration-200 ease-out ..."`. Within a large open
+   group, the rendered screenshots are themselves a row-windowed slice (`renderedScreenshots` /
+   `virtualGridTop`, computed in `visibleScreenshotGroups` in `index.vue`) that shifts every time
+   scrolling crosses a row boundary — cards leave the array from one end and appear at the other.
+   Vue's `TransitionGroup` treats that shift as a reorder and FLIPs every affected card into its new
+   position over 200ms — on nearly every scroll frame, fighting the actual scroll motion the entire
+   time. That's what "the position itself snaps/jerks" actually was. `index.vue` already computes an
+   `animateEntry` prop (`!regrouping && !screenshotsScrolling`) specifically to suppress animations
+   while scrolling, and it was already wired to the enter/leave transition classes on this same
+   `TransitionGroup` — just not to `move-class`, which stayed on unconditionally. Made `move-class`
+   conditional on the same `animateEntry` flag, so the FLIP animation only plays for genuine reorders
+   (regrouping, drag-and-drop, sort changes) and never for scroll-driven rewindowing.
+
+Still unverified against an actual build — same sandbox limitation as before. Needs a genuine restart
+(build.rs changes require a fresh `cargo build`, not just a hot-reloaded frontend) and a retest of all
+three: thumbnails loading without the permission error, thumbnail sharpness, and scroll smoothness.
+
+**Follow-up 4: the `move-class` fix in Follow-up 3 wasn't wrong, just incomplete — the scrolling kept
+jumping, worse scrolling down than up.** That directional asymmetry was the tell. The real cause is
+the browser's own native *scroll anchoring*: a built-in feature that nudges `scrollTop` to compensate
+whenever content mutates above the fold, specifically so things don't visually jump around when
+layout shifts — which is exactly, continuously true of a virtualized list, since rows and groups are
+constantly mounting/unmounting above the viewport as you scroll. `screenshots-page/index.vue` already
+had an `overflow-anchor: none` on its own tall content div (`screenshotListContainer`), added
+presumably for this exact reason — but that div isn't the actual scrolling element, just tall content
+sitting inside one several components up (`pages/instance/layout.vue`'s `overflow-y-auto` wrapper, via
+`findScrollableAncestor`). Scroll anchoring is a property of the real scroll container, so that
+`overflow-anchor: none` was opting the wrong element out and doing nothing.
+
+Fixed in `useScrollViewport` (`packages/ui/src/composables/virtual-scroll.ts`) itself, at the source:
+`syncScrollState()` now sets `overflow-anchor: none` directly on whatever `findScrollableAncestor`
+actually resolves to, whenever it resolves it. This fixes it for every virtualized list that uses this
+composable, not just Screenshots — and explains the "worse scrolling down" asymmetry, since anchoring
+specifically compensates for content appearing *above* the anchor point, which is more active while
+scrolling toward not-yet-rendered content than while scrolling back over already-rendered content.
+Frontend-only change — no Rust rebuild needed, just a reload.
+
+**Follow-up 5: still jumping after the scroll-anchoring fix — turned out to not be a scroll-position
+bug at all.** Got a screen recording this time rather than guessing again. Sampled it frame by frame:
+the grid pauses on the same content for a beat, then suddenly snaps forward — never backward, and
+distinctly worse scrolling down than up. That's the signature of the main thread stalling while native
+scroll input keeps accumulating, then the UI catching up in one jump once it's free — not a scroll
+handler bug.
+
+The missing piece: scrolling down constantly reveals cards that have never been viewed before, and
+each one fires its own `get_screenshot_thumbnail` IPC call, a fresh Rust-side decode/resize/encode, and
+a brand-new JPEG the browser has to fetch and decode — real, non-trivial work, all landing in the same
+short window when a fast scroll mounts a burst of new cards at once. Scrolling back up revisits cards
+whose thumbnails are already resolved and cached (`resolvedThumbnailUrls` in `card.vue`), so it's
+nearly free — exactly the asymmetry in the recording. This is the same "unbounded concurrency looks
+like a freeze" lesson this file already covers twice over (`list_replays`'s backend fix, the original
+Replays virtualization fix) — just one layer further out. The Screenshots grid's own virtualization
+correctly bounds how many cards are ever *mounted*, but every mounted card was still free to fire its
+thumbnail fetch immediately and independently, with no cap on how many of those could be in flight
+across the whole grid at once.
+
+Fixed with a small concurrency limiter in `card.vue` — a module-level counter and wait queue
+(`THUMBNAIL_FETCH_CONCURRENCY = 4`) that every card's `loadThumbnail()` now acquires a slot from before
+calling `get_screenshot_thumbnail`, releasing it when the call settles. A fast scroll mounting a dozen
+new cards now spaces their fetches out instead of firing them all in the same frame, which should
+smooth out the pause-then-snap pattern without slowing down how quickly thumbnails eventually show up.
+
+**Follow-up 6: the concurrency cap in Follow-up 5 didn't fix it either — because it was never about
+timing at all.** Four attempted fixes in a row (rAF throttle, `move-class`, scroll anchoring, fetch
+concurrency) all targeted scroll *mechanics* or *timing*, and none of them touched the one thing that
+actually explains it: the app's own frosted-glass system. `studio-overrides.css` applies
+`backdrop-filter: var(--studio-glass-blur, none)` to a set of surface classes including `bg-surface-3`
+— and this exact codebase already hit and documented this precise failure mode once before, for
+`ContentCardTable`: "blurring hundreds of simultaneously-visible rows overwhelmed the webview's
+compositor (corrupted color blocks, heavy flashing while scrolling)," which is why that fix's
+exclusion list carefully leaves `bg-surface-1`/`1.5`/`2`/`2.5` out of the blur. The screenshot grid's
+per-card loading skeleton (`card.vue`, the `animate-pulse` placeholder shown before a thumbnail
+resolves) uses `bg-surface-3` — one of the classes that *is* in the blurred set — and nobody connected
+the two, because the skeleton was added in a completely different piece of work from the
+`ContentCardTable` fix.
+
+With a custom background active (this only matters — and costs nothing — when `--studio-glass-blur` is
+an actual `blur()`, i.e. a custom background is on), every still-loading card in a virtualized,
+constantly mounting/unmounting grid is a blurred *and* opacity-animating element, and a fast scroll
+into unseen content can put a couple dozen of those on screen at once. That's the same compositor
+overload as the `ContentCardTable` case, and it explains every previously-unexplained detail: why it's
+Screenshots-specific (other lists don't have a blurred, animating, per-item loading skeleton at all);
+why it's worse scrolling down (new cards need the skeleton, already-resolved ones don't, so scrolling
+into fresh territory keeps more of these blurred elements alive at once); and why "jumping"/"snapping"
+was such a hard sensation to pin down in words — compositor corruption under blur pressure reads as
+visual glitching, not as an actual position change, which is also consistent with the screen recording
+never showing genuine backward motion.
+
+Fixed the same way `ContentCardTable` was: added a `screenshot-thumbnail-skeleton` class to the
+skeleton div in `card.vue` and a targeted `backdrop-filter: none !important` override for it in
+`studio-overrides.css`, rather than pulling `bg-surface-3` out of the shared exclusion list (plenty of
+other, non-virtualized uses of that class still want the blur). Frontend/CSS-only change.
+
+If this *still* doesn't fix it: the next thing to check is whether the same skeleton pattern exists on
+the Replays tab's `ReplayItem.vue` thumbnail-loading state — it wasn't reported as jumpy, but it's the
+same shape of problem (a `bg-surface-*`-classed loading placeholder in a list of many), just with a
+single small icon-sized thumbnail per row instead of a whole grid tile, so it may simply not have been
+severe enough to notice yet.
+
+**Follow-up 7: the blur fix didn't do it either — and the next report was finally specific enough to
+find the real thing: "the images just move a row down when I scroll."** That's a much more precise
+symptom than "jumping," and it doesn't match a compositor/paint issue (Follow-up 6) or scroll-input
+timing (Follow-ups 1-5) — it describes the rendered content itself landing in the wrong place,
+specifically by about one row, specifically as a discrete snap tied to crossing a row boundary while
+scrolling.
+
+The row-windowing in `visibleScreenshotGroups` (index.vue) assumes every row is exactly
+`screenshotRowHeight` (= `screenshotCardHeight` + the grid gap) tall, where `screenshotCardHeight` is
+computed in JS from the grid's own measured width divided by column count. But the card itself
+(`card.vue`) never actually used that number — it used Tailwind's `aspect-video` class, which derives
+the card's real height from whatever width the *browser's* CSS grid layout independently decides to
+give it. Those are two separate calculations that are supposed to agree, and normally come close
+enough that a small disagreement (grid gap rounding, scrollbar width, sub-pixel track sizing — anything
+that makes the true grid column width differ from index.vue's own width/column division by even a
+fraction of a pixel) is invisible on any single row. But the virtualizer positions a re-sliced window of
+rows at `firstRow * (assumed) screenshotRowHeight` every time a scroll crosses a row boundary, and that
+assumed height is what's used, not the browser's real one — so the two numbers *not* being connected
+means the visible content can be repositioned at a coordinate that doesn't quite match where the
+browser had actually laid the old rows out, and that mismatch is exactly what a "the images move a row
+down" snap at each row boundary would look like.
+
+Fixed by making the two impossible to disagree: added a `cardHeight` prop, threaded straight through
+from index.vue's `screenshotCardHeight` (the same value already driving the virtualization math) down
+through `group.vue` to `card.vue`, which now sets it directly via inline `style="height: ...px"` instead
+of leaving `aspect-video` to derive it separately. The card's actual rendered height and the
+virtualizer's assumed row height are now, by construction, the exact same number — there's no longer
+two independent calculations to drift apart from each other, at any scroll depth.
+
+**Follow-up 8: still not it — a user-supplied repro nailed the actual shape of the bug: "I'm on image
+2, scroll down a tiny bit, image 1 (the same view, a bit further up) appears for a second, then
+disappears again, without me touching the scrollwheel."** That last clause is the important one — the
+content changes *after* the input has already stopped, on its own, and then reverts on its own too. That
+rules out anything in the scroll-input pipeline itself (rAF-throttling, scroll-anchoring, row-windowing
+math) — those only ever run in direct response to a scroll event, and can't cause a second, later,
+undone change. It points at something that gets recomputed once, shortly after the scroll settles, and
+then corrects itself.
+
+Found it in `index.vue`'s outer group-positioning wrapper — the `<div>` around each
+`ScreenshotGroupSection` that places a whole date/instance/custom group via
+`style="transform: translateY(top)"`. Unlike everything one level down (group.vue's TransitionGroup,
+whose entry/move animations were already gated on `animateEntry` — off while `screenshotsScrolling` —
+back in Follow-up 1), this wrapper's `transition-transform duration-300 ease-in-out` was unconditional,
+left over from when it was added purely so a group collapsing/expanding slides the groups below it into
+their new position instead of snapping.
+
+`top` for every group is the running sum of every earlier group's height, computed from
+`screenshotCardHeight`/`screenshotColumnCount` — values sourced from `useElementSize` (a
+`ResizeObserver` on the grid's own width) and `useWindowSize`. Neither is perfectly scroll-invariant in
+practice: subpixel layout jitter, or a vertical scrollbar's width nudging the measured content width by
+a pixel right around an overflow threshold, is enough to fire a spurious `ResizeObserver` callback and
+recompute `screenshotCardHeight` by a hair, shortly after a scroll (not during it — these observers
+settle a frame or two after the layout that triggered them). That recomputation shifts every visible
+group's `top` for a moment before the measurement corrects itself back. With the transition always
+active, Vue sees an *existing* DOM element's `transform` change on each of those two shifts and dutifully
+plays the full 300ms ease-in-out slide both times — which is exactly "content slides to a different
+position, then slides back on its own, moments after the scroll input already stopped."
+
+Fixed by gating this wrapper's `transition-transform` on `!screenshotsScrolling`, the same flag (and the
+same reasoning) group.vue's TransitionGroup already used. A real collapse/expand or regroup (never
+mid-scroll) still animates smoothly; a scroll-adjacent recompute of `top` now just snaps instantly
+instead of animating a visible slide that then has to un-animate itself back. Frontend-only change,
+`screenshots-page/index.vue`.
 
 ## Releasing an update
 

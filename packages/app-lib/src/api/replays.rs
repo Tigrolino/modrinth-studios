@@ -10,9 +10,14 @@
 
 use crate::util::io;
 use crate::{Result, ErrorKind};
+use futures::stream::{self, StreamExt};
 use serde::{Deserialize, Serialize};
 use std::io::Read;
 use std::path::{Path, PathBuf};
+
+// Modrinth Studios addition: see the comment where this is used, in
+// `list_replays` below.
+const REPLAY_METADATA_READ_CONCURRENCY: usize = 16;
 
 #[derive(Deserialize, Serialize, Debug, Clone, Copy, PartialEq, Eq, Hash)]
 #[serde(rename_all = "snake_case")]
@@ -91,8 +96,10 @@ pub async fn list_replays(instance: &Path) -> Result<Vec<Replay>> {
     // it one file at a time made this tab take a very long time for anyone
     // with hundreds of replays. `read_zip_metadata_json` is synchronous/
     // blocking, so each one is farmed out to tokio's blocking thread pool via
-    // `spawn_blocking` — they all start running concurrently as soon as
-    // they're spawned below, rather than waiting on each other.
+    // `spawn_blocking`, with a bounded number running concurrently at once
+    // (see `REPLAY_METADATA_READ_CONCURRENCY` below) rather than either
+    // waiting on each other one at a time or all racing at once with no
+    // limit.
     let mut entries = Vec::new();
 
     for kind in ReplayKind::all() {
@@ -150,17 +157,50 @@ pub async fn list_replays(instance: &Path) -> Result<Vec<Replay>> {
         }
     }
 
-    let handles: Vec<_> = entries
-        .iter()
-        .map(|(path, _)| {
-            let path = path.clone();
-            tokio::task::spawn_blocking(move || read_zip_metadata_json(&path))
-        })
-        .collect();
+    // Modrinth Studios addition: cap how many replay archives get opened and
+    // read for metadata at once, rather than firing one `spawn_blocking` per
+    // replay and letting all of them race each other with no limit. That was
+    // fine for a handful of replays, but with hundreds or (as reported)
+    // ~1000, it meant opening and inflating ~1000 zip archives at the exact
+    // same instant every single time this tab was opened — a burst of disk
+    // I/O and CPU contention severe enough on its own to freeze the app for
+    // several seconds, entirely on the backend, before any row on the
+    // frontend ever gets a chance to render. Bounding concurrency means the
+    // reads that *are* running can actually make progress instead of all
+    // fighting over the same disk and CPU, while still running many in
+    // parallel rather than one at a time.
+    // Collecting owned `PathBuf`s first (rather than mapping `entries.iter()`
+    // directly into the `async move` below) sidesteps a real rustc
+    // limitation: a closure that both borrows from an outer iterator *and*
+    // returns a future capturing that borrow triggers "implementation of
+    // `FnOnce` is not general enough" (an HRTB error) once combined with
+    // `stream::iter`/`buffer_unordered` — the same reason the equivalent
+    // scan in `screenshots/operations.rs` maps over `sources.into_iter()`
+    // (owned values) rather than `sources.iter()`.
+    let paths: Vec<PathBuf> =
+        entries.iter().map(|(path, _)| path.clone()).collect();
 
-    for (handle, (_, replay)) in handles.into_iter().zip(entries.iter_mut()) {
-        if let Ok(Ok(bytes)) = handle.await {
-            apply_metadata_json(replay, &bytes);
+    let metadata_results: Vec<(usize, std::io::Result<Vec<u8>>)> = stream::iter(
+        paths.into_iter().enumerate().map(|(index, path)| async move {
+            let result = tokio::task::spawn_blocking(move || {
+                read_zip_metadata_json(&path)
+            })
+            .await
+            .unwrap_or_else(|error| {
+                Err(std::io::Error::other(format!(
+                    "replay metadata read task panicked: {error}"
+                )))
+            });
+            (index, result)
+        }),
+    )
+    .buffer_unordered(REPLAY_METADATA_READ_CONCURRENCY)
+    .collect()
+    .await;
+
+    for (index, result) in metadata_results {
+        if let Ok(bytes) = result {
+            apply_metadata_json(&mut entries[index].1, &bytes);
         }
     }
 

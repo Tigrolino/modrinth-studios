@@ -68,6 +68,28 @@ export function useScrollViewport(options: ScrollViewportOptions = {}) {
 		scrollTop.value = getScrollTop(container)
 		viewportHeight.value = getViewportHeight(container)
 		updateContainerOffset()
+
+		// Modrinth Studios addition: this is the real scroll-anchoring fix —
+		// setting `overflow-anchor: none` on a virtualized list's own content
+		// div (as screenshots-page/index.vue did on its own) doesn't disable
+		// scroll anchoring for the page, because that div isn't the scrolling
+		// element; it's just tall content sitting inside one (found here via
+		// `findScrollableAncestor`, often several components up — e.g.
+		// `pages/instance/layout.vue`'s `overflow-y-auto` wrapper). The
+		// browser's native scroll anchoring is still fully active on that real
+		// container, and it does exactly what it's designed to do: nudge
+		// `scrollTop` to compensate whenever content mutates above the fold —
+		// which is continuously true here, since virtualization means rows and
+		// groups are mounting/unmounting above the viewport on every scroll.
+		// That compensation is what looked like "the scroll position itself
+		// snapping/jerking" and why it was worse scrolling down: anchoring
+		// corrects for content appearing above the anchor point, which is more
+		// active while scrolling toward not-yet-rendered content. Disabling it
+		// on the actual scroll container (not the inner content div) is the
+		// standard fix for this well-known class of virtualized-list jank.
+		if (!(container instanceof Window)) {
+			container.style.overflowAnchor = 'none'
+		}
 	}
 
 	function resetScrollState() {
@@ -76,13 +98,35 @@ export function useScrollViewport(options: ScrollViewportOptions = {}) {
 		containerOffset.value = 0
 	}
 
-	function handleScroll() {
+	// Modrinth Studios addition: the native `scroll` event can fire far more
+	// often than once per animation frame (many times per frame during a fast
+	// trackpad/wheel fling, especially on Windows) — and every firing used to
+	// synchronously write two refs (`scrollTop`, `containerOffset`, the
+	// latter via a layout-forcing `getBoundingClientRect()` read) and run
+	// `onScroll` (which recomputes the virtualizer's visible range). Vue
+	// batches the *reactive re-render* from ref writes into a microtask, but
+	// it doesn't stop this handler's own synchronous work — the layout read
+	// chief among it — from running many more times than the screen can ever
+	// present, which is exactly what shows up as stutter during a scroll
+	// gesture regardless of how fast the rows themselves are to render.
+	// Coalescing to at most once per animation frame (last-value-wins if
+	// several `scroll` events land in the same frame) matches the browser's
+	// own paint cadence and is the standard fix for this class of jank.
+	let pendingScrollFrame: number | null = null
+
+	function flushScroll() {
+		pendingScrollFrame = null
 		if (scrollContainer.value) {
 			scrollTop.value = getScrollTop(scrollContainer.value)
 			updateContainerOffset()
 		}
 
 		options.onScroll?.()
+	}
+
+	function handleScroll() {
+		if (pendingScrollFrame !== null) return
+		pendingScrollFrame = window.requestAnimationFrame(flushScroll)
 	}
 
 	function handleResize() {
@@ -115,6 +159,10 @@ export function useScrollViewport(options: ScrollViewportOptions = {}) {
 			container.removeEventListener('scroll', handleScroll)
 			window.removeEventListener('resize', handleResize)
 			resizeObserver?.disconnect()
+			if (pendingScrollFrame !== null) {
+				window.cancelAnimationFrame(pendingScrollFrame)
+				pendingScrollFrame = null
+			}
 		})
 	})
 

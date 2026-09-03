@@ -43,7 +43,23 @@ type ExtractProgressFn<'a> = dyn FnMut(u64) -> Pin<Box<dyn Future<Output = crate
     + Send
     + 'a;
 type HashProgressFn<'a> = dyn FnMut(u64) -> crate::Result<()> + Send + 'a;
-const MODPACK_CONTENT_DOWNLOAD_CONCURRENCY: usize = 4;
+// Modrinth Studios change: was 4. This caps how many of a modpack's files
+// download at once, on top of (and more restrictively than) the user's own
+// "max concurrent downloads" setting (`Settings::max_concurrent_downloads`,
+// default 10 — see `state/settings.rs`) — so even someone who's turned that
+// setting up still only ever got 4 modpack files in flight at a time. For a
+// pack with many small-to-medium files against a CDN where per-connection
+// throughput is the limiting factor (very common — TLS/HTTP overhead
+// dominates a small file's transfer time more than raw bandwidth does),
+// that concurrency ceiling is the actual bottleneck on total install speed,
+// not the person's own connection — reported as "200MB took 5 minutes,
+// that doesn't feel normal." Raised to match the app's own general default
+// concurrency instead of silently overriding it with a stricter one. This
+// doesn't read the live setting (that value isn't threaded down to here
+// without larger plumbing changes), so someone who's set their own
+// concurrent-downloads preference below 10 won't see it respected here —
+// a reasonable follow-up if that gap ever matters in practice.
+const MODPACK_CONTENT_DOWNLOAD_CONCURRENCY: usize = 10;
 const MRPACK_WARNING_IGNORED_EXTENSIONS: &[&str] = &["rpo"];
 
 fn is_ignored_mrpack_warning_file(path: &str) -> bool {

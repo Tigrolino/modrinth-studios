@@ -34,7 +34,7 @@ pub(crate) async fn create_instance(
     trace!("Creating new instance. {}", input.name);
 
     let (path, full_path) =
-        resolve_instance_path(&input.name, input.path.as_deref(), state)
+        resolve_instance_path(&input.name, input.path.as_deref(), None, state)
             .await?;
     io::create_dir_all(&full_path).await?;
 
@@ -162,9 +162,26 @@ pub(crate) async fn create_instance(
 // so rename_instance_folder.rs can reuse the exact same sanitize +
 // collision-avoidance logic for the in-app rename-folder-to-match-name
 // feature, rather than a second, potentially-diverging copy of it.
+//
+// `exclude_instance_id`, if given, is the instance being *renamed* (not one
+// being newly created — `create_instance()` below always passes `None`,
+// since a brand new instance can never collide with itself). Without this,
+// a rename to a name that already resolves to the instance's own current
+// folder would never actually recognize that folder as available to
+// itself — `path_available()` sees the folder physically existing (it does,
+// it's the instance's own) and treats that as "taken," so it kept walking
+// to the next `(N)` and renaming the instance sideways into it for no
+// reason, on every single edit that didn't actually change the effective
+// name (a modpack install applying its resolved title right after creating
+// the instance under that exact same title being the most common trigger).
+// That spurious rename was purely wasteful in the best case, and could fail
+// outright in the worst case (see `rename_instance_folder_for_name_change`'s
+// doc comment on the file-watcher race) — for no reason, since nothing
+// actually needed to move.
 pub(crate) async fn resolve_instance_path(
     name: &str,
     path: Option<&str>,
+    exclude_instance_id: Option<&str>,
     state: &State,
 ) -> crate::Result<(String, std::path::PathBuf)> {
     let base_path = path
@@ -173,7 +190,7 @@ pub(crate) async fn resolve_instance_path(
     let mut path = base_path.clone();
     let mut full_path = state.directories.instances_dir().join(&path);
 
-    if path_available(&path, &full_path, state).await? {
+    if path_available(&path, &full_path, exclude_instance_id, state).await? {
         return Ok((path, full_path));
     }
 
@@ -182,7 +199,8 @@ pub(crate) async fn resolve_instance_path(
         path = format!("{base_path} ({which})");
         full_path = state.directories.instances_dir().join(&path);
 
-        if path_available(&path, &full_path, state).await? {
+        if path_available(&path, &full_path, exclude_instance_id, state).await?
+        {
             return Ok((path, full_path));
         }
 
@@ -193,15 +211,20 @@ pub(crate) async fn resolve_instance_path(
 async fn path_available(
     path: &str,
     full_path: &std::path::Path,
+    exclude_instance_id: Option<&str>,
     state: &State,
 ) -> crate::Result<bool> {
-    if full_path.exists() {
-        return Ok(false);
+    // Check the database first, not the filesystem: a path already owned by
+    // `exclude_instance_id` itself is always available *to that instance*,
+    // regardless of what's physically sitting there (it's that instance's
+    // own current folder) — this is the one case a pure `full_path.exists()`
+    // check can never get right, since the folder existing is exactly what's
+    // supposed to happen when a rename resolves back to a no-op.
+    if let Some(existing) = instance_rows::get_instance_by_path(path, &state.pool).await? {
+        return Ok(exclude_instance_id == Some(existing.id.as_str()));
     }
 
-    Ok(instance_rows::get_instance_by_path(path, &state.pool)
-        .await?
-        .is_none())
+    Ok(!full_path.exists())
 }
 
 pub(crate) async fn resolve_icon_path(

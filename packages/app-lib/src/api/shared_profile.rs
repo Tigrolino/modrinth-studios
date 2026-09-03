@@ -50,28 +50,54 @@
 //! including from the exact same UI action, or automatically the next time
 //! this profile's settings are edited.
 //!
-//! **Real data risk**: joining or leaving a shared profile moves or links
-//! real save data. Joining, when the instance already has its own real local
-//! data, backs that data up (renamed, not deleted) rather than silently
-//! discarding it. Leaving is intentionally destructive on the *instance's*
-//! side, by request: turning an item off (or off entirely) empties it out
-//! locally — an empty `saves`/`config`/`resourcepacks` folder, no
-//! `options.txt`/`servers.dat` — rather than restoring a private copy of
-//! whatever was being shared. The shared copy itself is untouched by this
-//! and keeps living under `shared_profiles/<id>/` for as long as any other
-//! instance is still using it (or the profile itself still exists); it only
-//! actually goes away once the shared profile is deleted via
-//! `delete_shared_profile`, which — for the same reason — is now a genuine,
-//! unrecoverable deletion of that data, not a safe detach.
+//! **Real data risk, and the "never delete or replace" guarantee**: joining
+//! or leaving a shared profile moves or links real save data, so this module
+//! goes out of its way to never make either operation lossy for anyone. Two
+//! specific behaviors, both by explicit request (this module used to do the
+//! opposite of each — see STUDIO.md's "Shared Minecraft folders" section if
+//! either ever needs revisiting):
 //!
-//! The one exception is the shared profile's **owner** — the instance that
-//! originally created it (`SharedProfile::owner_instance_id`). By request,
-//! that one instance is treated as holding a "master copy": detaching an
-//! item from it, however that happens, restores a real private copy instead
-//! of emptying it out, so the instance that started sharing something never
-//! loses it. Everyone else's data risk is as described above. See
-//! `join_item()`/`leave_item_empty()`/`leave_item_restore()` below for
-//! exactly what happens in each case.
+//! - **Joining**, when the instance already has its own real local data: for
+//!   a "collection" item (`LinkedItem::is_collection` — currently `saves`
+//!   and `resourcepacks`, since a world folder or a resource pack file is
+//!   independently named and safe to have more than one of), the instance's
+//!   existing entries are *merged* into the shared copy rather than hidden
+//!   away — each one is moved in, and only renamed (never overwritten or
+//!   dropped) if something with that exact name is already there. The
+//!   instance immediately sees the combined set through the new link: its
+//!   own worlds plus whatever anyone else already added, side by side. For a
+//!   non-collection item (`config`, plus the two hard-linked File items), a
+//!   real merge doesn't make sense — a mod's config file always uses the
+//!   same name on purpose, so "merging" it by renaming on conflict would
+//!   just orphan half of it — so those still fall back to the older
+//!   behavior: the instance's copy is renamed (never deleted) to
+//!   `<name>.pre-shared-backup` before linking. See `join_item()` and
+//!   `merge_dir_contents()`.
+//!
+//! - **Leaving** (turning an item off, leaving the profile entirely, or
+//!   having the shared profile deleted out from under the instance) always
+//!   restores a real, private copy of whatever the instance currently has
+//!   access to — never an empty folder. This applies to every member
+//!   instance equally now; there's no special-cased "owner" behavior for it
+//!   anymore. See `leave_item()`. Because that restore needs the instance to
+//!   be stopped to happen safely, every entry point that can trigger a leave
+//!   (`set_instance_shared_profile`, `update_shared_profile_items`,
+//!   `delete_shared_profile`) refuses outright if the relevant instance(s)
+//!   are currently running, rather than silently skipping their restore.
+//!
+//! The shared copy itself is untouched by any of this and keeps living
+//! under `shared_profiles/<id>/` for as long as any instance is still using
+//! it (or the profile itself still exists); it only actually goes away once
+//! the shared profile is deleted via `delete_shared_profile` — a real
+//! deletion of the *shared* copy, but (per the above) every member instance
+//! is left holding its own full private copy of what it could see, not
+//! empty-handed.
+//!
+//! `SharedProfile::owner_instance_id` (the instance that originally created
+//! a shared folder) is still recorded, but no longer changes how joining or
+//! leaving behaves for that instance — every member gets the same
+//! never-delete guarantee now. It's kept purely as "who created this"
+//! bookkeeping.
 //!
 //! **options.txt/servers.dat caveat**: these are hard-linked rather than
 //! symlinked (a Windows file symlink needs admin/Developer Mode; a hard link
@@ -110,12 +136,10 @@ pub struct SharedProfile {
     pub share_servers: bool,
     /// The instance that originally created this shared folder, if known
     /// (and if that instance still exists — see the migration that added
-    /// this column). That instance is treated as the shared folder's "master
-    /// copy" holder: unlike every other member, detaching an item from it
-    /// (by leaving, by an item being turned off, or by the shared folder
-    /// being deleted) restores a real private copy instead of emptying the
-    /// item out, so it never loses data it was the one to start sharing. See
-    /// `leave_item_restore()`.
+    /// this column). Purely "who created this" bookkeeping now — every
+    /// member instance gets the same never-lose-data guarantee on detaching
+    /// an item, not just this one (see `leave_item()` and the module doc
+    /// comment).
     pub owner_instance_id: Option<String>,
 }
 
@@ -131,6 +155,14 @@ struct LinkedItem {
     relative_path: &'static str,
     kind: LinkKind,
     flag: fn(&SharedProfile) -> bool,
+    /// Whether this item is made up of independently-named entries (a world
+    /// folder, a resource pack file) that can be safely combined by moving
+    /// each one in and renaming on a name collision — see `join_item()` and
+    /// `merge_dir_contents()`. `false` for `config` (a mod's config always
+    /// uses the same filename on purpose, so renaming on conflict would just
+    /// orphan half of it) and for both File-kind items (there's only ever
+    /// one `options.txt`/`servers.dat` to have, nothing to combine).
+    is_collection: bool,
 }
 
 /// Every item a shared profile *can* share, and how to read whether a given
@@ -141,26 +173,31 @@ const LINKED_ITEMS: &[LinkedItem] = &[
         relative_path: "saves",
         kind: LinkKind::Dir,
         flag: |p| p.share_saves,
+        is_collection: true,
     },
     LinkedItem {
         relative_path: "config",
         kind: LinkKind::Dir,
         flag: |p| p.share_config,
+        is_collection: false,
     },
     LinkedItem {
         relative_path: "resourcepacks",
         kind: LinkKind::Dir,
         flag: |p| p.share_resourcepacks,
+        is_collection: true,
     },
     LinkedItem {
         relative_path: "options.txt",
         kind: LinkKind::File,
         flag: |p| p.share_options,
+        is_collection: false,
     },
     LinkedItem {
         relative_path: "servers.dat",
         kind: LinkKind::File,
         flag: |p| p.share_servers,
+        is_collection: false,
     },
 ];
 
@@ -225,12 +262,10 @@ async fn get_shared_profile_row(
 }
 
 /// Creates a new, empty shared folder. `owner_instance_id`, if given, is
-/// recorded as the folder's "owner" — the instance the frontend created it
+/// recorded as the folder's creator — the instance the frontend created it
 /// from, which is always the same instance that immediately joins it right
-/// after (see `SharedProfile::owner_instance_id`'s doc comment for what that
-/// buys it). Passing `None` is fine — the shared folder just behaves as it
-/// did before this feature existed, with no owner-backup safety net for
-/// anyone.
+/// after (see `SharedProfile::owner_instance_id`'s doc comment — it's purely
+/// bookkeeping and doesn't change behavior). Passing `None` is fine too.
 pub async fn create_shared_profile(
     name: String,
     owner_instance_id: Option<String>,
@@ -293,14 +328,13 @@ pub async fn rename_shared_profile(
 
 /// Updates which items `id` shares, then re-syncs every instance currently
 /// using it to match — an instance that was sharing resource packs and just
-/// had that turned off gets its resource packs unlinked and emptied out
-/// right away (`leave_item_empty` — or a real copy restored via
-/// `leave_item_restore`, if that instance happens to be this profile's
-/// owner), and one that just had worlds turned on gets linked in, without
-/// needing to leave and rejoin the profile. Instances that are currently
-/// running are skipped (same as any other change to a running instance's
-/// shared folder) — they'll pick up the new selection next time they're
-/// stopped and something else touches this profile.
+/// had that turned off gets its resource packs unlinked and a real private
+/// copy restored right away (`leave_item`), and one that just had worlds
+/// turned on gets linked in (merging in any worlds it already had, see
+/// `join_item`), without needing to leave and rejoin the profile. Instances
+/// that are currently running are skipped (same as any other change to a
+/// running instance's shared folder) — they'll pick up the new selection
+/// next time they're stopped and something else touches this profile.
 pub async fn update_shared_profile_items(
     id: String,
     share_saves: bool,
@@ -362,12 +396,10 @@ pub async fn update_shared_profile_items(
             continue;
         }
 
-        let is_owner = profile.owner_instance_id.as_deref() == Some(instance_id.as_str());
         let outcome = apply_profile_items(
             &instance_id,
             &instance,
             Some(&profile),
-            is_owner,
             &state,
         )
         .await;
@@ -383,47 +415,18 @@ pub async fn update_shared_profile_items(
 }
 
 /// Deletes a shared profile — every instance currently using it is detached
-/// first (see `leave_item_empty`/`leave_item_restore`), exactly as if each
-/// had individually turned sharing off, so the instance-side unlink/watcher
-/// dance always happens cleanly before the shared folder disappears out from
-/// under it. **This is a genuine, unrecoverable deletion**: detaching no
-/// longer restores a private copy of the shared data for anyone except the
-/// profile's owner (see the module doc comment), so once every member has
-/// been detached and the shared folder itself is removed below, that data
-/// is gone for everyone else — not moved anywhere. Refuses outright (before
-/// touching anything) if this profile has an owner and that owner is
-/// currently running — see the running-check below for why.
+/// first (see `leave_item`), exactly as if each had individually turned
+/// sharing off, so the instance-side unlink/watcher dance always happens
+/// cleanly, and each member ends up with its own real private copy of
+/// whatever it could see, before the shared folder disappears out from under
+/// it. **This is a genuine, unrecoverable deletion of the *shared* copy**:
+/// once every member has been given back its own copy and the shared folder
+/// itself is removed below, the shared copy itself is gone — but, per the
+/// module doc comment, nobody who was using it loses their own data. Refuses
+/// outright (before touching anything) if any current member instance is
+/// running — see the running-check below for why.
 pub async fn delete_shared_profile(id: String) -> crate::Result<()> {
     let state = State::get().await?;
-
-    // If this shared folder has an owner, its backup restore (see
-    // `leave_item_restore`) has to actually run as part of detaching it
-    // below — and that can't happen safely while the owner instance is
-    // running (same reason every other shared-folder change refuses a
-    // running instance). Rather than silently skip the owner's backup in
-    // that case, refuse the whole deletion so the "master copy" guarantee
-    // never quietly fails to apply.
-    if let Some(profile) = get_shared_profile_row(&id, &state.pool).await?
-        && let Some(owner_instance_id) = &profile.owner_instance_id
-    {
-        let owner_running = state
-            .process_manager
-            .get_all()
-            .into_iter()
-            .any(|process| &process.instance_id == owner_instance_id);
-        if owner_running {
-            let owner_name = instance_rows::get_instance_by_id(owner_instance_id, &state.pool)
-                .await
-                .ok()
-                .flatten()
-                .map(|instance| instance.name)
-                .unwrap_or_else(|| owner_instance_id.clone());
-            return Err(crate::ErrorKind::InputError(format!(
-                "Can't delete this shared folder while '{owner_name}', the instance that created it, is running. Stop it first so its backup copy can be restored safely."
-            ))
-            .into());
-        }
-    }
 
     let member_instance_ids: Vec<String> = sqlx::query_scalar(
         "SELECT instance_id FROM studio_instance_shared_profiles WHERE shared_profile_id = ?",
@@ -432,13 +435,40 @@ pub async fn delete_shared_profile(id: String) -> crate::Result<()> {
     .fetch_all(&state.pool)
     .await?;
 
+    // Every member's restore-on-detach (see `leave_item`) has to actually
+    // run as part of detaching it below — and that can't happen safely while
+    // that instance is running (same reason every other shared-folder change
+    // refuses a running instance). Rather than silently skip a running
+    // instance's restore, refuse the whole deletion so the never-lose-data
+    // guarantee never quietly fails to apply.
+    let running_ids: HashSet<String> = state
+        .process_manager
+        .get_all()
+        .into_iter()
+        .map(|process| process.instance_id)
+        .collect();
+    if let Some(running_instance_id) = member_instance_ids
+        .iter()
+        .find(|instance_id| running_ids.contains(instance_id.as_str()))
+    {
+        let running_name =
+            instance_rows::get_instance_by_id(running_instance_id, &state.pool)
+                .await
+                .ok()
+                .flatten()
+                .map(|instance| instance.name)
+                .unwrap_or_else(|| running_instance_id.clone());
+        return Err(crate::ErrorKind::InputError(format!(
+            "Can't delete this shared folder while '{running_name}' is running. Stop it first so its private copy can be restored safely."
+        ))
+        .into());
+    }
+
     for instance_id in member_instance_ids {
-        // Best-effort: a running instance can't be safely detached, but a
-        // deletion shouldn't be blocked entirely by one busy instance either
-        // — it's left recorded as a member of a profile that's about to
-        // stop existing, which reconcile_links treats the same as "not
-        // shared" the next time anything touches it (get_shared_profile_row
-        // will simply return None for a deleted id).
+        // Every member is confirmed stopped above, so this should always
+        // succeed — logged rather than propagated so one unexpected failure
+        // (e.g. a filesystem error restoring one instance's copy) doesn't
+        // block the rest from being detached and given their own copy back.
         if let Err(error) = set_instance_shared_profile(&instance_id, None).await {
             tracing::warn!(
                 "Shared folder deletion: couldn't detach instance {instance_id}: {error}"
@@ -565,52 +595,26 @@ pub async fn set_instance_shared_profile(
         None => None,
     };
 
-    // Whichever profile this instance is currently in (if any) is the one
-    // being left below — fetch it (rather than just its id) so we can tell
-    // whether this instance is its "owner" (see `SharedProfile::
-    // owner_instance_id`) and, if so, restore a real private copy instead of
-    // emptying it out.
-    let leaving_profile = match &current_id {
-        Some(id) => get_shared_profile_row(id, &state.pool).await?,
-        None => None,
-    };
-    let is_owner_of_current = leaving_profile
-        .as_ref()
-        .is_some_and(|p| p.owner_instance_id.as_deref() == Some(instance_id));
-
     let mut failures = Vec::new();
 
     if current_id.is_some() && shared_profile_id.is_some() {
         // Switching from one profile to another: fully leave the old one
         // first (unlinks everything currently linked, regardless of which
         // profile it belonged to — reconcile_links only looks at what's
-        // *currently* linked), then join the new one fresh, rather than
+        // *currently* linked, and always restores a real private copy per
+        // item — see `leave_item`), then join the new one fresh, rather than
         // trying to re-target an existing link in place.
-        let leave_outcome = apply_profile_items(
-            instance_id,
-            &instance,
-            None,
-            is_owner_of_current,
-            &state,
-        )
-        .await;
+        let leave_outcome =
+            apply_profile_items(instance_id, &instance, None, &state).await;
         failures.extend(leave_outcome.failures);
     }
 
     // This call doubles as "join the new profile" (when `shared_profile_id`
-    // is `Some`, where restoring an owner backup is meaningless — nothing is
-    // being left here) and as "leave to no profile at all" (when it's
-    // `None`, the plain-toggle-off case) — only the second one should ever
-    // restore an owner backup.
-    let restore_owner_on_leave = shared_profile_id.is_none() && is_owner_of_current;
-    let join_outcome = apply_profile_items(
-        instance_id,
-        &instance,
-        target_profile.as_ref(),
-        restore_owner_on_leave,
-        &state,
-    )
-    .await;
+    // is `Some`) and as "leave to no profile at all" (when it's `None`, the
+    // plain-toggle-off case).
+    let join_outcome =
+        apply_profile_items(instance_id, &instance, target_profile.as_ref(), &state)
+            .await;
     failures.extend(join_outcome.failures);
 
     match shared_profile_id {
@@ -665,7 +669,6 @@ async fn apply_profile_items(
     instance_id: &str,
     instance: &Instance,
     profile: Option<&SharedProfile>,
-    restore_owner: bool,
     state: &State,
 ) -> ReconcileOutcome {
     let instance_full_path =
@@ -685,8 +688,7 @@ async fn apply_profile_items(
     )
     .await;
 
-    let outcome =
-        reconcile_links(&instance_full_path, profile, restore_owner, state).await;
+    let outcome = reconcile_links(&instance_full_path, profile, state).await;
 
     watcher::watch_instance_folder(
         instance_id,
@@ -754,17 +756,12 @@ async fn write_link_state(instance_full_path: &Path, state: &LinkState) {
 /// what a previous call *attempted* — only what actually landed — so this is
 /// always safe to call again.
 ///
-/// `restore_owner` controls what unlinking an item actually does: normally
-/// (`false`) it's emptied out, per the module doc comment's "real data risk"
-/// section. When `true` — passed by callers only when `instance_full_path`
-/// belongs to the shared profile's designated owner (see
-/// `SharedProfile::owner_instance_id`) and only for the specific reconcile
-/// call that's leaving it — a real private copy is restored instead
-/// (`leave_item_restore`), so the owner never loses data it started sharing.
+/// Unlinking an item always restores a real private copy of it
+/// (`leave_item`) rather than emptying it out — see the module doc comment's
+/// "never delete or replace" section.
 async fn reconcile_links(
     instance_full_path: &Path,
     profile: Option<&SharedProfile>,
-    restore_owner: bool,
     state: &State,
 ) -> ReconcileOutcome {
     let mut failures = Vec::new();
@@ -805,11 +802,7 @@ async fn reconcile_links(
             )
             .await
         } else if !should_be_linked && currently_linked {
-            if restore_owner {
-                leave_item_restore(instance_full_path, item, state).await
-            } else {
-                leave_item_empty(instance_full_path, item).await
-            }
+            leave_item(instance_full_path, item, state).await
         } else {
             Ok(())
         };
@@ -837,60 +830,15 @@ async fn reconcile_links(
     ReconcileOutcome { failures }
 }
 
-/// Detaches a shared item from the instance and empties it out locally —
-/// the default behavior, used for every instance except a shared profile's
-/// owner (see `leave_item_restore` for that case). An unlinked
-/// `saves`/`config`/`resourcepacks` becomes a fresh empty folder; an
-/// unlinked `options.txt`/`servers.dat` is simply removed (Minecraft writes
-/// a normal set of defaults for either on its next launch). Never touches
-/// the shared copy itself — it's still sitting under `shared_profiles/<id>/`,
-/// and other instances still in the profile are unaffected; that data only
-/// actually disappears if the shared profile itself is deleted (see
-/// `delete_shared_profile`).
-async fn leave_item_empty(
-    instance_full_path: &Path,
-    item: &LinkedItem,
-) -> crate::Result<()> {
-    let local_path = instance_full_path.join(item.relative_path);
-
-    match item.kind {
-        LinkKind::Dir => {
-            if !link::is_link(&local_path).await {
-                return Ok(());
-            }
-            link::remove_link(&local_path).await?;
-            crate::util::io::create_dir_all(&local_path).await?;
-        }
-        LinkKind::File => {
-            // A hard link has no distinct "is a link" signal to check —
-            // `reconcile_links` already knows (via the `LinkState` sidecar)
-            // that this path is currently hard-linked before calling us.
-            // Removing the directory entry doesn't delete the underlying
-            // data; the shared copy's own hard link keeps it alive.
-            if tokio::fs::try_exists(&local_path).await.unwrap_or(false) {
-                tokio::fs::remove_file(&local_path).await.map_err(|e| {
-                    crate::ErrorKind::FSError(format!(
-                        "Failed to unlink {}: {e}",
-                        local_path.display()
-                    ))
-                    .as_error()
-                })?;
-            }
-        }
-    }
-
-    Ok(())
-}
-
-/// Like `leave_item_empty`, but restores a full private copy of the shared
-/// content instead of leaving the item empty. Used only when
-/// `instance_full_path` belongs to the shared profile's designated "owner"
-/// (`SharedProfile::owner_instance_id`) — the instance that originally
-/// created it — so that instance keeps a real "master copy" and never loses
-/// data it started sharing, however it's detached: leaving the profile,
-/// turning one item off while staying a member, or the shared profile being
-/// deleted out from under it.
-async fn leave_item_restore(
+/// Detaches a shared item from the instance and restores a full private copy
+/// of it — the only behavior now, for every instance (there used to be a
+/// destructive "just empty it out" default with an owner-only exception; see
+/// the module doc comment's "never delete or replace" section for why that
+/// changed). However this item is detached — leaving the profile, turning
+/// one item off while staying a member, or the shared profile being deleted
+/// out from under it — the instance keeps everything it currently has access
+/// to, as its own real copy, never an empty folder.
+async fn leave_item(
     instance_full_path: &Path,
     item: &LinkedItem,
     state: &State,
@@ -912,12 +860,11 @@ async fn leave_item_restore(
             }
         }
         LinkKind::File => {
-            // Same hard-link situation as `leave_item_empty` — this path
-            // already holds the right bytes (it's literally the same file
-            // as the shared copy) — but here we keep them: read the current
-            // bytes out, remove this directory entry (which does *not*
-            // delete the data — the shared copy's own hard link keeps it
-            // alive), then write those bytes back as an independent file.
+            // This path already holds the right bytes (it's literally the
+            // same file as the shared copy, via the hard link) — read them
+            // out, remove this directory entry (which does *not* delete the
+            // data — the shared copy's own hard link keeps it alive), then
+            // write those bytes back as an independent file.
             if let Ok(bytes) = tokio::fs::read(&local_path).await {
                 tokio::fs::remove_file(&local_path).await.map_err(|e| {
                     crate::ErrorKind::FSError(format!(
@@ -928,7 +875,7 @@ async fn leave_item_restore(
                 })?;
                 tokio::fs::write(&local_path, bytes).await.map_err(|e| {
                     crate::ErrorKind::FSError(format!(
-                        "Failed to restore the owner's private copy of {}: {e}",
+                        "Failed to restore a private copy of {}: {e}",
                         local_path.display()
                     ))
                     .as_error()
@@ -942,8 +889,8 @@ async fn leave_item_restore(
 
 /// Recursively copies a directory's contents from `source` to `target`
 /// (which must not already exist as anything other than empty/missing).
-/// Used only by `leave_item_restore`, to give a shared profile's owner a
-/// real copy of the shared data rather than an empty folder. Mirrors
+/// Used only by `leave_item`, to give a detaching instance a real copy of
+/// the shared data rather than an empty folder. Mirrors
 /// `crate::install::recovery::copy_directory`'s approach — skips symlinks
 /// entirely rather than following them, since nothing under
 /// saves/config/resourcepacks is expected to contain one. Individual files
@@ -999,9 +946,13 @@ async fn copy_dir_recursive(
 /// If the shared profile doesn't have this item yet, this instance's own
 /// real data (if any) seeds it — otherwise an empty one is created so
 /// there's something to link to. If the shared profile *already* has this
-/// item and the instance also has its own real local data, the instance's
+/// item and the instance also has its own real local data: for a
+/// "collection" item (`LinkedItem::is_collection` — see its doc comment),
+/// the instance's entries are *merged* into the shared copy
+/// (`merge_dir_contents`) so nothing is hidden away — the instance sees the
+/// combined set immediately once linked. For anything else, the instance's
 /// copy is renamed (never deleted) to `<name>.pre-shared-backup` first, so
-/// nothing is silently lost.
+/// nothing is silently lost even though it isn't merged in.
 async fn join_item(
     instance_full_path: &Path,
     shared_profile_dir: &Path,
@@ -1041,16 +992,31 @@ async fn join_item(
             }
         }
     } else if local_exists {
-        let backup_path = backup_path_for(&local_path);
-        crate::util::io::rename_or_move(&local_path, &backup_path)
-            .await
-            .map_err(|e| {
-                crate::ErrorKind::FSError(format!(
-                    "Failed to back up {} before linking it to the shared folder: {e}",
-                    local_path.display()
-                ))
-                .as_error()
-            })?;
+        if item.is_collection {
+            merge_dir_contents(&local_path, &shared_path).await?;
+            // Every entry has now been moved into the shared copy, so this
+            // should be empty — remove it to make room for the link below.
+            crate::util::io::remove_dir_all(&local_path)
+                .await
+                .map_err(|e| {
+                    crate::ErrorKind::FSError(format!(
+                        "Failed to remove {} after merging its contents into the shared folder: {e}",
+                        local_path.display()
+                    ))
+                    .as_error()
+                })?;
+        } else {
+            let backup_path = backup_path_for(&local_path);
+            crate::util::io::rename_or_move(&local_path, &backup_path)
+                .await
+                .map_err(|e| {
+                    crate::ErrorKind::FSError(format!(
+                        "Failed to back up {} before linking it to the shared folder: {e}",
+                        local_path.display()
+                    ))
+                    .as_error()
+                })?;
+        }
     }
 
     match item.kind {
@@ -1058,6 +1024,57 @@ async fn join_item(
         LinkKind::File => {
             link::create_file_link(&shared_path, &local_path).await?
         }
+    }
+
+    Ok(())
+}
+
+/// Moves every top-level entry of `source` (a directory that's about to be
+/// replaced by a link) into `target` (the shared copy it's joining) — used
+/// only for "collection" items (`LinkedItem::is_collection`), where each
+/// entry is independently named and safe to combine this way: a world
+/// folder under `saves/`, or a resource pack file under `resourcepacks/`.
+/// Only goes one level deep — a whole world folder is moved as a unit, never
+/// merged file-by-file with anything already at the destination.
+///
+/// Never overwrites: if `target` already has an entry with the same name,
+/// the incoming one is renamed instead (see `dedupe_path_for`), so two
+/// worlds that happen to share a name both survive, side by side, rather
+/// than one silently replacing the other.
+async fn merge_dir_contents(source: &Path, target: &Path) -> crate::Result<()> {
+    let mut entries = tokio::fs::read_dir(source).await.map_err(|e| {
+        crate::ErrorKind::FSError(format!(
+            "Failed to read {} while merging it into the shared folder: {e}",
+            source.display()
+        ))
+        .as_error()
+    })?;
+
+    loop {
+        let entry = entries.next_entry().await.map_err(|e| {
+            crate::ErrorKind::FSError(format!(
+                "Failed to read an entry of {} while merging it into the shared folder: {e}",
+                source.display()
+            ))
+            .as_error()
+        })?;
+        let Some(entry) = entry else { break };
+
+        let entry_path = entry.path();
+        let mut destination = target.join(entry.file_name());
+        if destination.exists() {
+            destination = dedupe_path_for(&destination);
+        }
+
+        crate::util::io::rename_or_move(&entry_path, &destination)
+            .await
+            .map_err(|e| {
+                crate::ErrorKind::FSError(format!(
+                    "Failed to merge {} into the shared folder: {e}",
+                    entry_path.display()
+                ))
+                .as_error()
+            })?;
     }
 
     Ok(())
@@ -1077,4 +1094,39 @@ fn backup_path_for(path: &Path) -> PathBuf {
         attempt += 1;
     }
     candidate
+}
+
+/// Picks a name for `path` that doesn't already exist at its destination, by
+/// inserting " (2)", " (3)", etc. before the extension (or at the very end,
+/// for an extension-less name like a world folder) — used by
+/// `merge_dir_contents` so an incoming entry that collides by name with one
+/// already in the shared folder is kept and renamed, never dropped or
+/// overwritten.
+fn dedupe_path_for(path: &Path) -> PathBuf {
+    let file_name = path
+        .file_name()
+        .unwrap_or_default()
+        .to_string_lossy()
+        .into_owned();
+    // Don't treat a leading dot (a hidden file, or a name with no real
+    // extension) as an extension separator.
+    let (stem, extension) = match file_name.rsplit_once('.') {
+        Some((stem, ext)) if !stem.is_empty() => {
+            (stem.to_string(), Some(ext.to_string()))
+        }
+        _ => (file_name.clone(), None),
+    };
+
+    let mut attempt = 2;
+    loop {
+        let candidate_name = match &extension {
+            Some(ext) => format!("{stem} ({attempt}).{ext}"),
+            None => format!("{stem} ({attempt})"),
+        };
+        let candidate = path.with_file_name(candidate_name);
+        if !candidate.exists() {
+            return candidate;
+        }
+        attempt += 1;
+    }
 }
