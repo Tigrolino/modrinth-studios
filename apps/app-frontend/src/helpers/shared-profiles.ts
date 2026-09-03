@@ -14,11 +14,10 @@ export interface SharedProfile {
 	share_options: boolean
 	share_servers: boolean
 	/** The instance that originally created this shared folder, if known.
-	 * That instance is treated as holding a "master copy" — unlike every
-	 * other member, it gets a real private copy restored (instead of being
-	 * emptied out) whenever it's detached from an item, however that
-	 * happens. `null` for folders created before this existed, or if that
-	 * instance has since been deleted. */
+	 * Purely "who created this" bookkeeping — every member instance gets a
+	 * real private copy restored (never emptied out) whenever it's detached
+	 * from an item, not just this one. `null` for folders created before
+	 * this existed, or if that instance has since been deleted. */
 	owner_instance_id: string | null
 }
 
@@ -40,9 +39,10 @@ export async function listSharedProfiles(): Promise<SharedProfile[]> {
 
 /** Creates a new, empty shared folder profile. Shares everything by default —
  * turn individual items off afterward with `updateSharedProfileItems`.
- * `ownerInstanceId`, if given, marks that instance as this folder's "master
- * copy" holder — pass the instance you're creating it from, since that's
- * always the one about to join it immediately after. */
+ * `ownerInstanceId`, if given, is recorded as "who created this" — pass the
+ * instance you're creating it from, since that's always the one about to
+ * join it immediately after. Doesn't change how joining/leaving behaves for
+ * that instance; every member gets the same never-lose-data guarantee. */
 export async function createSharedProfile(
 	name: string,
 	ownerInstanceId?: string,

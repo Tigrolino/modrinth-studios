@@ -109,6 +109,8 @@ function formatFileSize(bytes: number): string {
 				v-if="thumbnail"
 				:src="thumbnail"
 				alt=""
+				loading="lazy"
+				decoding="async"
 				class="size-full object-cover"
 			/>
 			<VideoIcon v-else class="size-6" />

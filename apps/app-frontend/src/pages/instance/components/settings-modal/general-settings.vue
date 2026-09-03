@@ -405,10 +405,6 @@ const managedItems = reactive<SharedProfileItemFlags>({
 	share_servers: true,
 })
 
-const isOwnerOfCurrentSharedFolder = computed(
-	() => currentSharedProfile.value?.owner_instance_id === instance.value.id,
-)
-
 function openManageSharedFolder() {
 	if (!currentSharedProfile.value) return
 	managedItems.share_saves = currentSharedProfile.value.share_saves
@@ -603,7 +599,7 @@ const messages = defineMessages({
 	sharedFolderDescription: {
 		id: 'instance.settings.tabs.general.shared-folder.description',
 		defaultMessage:
-			'When enabled, this instance shares its worlds, configs, and resource packs with other instances in the selected folder. Changes apply to all of them, while mods and the Minecraft version stay separate. Turning it off removes the shared content from this instance without affecting the shared folder. ',
+			'When enabled, this instance shares its worlds, configs, and resource packs with other instances in the selected folder — any it already had are added in alongside what’s already there, not replaced. Changes apply to all of them, while mods and the Minecraft version stay separate. Turning it off gives this instance its own private copy of what it can currently see, without affecting the shared folder.',
 	},
 	sharedFolderNewButton: {
 		id: 'instance.settings.tabs.general.shared-folder.new-button',
@@ -640,7 +636,7 @@ const messages = defineMessages({
 	sharedFolderManageDescription: {
 		id: 'instance.settings.tabs.general.shared-folder.manage.description',
 		defaultMessage:
-			'Choose what this shared folder shares between instances. Unchecking an item removes it from each instance instead of keeping a private copy.',
+			'Choose what this shared folder shares between instances. Unchecking an item gives each instance its own private copy of what it currently has, instead of sharing it.',
 	},
 	sharedFolderItemSaves: {
 		id: 'instance.settings.tabs.general.shared-folder.item.saves',
@@ -690,12 +686,12 @@ const messages = defineMessages({
 	sharedFolderDeleteDescription: {
 		id: 'instance.settings.tabs.general.shared-folder.delete-description',
 		defaultMessage:
-			'This permanently deletes the shared data, worlds, configs, resource packs, and everything else being shared. All other instances lose it, with no private copies kept. The instance that created the shared folder gets its own copy back automatically. This can’t be undone for other instances.  ',
+			'This permanently deletes the shared copy itself. Every instance using it automatically gets its own private copy of whatever it currently has, so nothing is lost — but they stop being kept in sync with each other. This can’t be undone.',
 	},
-	sharedFolderOwnerNotice: {
-		id: 'instance.settings.tabs.general.shared-folder.owner-notice',
+	sharedFolderDataSafetyNotice: {
+		id: 'instance.settings.tabs.general.shared-folder.data-safety-notice',
 		defaultMessage:
-			'This instance created the shared folder, so it keeps a “master copy.” If it leaves, disables an item, or the shared folder is deleted, it automatically gets its own private copy back.',
+			'Nothing here is ever deleted or overwritten. Joining adds an instance’s existing worlds and resource packs alongside what’s already shared, and leaving (or turning an item off, or deleting this shared folder) always gives that instance its own private copy back instead of emptying it out.',
 	},
 })
 </script>
@@ -962,8 +958,8 @@ const messages = defineMessages({
 				<p class="m-0 text-sm text-secondary">
 					{{ formatMessage(messages.sharedFolderManageDescription) }}
 				</p>
-				<p v-if="isOwnerOfCurrentSharedFolder" class="m-0 text-sm text-brand">
-					{{ formatMessage(messages.sharedFolderOwnerNotice) }}
+				<p class="m-0 text-sm text-brand">
+					{{ formatMessage(messages.sharedFolderDataSafetyNotice) }}
 				</p>
 				<div class="flex flex-col gap-3">
 					<Checkbox

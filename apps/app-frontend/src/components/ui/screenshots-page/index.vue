@@ -1482,6 +1482,35 @@ onBeforeUnmount(() => {
 					class="relative w-full"
 					:style="{ height: `${screenshotListHeight}px`, overflowAnchor: 'none' }"
 				>
+					<!--
+						Modrinth Studios: this wrapper's `transition-transform` used to
+						be unconditional — added so a group collapsing/expanding (or a
+						groupBy change) smoothly slides the groups below it into their
+						new `top`, instead of snapping. But `top` for every group is
+						recomputed from `screenshotGroupLayouts`, which depends on
+						`screenshotCardHeight`/`screenshotColumnCount` — values sourced
+						from `useElementSize`/`useWindowSize` ResizeObserver
+						measurements that are not perfectly scroll-invariant in
+						practice (subpixel layout jitter, a vertical scrollbar's own
+						width nudging the measured content width by a pixel near an
+						overflow threshold, etc.). Any transient recompute of those
+						during a scroll — even one corrected on the very next frame —
+						shifts every visible group's `top` for a moment, and with this
+						transition always active, Vue sees an existing element's
+						`transform` change and plays the full 300ms ease-in-out slide,
+						which is exactly what showed up as content sliding to a
+						different position and then sliding back on its own a moment
+						later, with no further scroll input. The row-level entry/move
+						animations one level down (group.vue's TransitionGroup) were
+						already gated on `animateEntry` (off while
+						`screenshotsScrolling`) for this same reason — this outer,
+						whole-group reposition transition was the one layer that got
+						missed. Gating it the same way means a real collapse/expand or
+						regroup (never mid-scroll) still animates, but a scroll-driven
+						recompute of `top` — however it was triggered — just snaps
+						instead of visibly animating a slide that has to un-animate
+						itself back.
+					-->
 					<div
 						v-for="{
 							group,
@@ -1491,7 +1520,12 @@ onBeforeUnmount(() => {
 							virtualGridTop,
 						} in visibleScreenshotGroups"
 						:key="group.id"
-						class="absolute inset-x-0 transition-transform duration-300 ease-in-out will-change-transform motion-reduce:transition-none"
+						class="absolute inset-x-0 will-change-transform"
+						:class="
+							screenshotsScrolling
+								? ''
+								: 'transition-transform duration-300 ease-in-out motion-reduce:transition-none'
+						"
 						:style="{ transform: `translateY(${top}px)` }"
 					>
 						<ScreenshotGroupSection
@@ -1501,6 +1535,7 @@ onBeforeUnmount(() => {
 							:rendered-screenshots="renderedScreenshots"
 							:virtual-grid-height="gridHeight"
 							:virtual-grid-top="virtualGridTop"
+							:card-height="screenshotCardHeight"
 							:selected-keys="selectedKeys"
 							:selection-active="selectionActive"
 							:active-dragged-keys="activeDraggedKeys"

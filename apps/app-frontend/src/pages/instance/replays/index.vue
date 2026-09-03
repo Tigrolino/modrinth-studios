@@ -28,16 +28,28 @@
 				clearable
 				:placeholder="formatMessage(messages.searchPlaceholder, { count: replays.length })"
 			/>
-			<div class="flex flex-col w-full gap-2">
-				<ReplayItem
-					v-for="replay in filteredReplays"
+			<!--
+				Modrinth Studios addition: virtualized. See the
+				`useVirtualScroll` call below for why — rendering every
+				ReplayItem at once mounted (and thumbnail-fetched) all of
+				them simultaneously, which is what caused the multi-second
+				freeze on instances with hundreds/thousands of replays.
+			-->
+			<div ref="listContainer" class="relative w-full" :style="{ height: `${totalHeight}px` }">
+				<div
+					v-for="(replay, index) in visibleItems"
 					:key="`${replay.kind}-${replay.fileName}`"
-					:replay="replay"
-					:instance-id="instance.id"
-					@open-folder="openFolder(replay)"
-					@rename="startRename(replay)"
-					@delete="promptDelete(replay)"
-				/>
+					class="absolute inset-x-0"
+					:style="{ transform: `translateY(${visibleTop + index * REPLAY_ROW_HEIGHT}px)` }"
+				>
+					<ReplayItem
+						:replay="replay"
+						:instance-id="instance.id"
+						@open-folder="openFolder(replay)"
+						@rename="startRename(replay)"
+						@delete="promptDelete(replay)"
+					/>
+				</div>
 			</div>
 		</div>
 		<EmptyState
@@ -66,6 +78,7 @@ import {
 	ReadyTransition,
 	useReadyState,
 	useVIntl,
+	useVirtualScroll,
 } from '@modrinth/ui'
 import { useQuery, useQueryClient } from '@tanstack/vue-query'
 import { confirm, open } from '@tauri-apps/plugin-dialog'
@@ -143,6 +156,29 @@ const filteredReplays = computed(() => {
 			(replay.serverName?.toLowerCase().includes(query) ?? false) ||
 			(replay.worldName?.toLowerCase().includes(query) ?? false),
 	)
+})
+
+// Modrinth Studios addition: virtualize the replay list. Each ReplayItem row
+// independently fetches its own thumbnail via a Tauri IPC call in its
+// onMounted hook (a per-row `spawn_blocking` zip read on the Rust side — see
+// `get_replay_thumbnail` in replays.rs), and this list previously rendered
+// every replay unconditionally via `v-for`. With hundreds or (as reported)
+// ~1000 replays, that meant mounting all of them — and firing all of their
+// thumbnail fetches — at once, which is what caused the multi-second freeze
+// on opening this tab. Only mounting the rows near the viewport keeps the
+// number of concurrently in-flight thumbnail fetches bounded no matter how
+// many replays an instance has, the same way screenshots-page/index.vue
+// already bounds its own image work during scroll.
+//
+// ReplayItem's card is `min-h-20` (80px) with single-line/truncated content
+// throughout, so it doesn't grow with content — 88px accounts for that plus
+// the 8px (`gap-2`) row spacing the old flex layout used.
+const REPLAY_ROW_HEIGHT = 88
+
+const { listContainer, totalHeight, visibleTop, visibleItems } = useVirtualScroll(filteredReplays, {
+	itemHeight: REPLAY_ROW_HEIGHT,
+	bufferSize: 10,
+	initialItemCount: 30,
 })
 
 const importing = ref(false)

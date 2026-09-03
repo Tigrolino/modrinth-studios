@@ -52,7 +52,7 @@ pub(crate) async fn rename_instance_folder_for_name_change(
     }
 
     let (new_path, new_full_path) =
-        resolve_instance_path(new_name, None, state).await?;
+        resolve_instance_path(new_name, None, Some(instance_id), state).await?;
 
     if new_path == instance.path {
         // Sanitizes/collision-resolves to the exact folder name it already
