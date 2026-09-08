@@ -30,7 +30,7 @@
 			<video
 				v-if="isVideoBackground"
 				key="splash-video-bg"
-				class="cube-bg splash-video-bg"
+				class="cube-bg splash-video-bg has-custom-bg"
 				:src="customBackgroundSrc"
 				autoplay
 				muted
@@ -42,7 +42,13 @@
 			     replace this element (not patch it in place) whenever the mode
 			     switches, so a stale <video> element left over from a previous
 			     pick never lingers with the wrong `src`/no styling applied. -->
-			<div v-else key="splash-image-bg" class="cube-bg" :style="customBackgroundStyle"></div>
+			<div
+				v-else
+				key="splash-image-bg"
+				class="cube-bg"
+				:class="{ 'has-custom-bg': !!appearance.splashBackgroundPath }"
+				:style="customBackgroundStyle"
+			></div>
 			<div class="base-bg"></div>
 		</div>
 	</Transition>
@@ -320,6 +326,16 @@ useAppEvent('loading', (e) => {
 		background-size: contain;
 		opacity: var(--splash-cube-opacity);
 		mix-blend-mode: var(--splash-cube-blend);
+	}
+
+	// Modrinth Studios addition: upstream's default cube artwork above is an
+	// unconditional ::after overlay — it has no concept of a user-picked
+	// background, so it was painting itself on top of any custom splash
+	// image/video/GIF regardless. Suppress it whenever a custom background is
+	// actually in effect (see `has-custom-bg`, toggled in the template based
+	// on `appearance.splashBackgroundPath`).
+	&.has-custom-bg::after {
+		opacity: 0;
 	}
 }
 
