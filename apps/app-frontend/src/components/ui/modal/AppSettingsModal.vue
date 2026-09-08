@@ -6,6 +6,7 @@ import {
 	HeartHandshakeIcon,
 	InfoIcon,
 	LanguagesIcon,
+	LightBulbIcon,
 	ModrinthIcon,
 	PaintbrushIcon,
 	RefreshCwIcon,
@@ -27,19 +28,8 @@ import {
 import { getVersion } from '@tauri-apps/api/app'
 import { openUrl } from '@tauri-apps/plugin-opener'
 import { platform as getOsPlatform, version as getOsVersion } from '@tauri-apps/plugin-os'
-import { computed, provide, ref, watch } from 'vue'
+import { computed, defineAsyncComponent, provide, ref, watch } from 'vue'
 
-import PrivacySettings from '@/components/ui/settings/account/PrivacySettings.vue'
-import ProfileSettings from '@/components/ui/settings/account/ProfileSettings.vue'
-import SocialSettings from '@/components/ui/settings/account/SocialSettings.vue'
-import AppearanceSettings from '@/components/ui/settings/display/AppearanceSettings.vue'
-import BehaviorSettings from '@/components/ui/settings/display/BehaviorSettings.vue'
-import FeatureFlagSettings from '@/components/ui/settings/display/FeatureFlagSettings.vue'
-import LanguageSettings from '@/components/ui/settings/display/LanguageSettings.vue'
-import InstancesSyncedSettings from '@/components/ui/settings/instances/InstancesSyncedSettings.vue'
-import JavaSettings from '@/components/ui/settings/instances/JavaSettings.vue'
-import ResourceManagementSettings from '@/components/ui/settings/instances/ResourceManagementSettings.vue'
-import StorageSettings from '@/components/ui/settings/instances/StorageSettings.vue'
 import { useAppSettings } from '@/composables/use-app-settings.ts'
 import { get, set } from '@/helpers/settings.ts'
 import {
@@ -47,6 +37,44 @@ import {
 	type UnsavedChangesController,
 } from '@/providers/app-settings-modal'
 import { injectAppUpdateDownloadProgress } from '@/providers/download-progress.ts'
+
+const PrivacySettings = defineAsyncComponent(
+	() => import('@/components/ui/settings/account/PrivacySettings.vue'),
+)
+const ProfileSettings = defineAsyncComponent(
+	() => import('@/components/ui/settings/account/ProfileSettings.vue'),
+)
+const SocialSettings = defineAsyncComponent(
+	() => import('@/components/ui/settings/account/SocialSettings.vue'),
+)
+const AppearanceSettings = defineAsyncComponent(
+	() => import('@/components/ui/settings/display/AppearanceSettings.vue'),
+)
+const BehaviorSettings = defineAsyncComponent(
+	() => import('@/components/ui/settings/display/BehaviorSettings.vue'),
+)
+const FeatureFlagSettings = defineAsyncComponent(
+	() => import('@/components/ui/settings/display/FeatureFlagSettings.vue'),
+)
+const FeaturesSettings = defineAsyncComponent(
+	() => import('@/components/ui/settings/display/FeaturesSettings.vue'),
+)
+const LanguageSettings = defineAsyncComponent(
+	() => import('@/components/ui/settings/display/LanguageSettings.vue'),
+)
+const InstancesSyncedSettings = defineAsyncComponent(
+	() => import('@/components/ui/settings/instances/instances-synced-settings/index.vue'),
+)
+const JavaSettings = defineAsyncComponent(
+	() => import('@/components/ui/settings/instances/JavaSettings.vue'),
+)
+const ResourceManagementSettings = defineAsyncComponent(
+	() => import('@/components/ui/settings/instances/ResourceManagementSettings.vue'),
+)
+// Modrinth Studios: Storage settings tab, ported into upstream's lazy-loading pattern.
+const StorageSettings = defineAsyncComponent(
+	() => import('@/components/ui/settings/instances/StorageSettings.vue'),
+)
 
 // TODO: Apply COMPONENT_STRUCTURE.md here and extract out common setting option components
 const appSettings = useAppSettings()
@@ -84,6 +112,15 @@ const tabs = [
 		category: tabCategories.display,
 		icon: PaintbrushIcon,
 		content: AppearanceSettings,
+	},
+	{
+		name: defineMessage({
+			id: 'app.settings.tabs.features',
+			defaultMessage: 'Features',
+		}),
+		category: tabCategories.display,
+		icon: LightBulbIcon,
+		content: FeaturesSettings,
 	},
 	{
 		name: defineMessage({
