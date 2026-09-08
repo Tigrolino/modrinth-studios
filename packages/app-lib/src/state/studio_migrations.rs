@@ -73,25 +73,6 @@ const STUDIO_MIGRATIONS: &[StudioMigration] = &[
         ),
     },
     StudioMigration {
-        version: 20260829120000,
-        description: "studio-shared-profiles",
-        sql: include_str!("../../studio-migrations/20260829120000_studio-shared-profiles.sql"),
-    },
-    StudioMigration {
-        version: 20260829130000,
-        description: "studio-shared-profile-item-flags",
-        sql: include_str!(
-            "../../studio-migrations/20260829130000_studio-shared-profile-item-flags.sql"
-        ),
-    },
-    StudioMigration {
-        version: 20260829140000,
-        description: "studio-shared-profile-owner",
-        sql: include_str!(
-            "../../studio-migrations/20260829140000_studio-shared-profile-owner.sql"
-        ),
-    },
-    StudioMigration {
         version: 20260830120000,
         description: "studio-discord-rpc-settings",
         sql: include_str!(

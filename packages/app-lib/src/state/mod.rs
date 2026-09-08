@@ -49,6 +49,7 @@ pub use self::tunnel::*;
 
 pub mod db;
 pub(crate) mod db_backup;
+pub(crate) mod shared_folder_reversion;
 pub(crate) mod studio_migrations;
 mod mr_auth;
 
@@ -181,6 +182,12 @@ impl State {
                     "Error reconciling renamed instance folders: {e}"
                 );
             }
+
+            // Modrinth Studios: one-time reversion of the old shared-folder
+            // feature (removed — see shared_folder_reversion.rs), run before
+            // watch_instances_init() below so the watcher only ever sees
+            // each instance's final, already-reverted folder state.
+            shared_folder_reversion::revert_all(state).await;
 
             instances::watcher::watch_instances_init(
                 &state.file_watcher,

@@ -67,8 +67,8 @@ pub(crate) use self::screenshots::reconcile_screenshots;
 pub use self::screenshots::{
     InstanceScreenshot, ScreenshotEditSaveMode, ScreenshotKey,
     delete_screenshots, export_screenshots, get_screenshot_path,
-    get_screenshot_thumbnail, list_all_screenshots, list_screenshots,
-    list_synced_screenshots, move_screenshots, save_edited_screenshot,
+    list_all_screenshots, list_screenshots, list_synced_screenshots,
+    move_screenshots, save_edited_screenshot,
 };
 pub(crate) use self::shared::{
     CONFIG_BUNDLE_FILE_TYPE, CONFIG_DIRECTORY, CONFIG_FILE_EXTENSIONS,
@@ -77,9 +77,8 @@ pub(crate) use self::shared::{
 };
 // Modrinth Studios addition, see storage.rs
 pub use self::storage::{
-    InstanceStorageUsage, SharedFolderBreakdown, SharedFolderStorageUsage,
-    StorageBreakdown, SystemStorageOverview, instance_storage_usage,
-    instance_storage_usage_single, shared_folder_storage_usage,
+    InstanceStorageUsage, StorageBreakdown, SystemStorageOverview,
+    instance_storage_usage, instance_storage_usage_single,
     system_storage_overview,
 };
 pub use self::shared::{

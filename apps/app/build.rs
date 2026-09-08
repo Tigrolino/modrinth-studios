@@ -221,7 +221,6 @@ fn main() {
                         "instance_list_screenshots",
                         "instance_list_all_screenshots",
                         "instance_list_synced_screenshots",
-                        "instance_get_screenshot_thumbnail",
                         "instance_save_edited_screenshot",
                         "instance_list_screenshot_groups",
                         "instance_create_screenshot_group",
@@ -467,23 +466,6 @@ fn main() {
                     .commands(&[
                         "discord_rpc_get_settings",
                         "discord_rpc_set_settings",
-                    ])
-                    .default_permission(
-                        DefaultPermissionRule::AllowAllCommands,
-                    ),
-            )
-            .plugin(
-                // Modrinth Studios addition
-                "shared-profile",
-                InlinedPlugin::new()
-                    .commands(&[
-                        "shared_profile_list",
-                        "shared_profile_create",
-                        "shared_profile_rename",
-                        "shared_profile_update_items",
-                        "shared_profile_delete",
-                        "shared_profile_get_for_instance",
-                        "shared_profile_set_for_instance",
                     ])
                     .default_permission(
                         DefaultPermissionRule::AllowAllCommands,

@@ -3,14 +3,15 @@
 //! listed by size rather than the person having to go digging through
 //! Explorer themselves.
 //!
-//! Also measures shared folders (`crate::api::shared_profile`) separately —
-//! an instance that's a member of one only holds a directory
-//! junction/symlink or hard link into that data, not a copy of it, so its
-//! own `directory_size()` walk (see that function's doc comment) already
-//! skips over it entirely rather than counting it. Without a separate
-//! listing, that space would look like it just isn't tracked anywhere; with
-//! one, it shows up exactly once — against the shared folder itself — no
-//! matter how many instances are using it, instead of once per instance.
+//! Used to also measure Studio's own shared-folder feature separately (an
+//! instance sharing worlds/config/resource packs with others via a
+//! directory junction/symlink), but that feature was removed once Modrinth
+//! shipped their own way to sync content between instances — see
+//! `crate::state::shared_folder_reversion` for how any instance still using
+//! it gets its own private copy back automatically. The symlink/junction
+//! skip in `directory_size()` below is kept anyway: it's a reasonable
+//! defensive default for any directory walk like this one regardless of why
+//! a link might exist under an instance folder.
 
 use crate::state::State;
 use crate::util::link;
@@ -50,41 +51,6 @@ pub struct InstanceStorageUsage {
     pub name: String,
     pub size_bytes: u64,
     pub breakdown: StorageBreakdown,
-}
-
-/// Modrinth Studios addition: same idea as `StorageBreakdown`, but for a
-/// shared folder's own composition instead of an instance's — a shared
-/// folder can only ever contain the specific items `api::shared_profile`
-/// knows how to share (see its `SHAREABLE_ITEMS` list): `saves`,
-/// `resourcepacks`, `config`, `options.txt`, `servers.dat`. `config`,
-/// `options.txt`, and `servers.dat` don't get their own bucket here (there's
-/// only ever at most a few small config files in there, not worth calling
-/// out) — they fold into `other_bytes`, mirroring how `StorageBreakdown`
-/// folds an instance's own `config` folder into *its* `other_bytes` too.
-#[derive(serde::Serialize, Debug, Clone, Default)]
-pub struct SharedFolderBreakdown {
-    pub worlds_bytes: u64,
-    pub resourcepacks_bytes: u64,
-    pub other_bytes: u64,
-}
-
-impl SharedFolderBreakdown {
-    pub fn total(&self) -> u64 {
-        self.worlds_bytes + self.resourcepacks_bytes + self.other_bytes
-    }
-}
-
-#[derive(serde::Serialize, Debug, Clone)]
-pub struct SharedFolderStorageUsage {
-    pub shared_profile_id: String,
-    pub name: String,
-    pub size_bytes: u64,
-    pub member_count: i64,
-    pub breakdown: SharedFolderBreakdown,
-    /// Absolute path to this shared folder's data on disk, so the Storage
-    /// page can offer an "open folder" action the same way it does for
-    /// instances, without a second round-trip just to resolve the path.
-    pub full_path: String,
 }
 
 /// Recursively measures every instance's folder. Skips symlinks entirely —
@@ -137,14 +103,11 @@ pub async fn instance_storage_usage()
 /// `total_disk_bytes`: `worlds_bytes` through `replays_bytes` are each
 /// category summed across *every* instance, `instances_other_bytes` is
 /// whatever's left of instance folders once those categories are pulled out
-/// (see `StorageBreakdown::other_bytes`), `shared_folders_bytes` is shared
-/// folders' own total (kept separate rather than folded into the categories
-/// above — see `shared_folder_storage_usage`'s doc comment for why that data
-/// only counts once), and `non_modrinth_bytes` is everything else on the
-/// drive Studio's data lives on (every other app/file, the OS itself, etc.)
-/// — computed as a remainder rather than measured directly, since actually
-/// walking "everything else on this drive" isn't something any of this needs
-/// to do.
+/// (see `StorageBreakdown::other_bytes`), and `non_modrinth_bytes` is
+/// everything else on the drive Studio's data lives on (every other
+/// app/file, the OS itself, etc.) — computed as a remainder rather than
+/// measured directly, since actually walking "everything else on this
+/// drive" isn't something any of this needs to do.
 #[derive(serde::Serialize, Debug, Clone)]
 pub struct SystemStorageOverview {
     pub total_disk_bytes: u64,
@@ -155,7 +118,6 @@ pub struct SystemStorageOverview {
     pub shaderpacks_bytes: u64,
     pub mods_bytes: u64,
     pub replays_bytes: u64,
-    pub shared_folders_bytes: u64,
     pub non_modrinth_bytes: u64,
 }
 
@@ -179,14 +141,13 @@ fn disk_totals(path: &Path) -> Option<(u64, u64)> {
 }
 
 /// Builds the Storage page's system-wide overview bar. Reuses
-/// `instance_storage_usage()`/`shared_folder_storage_usage()` rather than
-/// re-walking the filesystem a second way, so this never disagrees with what
-/// the per-instance/per-shared-folder lists below it show.
+/// `instance_storage_usage()` rather than re-walking the filesystem a second
+/// way, so this never disagrees with what the per-instance list below it
+/// shows.
 pub async fn system_storage_overview() -> crate::Result<SystemStorageOverview> {
     let state = State::get().await?;
 
     let instances = instance_storage_usage().await?;
-    let shared_folders = shared_folder_storage_usage().await?;
 
     let mut worlds_bytes = 0u64;
     let mut resourcepacks_bytes = 0u64;
@@ -203,9 +164,6 @@ pub async fn system_storage_overview() -> crate::Result<SystemStorageOverview> {
         instances_other_bytes += entry.breakdown.other_bytes;
     }
 
-    let shared_folders_bytes: u64 =
-        shared_folders.iter().map(|entry| entry.size_bytes).sum();
-
     let instances_dir = state.directories.instances_dir();
     let (total_disk_bytes, free_disk_bytes) =
         disk_totals(&instances_dir).unwrap_or((0, 0));
@@ -215,8 +173,7 @@ pub async fn system_storage_overview() -> crate::Result<SystemStorageOverview> {
         + shaderpacks_bytes
         + mods_bytes
         + replays_bytes
-        + instances_other_bytes
-        + shared_folders_bytes;
+        + instances_other_bytes;
 
     // `saturating_sub` rather than plain subtraction: `total_disk_bytes`
     // being 0 (disk lookup failed) or a race between the walk above and the
@@ -234,7 +191,6 @@ pub async fn system_storage_overview() -> crate::Result<SystemStorageOverview> {
         shaderpacks_bytes,
         mods_bytes,
         replays_bytes,
-        shared_folders_bytes,
         non_modrinth_bytes,
     })
 }
@@ -368,82 +324,4 @@ async fn categorize_instance_dir(root: &Path) -> StorageBreakdown {
     }
 
     breakdown
-}
-
-/// Same idea as `categorize_instance_dir`, but for a shared folder's root —
-/// see `SharedFolderBreakdown`'s doc comment for exactly which top-level
-/// items map to which bucket. No symlink/junction check needed here (unlike
-/// `categorize_instance_dir`): a shared folder's own directory is the real
-/// data itself, never a link to something else.
-async fn categorize_shared_folder_dir(root: &Path) -> SharedFolderBreakdown {
-    let mut breakdown = SharedFolderBreakdown::default();
-
-    let Ok(mut entries) = tokio::fs::read_dir(root).await else {
-        return breakdown;
-    };
-
-    while let Ok(Some(entry)) = entries.next_entry().await {
-        let Ok(file_type) = entry.file_type().await else {
-            continue;
-        };
-
-        if file_type.is_dir() {
-            let name = entry.file_name().to_string_lossy().to_ascii_lowercase();
-            let size = directory_size(&entry.path()).await;
-            match name.as_str() {
-                "saves" => breakdown.worlds_bytes += size,
-                "resourcepacks" => breakdown.resourcepacks_bytes += size,
-                _ => breakdown.other_bytes += size,
-            }
-        } else if let Ok(metadata) = entry.metadata().await {
-            breakdown.other_bytes += metadata.len();
-        }
-    }
-
-    breakdown
-}
-
-/// Measures how much disk space every shared folder's *actual* data takes up
-/// — see the module doc comment for why this needs to be tracked separately
-/// from any instance's own number rather than folded into one.
-pub async fn shared_folder_storage_usage()
--> crate::Result<Vec<SharedFolderStorageUsage>> {
-    let state = State::get().await?;
-
-    let profiles: Vec<(String, String)> = sqlx::query_as(
-        "SELECT id, name FROM studio_shared_profiles ORDER BY name COLLATE NOCASE",
-    )
-    .fetch_all(&state.pool)
-    .await?;
-
-    let usage = futures::future::join_all(profiles.into_iter().map(
-        |(id, name)| {
-            let shared_profiles_dir = state.directories.shared_profiles_dir();
-            let pool = state.pool.clone();
-            async move {
-                let full_path = shared_profiles_dir.join(&id);
-                let breakdown = categorize_shared_folder_dir(&full_path).await;
-                let size_bytes = breakdown.total();
-                let member_count: i64 = sqlx::query_scalar(
-                    "SELECT COUNT(*) FROM studio_instance_shared_profiles WHERE shared_profile_id = ?",
-                )
-                .bind(&id)
-                .fetch_one(&pool)
-                .await
-                .unwrap_or(0);
-
-                SharedFolderStorageUsage {
-                    shared_profile_id: id,
-                    name,
-                    size_bytes,
-                    member_count,
-                    breakdown,
-                    full_path: full_path.to_string_lossy().into_owned(),
-                }
-            }
-        },
-    ))
-    .await;
-
-    Ok(usage)
 }

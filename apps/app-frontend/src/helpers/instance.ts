@@ -274,17 +274,6 @@ export async function open_screenshot(key: ScreenshotKey): Promise<void> {
 	return await invoke('plugin:instance|instance_open_screenshot', { key })
 }
 
-// Modrinth Studios addition: fetched lazily per-card from card.vue's
-// onMounted, mirroring getReplayThumbnail — see the doc comment on
-// `get_screenshot_thumbnail` in operations.rs for why this is generated (and
-// cached to disk) on demand rather than coming back with the rest of a
-// screenshot's fields from the list commands. `null` means no thumbnail
-// could be generated; the grid falls back to the screenshot's full-size
-// `url` in that case.
-export async function get_screenshot_thumbnail(key: ScreenshotKey): Promise<string | null> {
-	return await invoke('plugin:instance|instance_get_screenshot_thumbnail', { key })
-}
-
 export async function set_synced_option(
 	instanceId: string,
 	option: SyncedOption,

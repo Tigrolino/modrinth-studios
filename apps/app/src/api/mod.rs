@@ -33,7 +33,6 @@ pub mod friends;
 // Modrinth Studios additions, see apps/app/src/api/replays.rs and studio.rs
 pub mod playtime_correction;
 pub mod replays;
-pub mod shared_profile;
 pub mod studio;
 #[cfg(windows)]
 mod studio_pinned_icon_windows;

@@ -1,9 +1,10 @@
 //! Modrinth Studios addition: cross-platform helpers for linking one path to
-//! another, used by the shared Minecraft folder feature (see
-//! `crate::shared_profile`) to make an instance's `saves`/`config`/
-//! `resourcepacks` folders and `options.txt` file actually *be* the shared
-//! profile's copies, rather than separate copies that would need to be kept
-//! in sync.
+//! another. Originally built for the shared Minecraft folder feature (now
+//! removed — see `crate::state::shared_folder_reversion`, which still uses
+//! these helpers to detect and undo old links) to make an instance's
+//! `saves`/`config`/`resourcepacks` folders and `options.txt` file actually
+//! *be* the shared profile's copies, rather than separate copies that would
+//! need to be kept in sync.
 //!
 //! - Directories use an NTFS junction on Windows (via the `junction` crate)
 //!   or a symlink everywhere else. A junction was chosen over a real Windows

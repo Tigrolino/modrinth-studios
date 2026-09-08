@@ -192,11 +192,11 @@ impl DirectoryInfo {
         self.config_dir.join(CACHES_FOLDER_NAME)
     }
 
-    /// Modrinth Studios addition: root folder for shared Minecraft folders
-    /// (see api/shared_profile.rs) — each shared profile gets its own
-    /// subfolder here, holding the saves/config/resourcepacks/options.txt
-    /// that every instance using that profile links into instead of keeping
-    /// its own private copies.
+    /// Modrinth Studios: root folder the old (now-removed) shared Minecraft
+    /// folders feature used to keep its data in. Kept only so
+    /// `state::shared_folder_reversion` can find and clean up any leftover
+    /// data from before the feature was removed — nothing else should ever
+    /// write here again.
     #[inline]
     pub fn shared_profiles_dir(&self) -> PathBuf {
         self.config_dir.join("shared_profiles")
