@@ -133,8 +133,6 @@ cidre = { workspace = true, features = ["blocks", "nw"] }
 windows = { workspace = true, features = ["Networking_Connectivity"] }
 windows-core = { workspace = true }
 winreg = { workspace = true }
-# Modrinth Studios addition, see src/util/link.rs
-junction = { workspace = true }
 
 [features]
 cli = ["dep:indicatif"]
