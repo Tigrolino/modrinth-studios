@@ -75,80 +75,10 @@ pub async fn read_link_target(path: impl AsRef<Path>) -> crate::Result<PathBuf> 
     })
 }
 
-/// Creates `link_path` as a link to the directory `target` (which must
-/// already exist). `link_path` must not already exist.
-pub async fn create_dir_link(
-    target: impl AsRef<Path>,
-    link_path: impl AsRef<Path>,
-) -> crate::Result<()> {
-    let target = target.as_ref().to_path_buf();
-    let link_path = link_path.as_ref().to_path_buf();
-    tokio::task::spawn_blocking(move || create_dir_link_sync(&target, &link_path))
-        .await
-        .map_err(|e| {
-            crate::ErrorKind::OtherError(format!(
-                "shared folder link task panicked: {e}"
-            ))
-            .as_error()
-        })??;
-    Ok(())
-}
-
-#[cfg(windows)]
-fn create_dir_link_sync(target: &Path, link_path: &Path) -> crate::Result<()> {
-    junction::create(target, link_path).map_err(|e| {
-        crate::ErrorKind::FSError(format!(
-            "Failed to create shared folder junction at {}: {e}",
-            link_path.display()
-        ))
-        .as_error()
-    })
-}
-
-#[cfg(not(windows))]
-fn create_dir_link_sync(target: &Path, link_path: &Path) -> crate::Result<()> {
-    std::os::unix::fs::symlink(target, link_path).map_err(|e| {
-        crate::ErrorKind::FSError(format!(
-            "Failed to create shared folder symlink at {}: {e}",
-            link_path.display()
-        ))
-        .as_error()
-    })
-}
-
-/// Creates `link_path` as a hard link to the file `target` (which must
-/// already exist). `link_path` must not already exist. Both paths need to be
-/// on the same filesystem/volume — always true here, since shared profiles
-/// live under the same app data directory as every instance.
-pub async fn create_file_link(
-    target: impl AsRef<Path>,
-    link_path: impl AsRef<Path>,
-) -> crate::Result<()> {
-    let target = target.as_ref().to_path_buf();
-    let link_path = link_path.as_ref().to_path_buf();
-    tokio::task::spawn_blocking(move || {
-        std::fs::hard_link(&target, &link_path).map_err(|e| {
-            crate::ErrorKind::FSError(format!(
-                "Failed to create shared folder hard link at {}: {e}",
-                link_path.display()
-            ))
-            .as_error()
-        })
-    })
-    .await
-    .map_err(|e| {
-        crate::ErrorKind::OtherError(format!(
-            "shared folder link task panicked: {e}"
-        ))
-        .as_error()
-    })??;
-    Ok(())
-}
-
-/// Removes a link created by `create_dir_link`/`create_file_link` at `path`
-/// — only the link/reparse point/hard link entry itself, never the shared
-/// data on the other end of it. Does nothing (returns `Ok`) if `path`
-/// doesn't exist.
+/// Removes a directory junction/symlink or hard-linked file left over from
+/// the old shared-folder feature at `path` — only the link/reparse point/hard
+/// link entry itself, never the shared data on the other end of it. Does
+/// nothing (returns `Ok`) if `path` doesn't exist.
 pub async fn remove_link(path: impl AsRef<Path>) -> crate::Result<()> {
     let path = path.as_ref().to_path_buf();
     tokio::task::spawn_blocking(move || remove_link_sync(&path))

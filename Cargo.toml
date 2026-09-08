@@ -113,11 +113,6 @@ itertools = "0.14.0"
 jemalloc_pprof = "0.8.1"
 json-patch = { version = "4.1.0", default-features = false }
 json5 = "1.3.1"
-# Modrinth Studios addition: creates NTFS directory junctions on Windows
-# without requiring admin rights or Developer Mode (unlike a real directory
-# symlink, which needs SeCreateSymbolicLinkPrivilege) — used by the shared
-# Minecraft folder feature, see packages/app-lib/src/util/link.rs.
-junction = "1.2.0"
 lettre = { version = "0.11.19", default-features = false, features = [
   "aws-lc-rs",
   "builder",
