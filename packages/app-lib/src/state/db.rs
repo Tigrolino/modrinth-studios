@@ -48,7 +48,7 @@ async fn open_migrated_app_db(db_path: &Path) -> crate::Result<Pool<Sqlite>> {
     // migrations applied by a *different build* of this same crate than the
     // one currently running — e.g. the person's separate official Modrinth
     // App install has since shipped upstream migrations Studio's own fork
-    // hasn't caught up to yet, and vice versa for the 5 Studio-only
+    // hasn't caught up to yet, and vice versa for the Studio-only
     // migrations `reconcile_legacy_rows` just cleared out above. By default
     // sqlx::migrate!() hard-errors the moment `_sqlx_migrations` contains
     // any row it doesn't resolve locally ("was previously applied but is

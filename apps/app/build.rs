@@ -440,7 +440,6 @@ fn main() {
                         "studio_apply_pinned_icon",
                         "studio_instance_storage_usage",
                         "studio_instance_storage_usage_single",
-                        "studio_shared_folder_storage_usage",
                         "studio_system_storage_overview",
                     ])
                     .default_permission(
@@ -500,6 +499,7 @@ fn main() {
                         "backup_world",
                         "delete_world",
                         "add_server_to_instance",
+                        "ensure_managed_server_in_instance",
                         "edit_server_in_instance",
                         "remove_server_from_instance",
                         "desync_server",

@@ -25,7 +25,7 @@
 //! `sqlx::migrate!()` gave.
 //!
 //! For anyone who already had Studio installed before this change (and
-//! therefore already has these 5 versions recorded as successful in
+//! therefore already has these versions recorded as successful in
 //! `_sqlx_migrations`, with their tables/columns/data already applied), the
 //! legacy record needs backfilling into `studio_migrations` WITHOUT
 //! re-running the SQL (re-running a plain `CREATE TABLE` would fail
@@ -36,11 +36,11 @@
 //! itself, not just once after it — `sqlx::migrate!().run(&pool)` validates,
 //! *before applying anything new*, that every row already in
 //! `_sqlx_migrations` corresponds to one of the migrations it has resolved.
-//! Since Studio's own `sqlx::migrate!()` no longer resolves Studio's 5
+//! Since Studio's own `sqlx::migrate!()` no longer resolves Studio's own
 //! migrations either (they moved out of the tracked folder), Studio's own
 //! next launch after upgrading hit the *exact* "previously applied but is
 //! missing in the resolved migrations" error this whole fix exists to solve
-//! — just against itself instead of the official app — because the 5 legacy
+//! — just against itself instead of the official app — because the legacy
 //! rows were still sitting in `_sqlx_migrations` when `sqlx::migrate!()` ran
 //! and checked. `reconcile_legacy_rows()` below strips those rows out
 //! *before* `sqlx::migrate!()` gets a chance to validate the table, and
