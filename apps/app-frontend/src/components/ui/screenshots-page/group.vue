@@ -15,9 +15,6 @@ const props = defineProps<{
 	renderedScreenshots?: InstanceScreenshot[]
 	virtualGridHeight?: number
 	virtualGridTop?: number
-	// Modrinth Studios addition: see the doc comment on ScreenshotCard's
-	// `cardHeight` prop in card.vue.
-	cardHeight: number
 	selectedKeys: ReadonlySet<string>
 	selectionActive: boolean
 	activeDraggedKeys: ReadonlySet<string>
@@ -152,30 +149,12 @@ function getSelectionKey(screenshot: InstanceScreenshot) {
 				<slot name="actions" :start-editing="startEditing" />
 			</template>
 			<div v-if="renderGrid" class="relative min-h-[45px] w-full" :style="virtualGridStyle">
-				<!--
-					Modrinth Studios: `move-class` here used to be a hardcoded,
-					always-on string. Within a large open group, `renderedScreenshots`
-					is itself a virtualized row-window (see `visibleScreenshotGroups`
-					in index.vue) that shifts every time scrolling crosses a row
-					boundary — cards leave from one end of the v-for array and appear
-					at the other. TransitionGroup treats that as a reorder and FLIPs
-					every shifted card into place over 200ms, which fired on almost
-					every scroll frame and is exactly what looked like the scroll
-					position itself snapping/jerking. Tying it to `animateEntry`
-					(already false while `screenshotsScrolling` in index.vue) means
-					the move animation only plays for genuine reorders — regrouping,
-					drag-and-drop, sort changes — never for scroll-driven rewindowing.
-				-->
 				<TransitionGroup
 					tag="div"
 					class="grid min-h-[45px] w-full grid-cols-1 gap-3 sm:grid-cols-2 2xl:grid-cols-4"
 					:class="{ 'absolute inset-x-0 top-0': virtualGridHeight !== undefined }"
 					:style="visibleGridStyle"
-					:move-class="
-						animateEntry
-							? 'transition-transform duration-200 ease-out motion-reduce:transition-none'
-							: ''
-					"
+					move-class="transition-transform duration-200 ease-out motion-reduce:transition-none"
 					:enter-active-class="
 						animateEntry
 							? 'transition-[opacity,transform] duration-[150ms] ease-out motion-reduce:transition-none'
@@ -188,7 +167,6 @@ function getSelectionKey(screenshot: InstanceScreenshot) {
 						v-for="screenshot in visibleScreenshots"
 						:key="getSelectionKey(screenshot)"
 						:screenshot="screenshot"
-						:card-height="cardHeight"
 						:selection-key="getSelectionKey(screenshot)"
 						:selected="selectedKeys.has(getSelectionKey(screenshot))"
 						:selection-active="selectionActive"

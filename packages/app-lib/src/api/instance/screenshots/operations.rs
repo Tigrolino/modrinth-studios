@@ -19,22 +19,11 @@ use crate::state::instances::adapters::sqlite::{
     instance_rows::{self, InstanceScreenshotSource},
     screenshot_rows,
 };
-use crate::util::fetch::{sha1_file_async, write};
+use crate::util::fetch::sha1_file_async;
 use crate::util::io::{self, IOError};
 
 const SCREENSHOTS_DIRECTORY: &str = "screenshots";
 const SCREENSHOT_SCAN_CONCURRENCY: usize = 8;
-
-// Modrinth Studios addition: see `get_screenshot_thumbnail` below. 960 (up
-// from an initial 480) because the grid goes up to 4 columns on wide windows
-// — at that width a card can render well past 480 CSS px, and on any
-// >1x-DPI display (which is most of them) the browser needs that many
-// *device* pixels just to draw one CSS pixel crisply, so 480 looked visibly
-// soft. The dimension is baked into the cache filename below specifically so
-// bumping this constant again later can't leave old, smaller cached
-// thumbnails being served under the same name.
-const SCREENSHOT_THUMBNAIL_DIRECTORY: &str = "screenshot-thumbnails";
-const SCREENSHOT_THUMBNAIL_MAX_DIMENSION: u32 = 960;
 
 #[derive(Clone, Debug, Deserialize, Eq, Hash, PartialEq, Serialize)]
 pub struct ScreenshotKey {
@@ -332,132 +321,6 @@ pub async fn get_screenshot_path(
     }
 
     Ok(canonical_path)
-}
-
-/// Generates (or reuses an already-cached) small JPEG thumbnail for a
-/// screenshot, returning `None` if the source file can't be decoded rather
-/// than failing outright — a thumbnail is a nice-to-have for the grid view,
-/// not something that should block showing the screenshot at all (the
-/// frontend falls back to the full-resolution `url` when this returns
-/// `None`).
-///
-/// Modrinth Studios addition: the Screenshots tab grid was decoding every
-/// visible card's full-resolution original PNG directly (there was, and
-/// otherwise still is, no thumbnail concept anywhere in this pipeline) —
-/// which is what made scrolling laggy even though the grid itself is
-/// already properly virtualized. Virtualization bounds *how many* cards are
-/// mounted at once; it does nothing about how expensive decoding each one
-/// is, and Minecraft screenshots are often multi-megapixel PNGs.
-///
-/// Cached by the screenshot's `content_hash` (already computed during
-/// indexing — see `resolve_scanned_screenshot` in reconciliation.rs) rather
-/// than by file path or name, so an edited/replaced screenshot naturally
-/// gets a fresh thumbnail without any separate invalidation step. The old
-/// thumbnail file for the previous content is simply left unreferenced —
-/// this doesn't get cleaned up automatically yet, the same tradeoff the
-/// instance-icon cache in `icon.rs` already makes for the same reason.
-///
-/// Deliberately lazy — generated on first request, from a per-screenshot
-/// Tauri command the frontend calls from `card.vue`'s `onMounted` — rather
-/// than eagerly generated for every screenshot up front inside
-/// `list_screenshots`. With hundreds or thousands of existing screenshots
-/// the first time this feature runs, eagerly decoding + resizing + encoding
-/// all of them before returning the list at all would just move the freeze
-/// earlier instead of fixing it. Doing this lazily per-row is safe here —
-/// unlike the Replays tab before its own virtualization fix — specifically
-/// *because* the Screenshots grid already virtualizes properly: only the
-/// rows actually near the viewport ever mount and request a thumbnail at
-/// once, so this can never fire hundreds of concurrent requests the way the
-/// old unvirtualized Replays list did.
-pub async fn get_screenshot_thumbnail(
-    key: &ScreenshotKey,
-) -> crate::Result<Option<PathBuf>> {
-    let path = get_screenshot_path(key).await?;
-    let state = State::get().await?;
-    let row = screenshot_rows::get_screenshot_by_key(
-        &key.instance_id,
-        &key.file_name,
-        &state.pool,
-    )
-    .await?
-    .ok_or_else(|| {
-        crate::ErrorKind::InputError("Unknown screenshot".to_string())
-    })?;
-
-    let cache_path = state
-        .directories
-        .caches_dir()
-        .join(SCREENSHOT_THUMBNAIL_DIRECTORY)
-        .join(format!(
-            "{}-{SCREENSHOT_THUMBNAIL_MAX_DIMENSION}.jpg",
-            row.content_hash
-        ));
-
-    if tokio::fs::try_exists(&cache_path)
-        .await
-        .map_err(|error| IOError::with_path(error, &cache_path))?
-    {
-        return Ok(Some(cache_path));
-    }
-
-    let thumbnail_bytes: crate::Result<Vec<u8>> =
-        tokio::task::spawn_blocking(move || -> crate::Result<Vec<u8>> {
-            let file = std::fs::File::open(&path)
-                .map_err(|error| IOError::with_path(error, &path))?;
-            let image = image::ImageReader::with_format(
-                std::io::BufReader::new(file),
-                image::ImageFormat::Png,
-            )
-            .decode()
-            .map_err(|error| {
-                crate::ErrorKind::InputError(format!(
-                    "Could not decode screenshot as PNG: {error}"
-                ))
-            })?;
-
-            let resized = image.resize(
-                SCREENSHOT_THUMBNAIL_MAX_DIMENSION,
-                SCREENSHOT_THUMBNAIL_MAX_DIMENSION,
-                image::imageops::FilterType::Triangle,
-            );
-
-            // JPEG has no alpha channel — flatten explicitly rather than
-            // relying on the encoder to reject (some versions do) or
-            // silently mishandle a screenshot that happens to carry one
-            // (e.g. one that's been through the in-app editor).
-            let mut bytes = Vec::new();
-            image::DynamicImage::ImageRgb8(resized.to_rgb8())
-                .write_to(&mut Cursor::new(&mut bytes), image::ImageFormat::Jpeg)
-                .map_err(|error| {
-                    crate::ErrorKind::InputError(format!(
-                        "Could not encode screenshot thumbnail: {error}"
-                    ))
-                })?;
-
-            Ok(bytes)
-        })
-        .await
-        .map_err(|error| {
-            crate::ErrorKind::OtherError(format!(
-                "thumbnail task panicked: {error}"
-            ))
-        })?;
-
-    let thumbnail_bytes = match thumbnail_bytes {
-        Ok(bytes) => bytes,
-        Err(error) => {
-            tracing::warn!(
-                file_name = %key.file_name,
-                %error,
-                "Failed to generate screenshot thumbnail, falling back to full-resolution image"
-            );
-            return Ok(None);
-        }
-    };
-
-    write(&cache_path, &thumbnail_bytes, &state.io_semaphore).await?;
-
-    Ok(Some(cache_path))
 }
 
 pub async fn save_edited_screenshot(

@@ -4,7 +4,7 @@ mod reconciliation;
 pub use self::operations::{
     InstanceScreenshot, ScreenshotEditSaveMode, ScreenshotKey,
     delete_screenshots, export_screenshots, get_screenshot_path,
-    get_screenshot_thumbnail, list_all_screenshots, list_screenshots,
-    list_synced_screenshots, move_screenshots, save_edited_screenshot,
+    list_all_screenshots, list_screenshots, list_synced_screenshots,
+    move_screenshots, save_edited_screenshot,
 };
 pub(crate) use self::reconciliation::reconcile_screenshots;

@@ -299,17 +299,6 @@ wildcard_dependencies = "warn"
 [profile.dev.package.sqlx-macros]
 opt-level = 3
 
-# Modrinth Studios addition: `pnpm app:dev` builds every workspace crate
-# unoptimized, which is fine for code we're actively iterating on but makes
-# genuinely CPU-heavy work — like decoding/resizing/encoding screenshots for
-# `get_screenshot_thumbnail` — 10-50x slower than a release build. This
-# optimizes every *third-party* dependency (the `image` crate and its PNG/JPEG
-# codecs included) while leaving our own workspace crates at opt-level 0, so
-# incremental rebuilds of our own code stay fast; only the one-time build of
-# dependencies gets slower.
-[profile.dev.package."*"]
-opt-level = 2
-
 # Optimize for speed and reduce size on release builds
 [profile.release]
 opt-level = "s"  # Optimize for binary size

@@ -49,7 +49,6 @@ pub fn init<R: tauri::Runtime>() -> tauri::plugin::TauriPlugin<R> {
             instance_list_screenshots,
             instance_list_all_screenshots,
             instance_list_synced_screenshots,
-            instance_get_screenshot_thumbnail,
             instance_save_edited_screenshot,
             instance_list_screenshot_groups,
             instance_create_screenshot_group,
@@ -792,36 +791,6 @@ pub async fn instance_open_screenshot<R: Runtime>(
         .reveal_item_in_dir(path)
         .map_err(|error| std::io::Error::other(error.to_string()))?;
     Ok(())
-}
-
-// Modrinth Studios addition: lazily fetched by card.vue on mount, one call
-// per visible grid card — see the doc comment on `get_screenshot_thumbnail`
-// in operations.rs for why a small cached thumbnail (instead of every card
-// decoding the full-resolution original) is what actually fixes the
-// Screenshots tab's scroll lag, and why doing this lazily per-row is safe
-// here specifically because the grid is already virtualized. Returns `None`
-// (rather than erroring) when a thumbnail couldn't be generated, so the
-// frontend can just fall back to the full-resolution `url` it already has.
-#[tauri::command]
-pub async fn instance_get_screenshot_thumbnail<R: Runtime>(
-    app_handle: AppHandle<R>,
-    key: theseus::instance::ScreenshotKey,
-) -> Result<Option<url::Url>> {
-    let Some(path) = theseus::instance::get_screenshot_thumbnail(&key).await?
-    else {
-        return Ok(None);
-    };
-
-    app_handle
-        .asset_protocol_scope()
-        .allow_file(&path)
-        .map_err(|error| std::io::Error::other(error.to_string()))?;
-    app_handle
-        .fs_scope()
-        .allow_file(&path)
-        .map_err(|error| std::io::Error::other(error.to_string()))?;
-
-    Ok(Some(super::utils::tauri_convert_file_src(&path)?))
 }
 
 #[tauri::command]

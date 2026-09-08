@@ -1,11 +1,11 @@
 -- Modrinth Studios addition: customizable Discord Rich Presence. Kept in its
 -- own singleton table (id is always 1) rather than new columns on the
 -- existing `settings` table, for the same reason studio_playtime_corrections
--- and studio_shared_profiles already avoid touching upstream-queried tables:
--- packages/app-lib/.cargo/config.toml forces SQLX_OFFLINE, so any change to
--- a `sqlx::query!`-checked query against `settings` would need a
--- regenerated `.sqlx` cache via `cargo sqlx prepare`, which isn't guaranteed
--- to be available in every environment this fork gets built in.
+-- already avoids touching upstream-queried tables: packages/app-lib/.cargo/
+-- config.toml forces SQLX_OFFLINE, so any change to a `sqlx::query!`-checked
+-- query against `settings` would need a regenerated `.sqlx` cache via
+-- `cargo sqlx prepare`, which isn't guaranteed to be available in every
+-- environment this fork gets built in.
 CREATE TABLE studio_discord_rpc_settings (
 	id INTEGER NOT NULL DEFAULT 1,
 

@@ -21,7 +21,6 @@ pub fn init<R: Runtime>() -> tauri::plugin::TauriPlugin<R> {
             studio_apply_pinned_icon,
             studio_instance_storage_usage,
             studio_instance_storage_usage_single,
-            studio_shared_folder_storage_usage,
             studio_system_storage_overview
         ])
         .build()
@@ -389,16 +388,6 @@ pub async fn studio_instance_storage_usage_single(
     instance_id: String,
 ) -> Result<Option<theseus::instance::InstanceStorageUsage>> {
     Ok(theseus::instance::instance_storage_usage_single(&instance_id).await?)
-}
-
-/// Modrinth Studios addition: backs the Storage page's separate "shared
-/// folders" section — see `theseus::instance::shared_folder_storage_usage()`
-/// for why shared folders need their own listing instead of being folded
-/// into any single instance's number.
-#[tauri::command]
-pub async fn studio_shared_folder_storage_usage()
--> Result<Vec<theseus::instance::SharedFolderStorageUsage>> {
-    Ok(theseus::instance::shared_folder_storage_usage().await?)
 }
 
 /// Modrinth Studios addition: backs the Storage page's Steam-style overview

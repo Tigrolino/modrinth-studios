@@ -123,7 +123,6 @@
 		"studio:default",
 		"playtime-correction:default",
 		"discord-rpc:default",
-		"shared-profile:default",
 		"worlds:default"
 	]
 }

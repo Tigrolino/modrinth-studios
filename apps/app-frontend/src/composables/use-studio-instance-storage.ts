@@ -29,23 +29,7 @@ export interface SystemStorageOverview {
 	shaderpacks_bytes: number
 	mods_bytes: number
 	replays_bytes: number
-	shared_folders_bytes: number
 	non_modrinth_bytes: number
-}
-
-export interface SharedFolderBreakdown {
-	worlds_bytes: number
-	resourcepacks_bytes: number
-	other_bytes: number
-}
-
-export interface SharedFolderStorageUsage {
-	shared_profile_id: string
-	name: string
-	size_bytes: number
-	member_count: number
-	breakdown: SharedFolderBreakdown
-	full_path: string
 }
 
 /** Every instance's on-disk size, largest first — a full recursive walk of
@@ -97,19 +81,6 @@ export async function fetchInstanceStorageUsageSingle(instanceId: string): Promi
 		return entry.size_bytes
 	}
 	return null
-}
-
-/** Every shared folder's actual on-disk size, largest first — kept separate
- * from `fetchInstanceStorageUsage()` above on purpose. A member instance
- * only holds a link into this data, not a copy of it, so it's tracked once
- * here against the shared folder itself rather than once per instance using
- * it (see `shared_folder_storage_usage()` in
- * `packages/app-lib/src/api/instance/storage.rs`). */
-export async function fetchSharedFolderStorageUsage(): Promise<SharedFolderStorageUsage[]> {
-	const usage = await invoke<SharedFolderStorageUsage[]>(
-		'plugin:studio|studio_shared_folder_storage_usage',
-	)
-	return [...usage].sort((a, b) => b.size_bytes - a.size_bytes)
 }
 
 /** The Steam-style overview bar's segments — see

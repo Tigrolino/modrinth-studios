@@ -76,20 +76,7 @@
  * compositor (corrupted color blocks, heavy flashing while scrolling).
  * Everything else below is normally a much smaller, bounded set of elements
  * on screen at once (a handful of cards, buttons, one sidebar) and keeps its
- * blur.
- *
- * Modrinth Studios: the Screenshots grid hit this same problem via a
- * different door. Its per-card loading skeleton (`card.vue`) is a
- * `bg-surface-3` `animate-pulse` div — `bg-surface-3` isn't in the excluded
- * list above, so every not-yet-thumbnailed card in the (virtualized, so
- * constantly mounting/unmounting) grid was a blurred, animating element, and
- * a fast scroll can have a couple dozen of those on screen loading at once.
- * Same compositor overload as the ContentCardTable case, just via a class
- * that fix never touched. `.screenshot-thumbnail-skeleton` opts just that
- * element back out, the same shape as the exclusions above but scoped
- * narrowly instead of pulling `bg-surface-3` out of the shared list (plenty
- * of legitimate single-element uses of that class elsewhere still want the
- * blur). Needs to come after the block below in the cascade to win. */
+ * blur. */
 .bg-bg-raised,
 .bg-surface-3,
 .bg-surface-4,
@@ -100,10 +87,6 @@ svg.avatar,
 .modal-body,
 .xterm-viewport {
 	backdrop-filter: var(--studio-glass-blur, none) !important;
-}
-
-.screenshot-thumbnail-skeleton {
-	backdrop-filter: none !important;
 }
 
 /* TabbedModal.vue's tab "badge" (e.g. Settings' Language tab shows a "Beta"

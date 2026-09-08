@@ -300,7 +300,6 @@ fn main() {
         .plugin(api::discord_rpc::init())
         .plugin(api::playtime_correction::init())
         .plugin(api::replays::init())
-        .plugin(api::shared_profile::init())
         .plugin(api::studio::init())
         .plugin(api::worlds::init())
         .manage(PendingUpdateData::default())

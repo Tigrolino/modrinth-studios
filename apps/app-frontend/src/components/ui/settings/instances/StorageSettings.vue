@@ -1,27 +1,25 @@
 <!--
 	Modrinth Studios addition: overview of how much disk space Studio's data
 	uses, styled after Steam's own per-drive storage breakdown — a segmented
-	bar across the whole drive at the top (Modrinth instances / shared
-	folders / worlds / resource packs / shaders / mods / replays / everything
-	else on the drive / free space), then every instance listed below with
-	its own composition bar (which of *that* instance's own categories its
-	space is going to) instead of a bar that's just relative to the biggest
-	instance. Clicking a row now opens that instance instead of its folder —
-	folder access, instance settings, and delete all moved into a "..." menu,
-	matching how the Library's own instance cards work. See
-	use-studio-instance-storage.ts for the fetch/format helpers and
-	packages/app-lib/src/api/instance/storage.rs for the actual disk walk.
+	bar across the whole drive at the top (Modrinth instances / worlds /
+	resource packs / shaders / mods / replays / everything else on the drive /
+	free space), then every instance listed below with its own composition
+	bar (which of *that* instance's own categories its space is going to)
+	instead of a bar that's just relative to the biggest instance. Clicking a
+	row now opens that instance instead of its folder — folder access,
+	instance settings, and delete all moved into a "..." menu, matching how
+	the Library's own instance cards work. See use-studio-instance-storage.ts
+	for the fetch/format helpers and packages/app-lib/src/api/instance/storage.rs
+	for the actual disk walk.
 -->
 <script setup>
 import {
 	DatabaseIcon,
-	FolderIcon,
 	FolderOpenIcon,
 	MoreVerticalIcon,
 	SettingsIcon,
 	SpinnerIcon,
 	TrashIcon,
-	UsersIcon,
 } from '@modrinth/assets'
 import {
 	Avatar,
@@ -40,12 +38,11 @@ import ConfirmDeleteInstanceModal from '@/components/ui/modal/ConfirmDeleteInsta
 import { useStudioAppearance } from '@/composables/use-studio-appearance.ts'
 import {
 	fetchInstanceStorageUsage,
-	fetchSharedFolderStorageUsage,
 	fetchSystemStorageOverview,
 	formatStorageSize,
 } from '@/composables/use-studio-instance-storage.ts'
 import { getInstanceIconUrl, list as listInstances, remove as removeInstance } from '@/helpers/instance'
-import { openPath, showInstanceInFolder } from '@/helpers/utils.js'
+import { showInstanceInFolder } from '@/helpers/utils.js'
 
 const { handleError } = injectNotificationManager()
 const { formatMessage } = useVIntl()
@@ -55,8 +52,6 @@ const router = useRouter()
 const loading = ref(true)
 const usage = ref([])
 const instancesById = ref(new Map())
-const sharedFolderUsage = ref([])
-const sharedFoldersLoading = ref(true)
 const overview = ref(null)
 const overviewLoading = ref(true)
 
@@ -90,27 +85,6 @@ const messages = defineMessages({
 		id: 'app.settings.storage.more-options',
 		defaultMessage: 'More options',
 	},
-	sharedFoldersTitle: {
-		id: 'app.settings.storage.shared-folders.title',
-		defaultMessage: 'Shared folders',
-	},
-	sharedFoldersDescription: {
-		id: 'app.settings.storage.shared-folders.description',
-		defaultMessage:
-			"Worlds, resource packs, and other files you've shared between instances. They're counted here just once, instead of under every instance using them. Each instance just links to this data rather than keeping its own copy, so it isn't really \"theirs\" to count.",
-	},
-	sharedFoldersEmpty: {
-		id: 'app.settings.storage.shared-folders.empty',
-		defaultMessage: "You don't have any shared folders yet.",
-	},
-	sharedFolderMemberCount: {
-		id: 'app.settings.storage.shared-folders.member-count',
-		defaultMessage: '{count, plural, one {# instance} other {# instances}}',
-	},
-	sharedFoldersTotal: {
-		id: 'app.settings.storage.shared-folders.total',
-		defaultMessage: '{size} total across {count, plural, one {# shared folder} other {# shared folders}}',
-	},
 	overviewTitle: {
 		id: 'app.settings.storage.overview.title',
 		defaultMessage: 'Overview',
@@ -122,10 +96,6 @@ const messages = defineMessages({
 	categoryInstances: {
 		id: 'app.settings.storage.overview.category.instances',
 		defaultMessage: 'Modrinth instances',
-	},
-	categoryShared: {
-		id: 'app.settings.storage.overview.category.shared-folders',
-		defaultMessage: 'Shared folders',
 	},
 	categoryWorlds: {
 		id: 'app.settings.storage.overview.category.worlds',
@@ -151,10 +121,6 @@ const messages = defineMessages({
 		id: 'app.settings.storage.overview.disk-unknown',
 		defaultMessage: "Couldn't read this drive's total capacity.",
 	},
-	categoryConfigOther: {
-		id: 'app.settings.storage.overview.category.config-other',
-		defaultMessage: 'Config & other',
-	},
 })
 
 // Modrinth Studios addition: one shared flat color per category, reused
@@ -176,7 +142,6 @@ const messages = defineMessages({
 // shows Modrinth's actual green here regardless of accent color.
 const CATEGORY_COLOR = {
 	other: 'var(--color-green-500)',
-	shared: 'var(--color-blue)',
 	worlds: 'var(--color-purple)',
 	content: 'var(--color-orange)',
 	replays: 'var(--color-red)',
@@ -189,7 +154,6 @@ const overviewSegments = computed(() => {
 	const o = overview.value
 	return [
 		{ key: 'other', label: formatMessage(messages.categoryInstances), bytes: o.instances_other_bytes, color: CATEGORY_COLOR.other },
-		{ key: 'shared', label: formatMessage(messages.categoryShared), bytes: o.shared_folders_bytes, color: CATEGORY_COLOR.shared },
 		{ key: 'worlds', label: formatMessage(messages.categoryWorlds), bytes: o.worlds_bytes, color: CATEGORY_COLOR.worlds },
 		{
 			key: 'content',
@@ -224,23 +188,6 @@ function instanceSegments(entry) {
 	]
 }
 
-// Modrinth Studios addition: a shared folder can only ever hold the specific
-// items `api::shared_profile` knows how to share — `saves`, `resourcepacks`,
-// `config`, `options.txt`, `servers.dat` — so it gets its own, shorter
-// segment list rather than reusing `instanceSegments`. Worlds and resource
-// packs still reuse the exact same colors as everywhere else on this page;
-// config/options/servers.dat fold into one "Config & other" bucket (reusing
-// the "Modrinth instances" green, since it plays the same "everything not
-// worth calling out individually" role here).
-function sharedFolderSegments(entry) {
-	const b = entry.breakdown
-	return [
-		{ key: 'worlds', label: formatMessage(messages.categoryWorlds), bytes: b.worlds_bytes, color: CATEGORY_COLOR.worlds },
-		{ key: 'content', label: formatMessage(messages.categoryContent), bytes: b.resourcepacks_bytes, color: CATEGORY_COLOR.content },
-		{ key: 'other', label: formatMessage(messages.categoryConfigOther), bytes: b.other_bytes, color: CATEGORY_COLOR.other },
-	]
-}
-
 function segmentTooltip(segment) {
 	return `${segment.label}: ${formatStorageSize(segment.bytes)}`
 }
@@ -264,17 +211,6 @@ async function load() {
 	}
 }
 
-async function loadSharedFolders() {
-	sharedFoldersLoading.value = true
-	try {
-		sharedFolderUsage.value = await fetchSharedFolderStorageUsage()
-	} catch (err) {
-		handleError(err)
-	} finally {
-		sharedFoldersLoading.value = false
-	}
-}
-
 async function loadOverview() {
 	overviewLoading.value = true
 	try {
@@ -284,14 +220,6 @@ async function loadOverview() {
 	} finally {
 		overviewLoading.value = false
 	}
-}
-
-const totalSharedFolderBytes = computed(() =>
-	sharedFolderUsage.value.reduce((sum, entry) => sum + entry.size_bytes, 0),
-)
-
-async function openSharedFolder(fullPath) {
-	await openPath(fullPath).catch(handleError)
 }
 
 // Modrinth Studios addition: a stub GameInstance-shaped object for
@@ -334,7 +262,6 @@ async function performDeleteInstance() {
 }
 
 onMounted(load)
-onMounted(loadSharedFolders)
 onMounted(loadOverview)
 </script>
 
@@ -507,71 +434,6 @@ onMounted(loadOverview)
 								</div>
 							</div>
 						</SmartClickable>
-					</div>
-				</template>
-			</template>
-		</div>
-
-		<div class="flex flex-col gap-2.5">
-			<h2 class="m-0 text-lg font-semibold text-contrast">
-				{{ formatMessage(messages.sharedFoldersTitle) }}
-			</h2>
-			<p class="m-0 leading-tight text-secondary">
-				{{ formatMessage(messages.sharedFoldersDescription) }}
-			</p>
-
-			<div v-if="sharedFoldersLoading" class="flex items-center gap-2 text-secondary py-4">
-				<SpinnerIcon class="animate-spin" />
-				<span>{{ formatMessage(commonMessages.loadingLabel) }}</span>
-			</div>
-
-			<template v-else>
-				<p v-if="sharedFolderUsage.length === 0" class="m-0 text-secondary">
-					{{ formatMessage(messages.sharedFoldersEmpty) }}
-				</p>
-				<template v-else>
-					<p class="m-0 mb-1 text-sm font-semibold text-secondary">
-						{{
-							formatMessage(messages.sharedFoldersTotal, {
-								size: formatStorageSize(totalSharedFolderBytes),
-								count: sharedFolderUsage.length,
-							})
-						}}
-					</p>
-					<div class="flex flex-col gap-1.5">
-						<button
-							v-for="entry in sharedFolderUsage"
-							:key="entry.shared_profile_id"
-							type="button"
-							class="button-base flex flex-col gap-1 rounded-lg p-2.5 bg-bg-raised hover:brightness-90 transition-all text-left"
-							@click="openSharedFolder(entry.full_path)"
-						>
-							<div class="flex items-center justify-between gap-3">
-								<span class="flex items-center gap-1.5 min-w-0">
-									<FolderIcon class="shrink-0 text-secondary" aria-hidden="true" />
-									<span class="font-semibold text-contrast truncate">{{ entry.name }}</span>
-									<span class="flex items-center gap-0.5 text-xs text-secondary shrink-0">
-										<UsersIcon class="shrink-0 h-3.5 w-3.5" aria-hidden="true" />
-										{{ formatMessage(messages.sharedFolderMemberCount, { count: entry.member_count }) }}
-									</span>
-								</span>
-								<span class="flex items-center gap-1 text-sm text-secondary shrink-0">
-									<DatabaseIcon class="shrink-0" aria-hidden="true" />
-									{{ formatStorageSize(entry.size_bytes) }}
-									<FolderOpenIcon class="shrink-0 ml-1" aria-hidden="true" />
-								</span>
-							</div>
-							<div class="flex h-2 gap-px overflow-hidden rounded-full bg-surface-3">
-								<div
-									v-for="segment in sharedFolderSegments(entry)"
-									v-show="segment.bytes > 0"
-									:key="segment.key"
-									v-tooltip="segmentTooltip(segment)"
-									class="h-full"
-									:style="{ flexGrow: segment.bytes, flexBasis: '0%', minWidth: '2px', background: segment.color }"
-								/>
-							</div>
-						</button>
 					</div>
 				</template>
 			</template>

@@ -3,8 +3,8 @@
 //! "Playing <instance name>" upstream always sends. Kept in its own table
 //! (see the `studio_discord_rpc_settings` migration) rather than new columns
 //! on `settings`, for the same SQLX_OFFLINE reason `studio_playtime_corrections`
-//! and `studio_shared_profiles` already avoid touching upstream-queried
-//! tables — see either of those modules for the full explanation.
+//! already avoids touching upstream-queried tables — see that module for
+//! the full explanation.
 //!
 //! Deliberately does **not** let someone set a custom large/small image.
 //! Both would need a Discord "Rich Presence art asset" key already uploaded
