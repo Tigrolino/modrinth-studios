@@ -117,7 +117,7 @@ export default new createRouter({
 					// Modrinth Studios addition
 					path: 'replays',
 					name: 'InstanceReplays',
-					component: Instance.Replays,
+					component: () => import('@/pages/instance/replays/index.vue'),
 				},
 				{
 					path: 'share',
