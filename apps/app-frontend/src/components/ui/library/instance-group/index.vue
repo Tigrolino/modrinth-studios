@@ -130,13 +130,26 @@ watch(
 )
 const remSize = ref(16)
 const gap = computed(() => remSize.value * 0.75)
-const columnCount = computed(() => {
-	const minWidth = remSize.value * (compactMode.value ? 15 : windowWidth.value < 1280 ? 8 : 10)
-	return Math.max(1, Math.floor((gridWidth.value + gap.value) / (minWidth + gap.value)))
-})
-const cardWidth = computed(
-	() => (gridWidth.value - gap.value * (columnCount.value - 1)) / columnCount.value,
+const minCardWidth = computed(
+	() => remSize.value * (compactMode.value ? 15 : windowWidth.value < 1280 ? 8 : 10),
 )
+const columnCount = computed(() =>
+	Math.max(1, Math.floor((gridWidth.value + gap.value) / (minCardWidth.value + gap.value))),
+)
+// Modrinth Studios addition: upstream's virtualized rewrite of this grid
+// (v0.20.0) computed card width by evenly dividing the row's available
+// width among however many columns currently fit — that's continuous
+// (it changes on every resize tick) and produces exactly the
+// "grow-then-snap" wobble this fork already fixed once before, back when
+// this was a plain CSS grid (see the old `1fr` writeup in git history):
+// cards visibly grow while you drag-resize the window or open/close the
+// sidebar, then snap smaller the instant a new column fits. Pinning card
+// width to the same fixed minimum used to decide the column count means
+// width only ever changes at an actual column-count breakpoint, not
+// continuously — nothing left to visibly grow. Trade-off, same as before:
+// a row can end with empty space on the right instead of always filling
+// edge to edge.
+const cardWidth = computed(() => minCardWidth.value)
 const cardHeight = computed(() =>
 	compactMode.value ? remSize.value * 3.875 : Math.max(0, cardWidth.value) + remSize.value * 3.375,
 )
