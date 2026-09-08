@@ -22,7 +22,17 @@ import {
 	useVIntl,
 } from '@modrinth/ui'
 import { useElementSize, useWindowSize } from '@vueuse/core'
-import { computed, inject, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
+import {
+	computed,
+	inject,
+	nextTick,
+	onActivated,
+	onDeactivated,
+	onMounted,
+	onUnmounted,
+	ref,
+	watch,
+} from 'vue'
 
 import GroupActionButtons from '@/components/ui/library/instance-group/group-action-buttons.vue'
 import InstanceCard from '@/components/ui/library/instance-group/instance-card.vue'
