@@ -97,7 +97,7 @@ import {
 	EditIcon,
 	FolderOpenIcon,
 	GlobeIcon,
-	ImagesIcon,
+	ImageIcon,
 	PlayIcon,
 	PlusIcon,
 	StopCircleIcon,
@@ -153,7 +153,6 @@ import {
 } from '@/helpers/install'
 import {
 	get_full_path,
-	get_global_synced_options,
 	getInstanceIconUrl,
 	kill,
 	refresh_content_updates,
@@ -300,10 +299,6 @@ const hasReplaysQuery = useQuery(
 	})),
 )
 const showReplaysTab = computed(() => hasReplaysQuery.data.value === true)
-const globalSyncedOptionsQuery = useQuery({
-	queryKey: ['global-synced-options'],
-	queryFn: get_global_synced_options,
-})
 useQuery(
 	computed(() => ({
 		queryKey: instanceKeys.contentUpdateCheck(instanceId.value),
@@ -562,26 +557,29 @@ const tabs = computed(() => {
 			href: `${basePath.value}`,
 			icon: BoxesIcon,
 		},
-		{
+	]
+
+	if (appSettings.showFilesTabInInstances) {
+		instanceTabs.push({
 			label: formatMessage(messages.filesTab),
 			href: `${basePath.value}/files`,
 			icon: FolderOpenIcon,
-		},
-		{
+		})
+	}
+
+	if (appSettings.showScreenshotsTabInInstances) {
+		instanceTabs.push({
+			label: formatMessage(messages.screenshotsTab),
+			href: `${basePath.value}/screenshots`,
+			icon: ImageIcon,
+		})
+	}
+
+	if (appSettings.showWorldsTabInInstances) {
+		instanceTabs.push({
 			label: formatMessage(messages.worldsTab),
 			href: `${basePath.value}/worlds`,
 			icon: GlobeIcon,
-		},
-	]
-
-	const screenshotsSynced =
-		globalSyncedOptionsQuery.data.value?.screenshots === true &&
-		instance.value?.synced_options.screenshots === true
-	if (!screenshotsSynced) {
-		instanceTabs.splice(2, 0, {
-			label: formatMessage(messages.screenshotsTab),
-			href: `${basePath.value}/screenshots`,
-			icon: ImagesIcon,
 		})
 	}
 
@@ -998,15 +996,8 @@ watch(instanceId, (currentInstanceId, previousInstanceId) => {
 })
 
 useAppEvent('instance', async (event) => {
-	if (event.instance_id !== instanceId.value) return
-	if (event.event === 'removed' || route.path === '/') {
-		if (route.path !== '/') await router.push({ path: '/' })
-		return
-	}
-	await queryClient.invalidateQueries({
-		queryKey: instanceKeys.detail(event.instance_id),
-		exact: true,
-	})
+	if (event.instance_id !== instanceId.value || event.event !== 'removed') return
+	if (route.path !== '/') await router.push({ path: '/' })
 })
 
 useAppEvent('process', (event) => {
