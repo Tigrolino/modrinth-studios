@@ -311,8 +311,8 @@ const settings = ref(await get())
 // upstream commit this fork last synced with — shown here (with a link to
 // it on GitHub) instead of a version number that doesn't really exist.
 // Update this pair whenever pulling newer upstream changes in.
-const UPSTREAM_BASE_COMMIT = '5d4759430'
-const UPSTREAM_BASE_DATE = '2026-08-27'
+const UPSTREAM_BASE_COMMIT = '96ea36c72'
+const UPSTREAM_BASE_DATE = '2026-09-07'
 function openUpstreamCommit() {
 	void openUrl(`https://github.com/modrinth/code/commit/${UPSTREAM_BASE_COMMIT}`)
 }
