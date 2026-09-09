@@ -22,9 +22,18 @@ import {
 	useFormatDateTime,
 	useVIntl,
 } from '@modrinth/ui'
-import { onMounted, ref } from 'vue'
+import { onBeforeUnmount, onMounted, ref } from 'vue'
 
 import { getReplayThumbnail, type Replay } from '@/helpers/replays'
+
+// Modrinth Studios addition: how long a press has to be held before it
+// counts as "hold to select" rather than a plain click. Matches the
+// mobile/file-manager convention of a long-press entering selection mode.
+const LONG_PRESS_MS = 450
+// A real long-press involves some hand tremor; anything past this many CSS
+// pixels of movement while still holding is treated as an intentional drag
+// (e.g. starting a scroll) rather than a hold, and cancels the timer.
+const LONG_PRESS_MOVE_TOLERANCE_PX = 8
 
 const props = withDefaults(
 	defineProps<{
@@ -32,9 +41,12 @@ const props = withDefaults(
 		instanceId: string
 		selected?: boolean
 		// Modrinth Studios addition: whether *any* replay is currently
-		// selected across the whole list — keeps every row's checkbox
-		// visible (not just the hovered one) once a selection is active, the
-		// same reveal behavior the Library's instance cards use.
+		// selected across the whole list. While this is false, rows have no
+		// checkbox at all (no permanently-reserved layout space for one
+		// either — see the row's `grid-cols-*` toggle in the template) and
+		// the only way to select anything is a press-and-hold. Once it's
+		// true, every row gets a checkbox and starts responding to plain
+		// clicks too.
 		selectionActive?: boolean
 	}>(),
 	{
@@ -69,6 +81,54 @@ onMounted(async () => {
 		props.replay.fileName,
 	).catch(() => null)
 })
+
+// Modrinth Studios addition: press-and-hold anywhere on the row to select
+// it (entering selection mode), then — once at least one replay is
+// selected — a plain click anywhere on the row (not just a small checkbox
+// target) toggles it too. `suppressClick` swallows the click event a
+// browser fires right after the pointerup that ends a long press, so
+// finishing a hold doesn't immediately toggle the row back off again.
+let pressTimer: ReturnType<typeof setTimeout> | undefined
+let pressOrigin: { x: number; y: number } | undefined
+let suppressClick = false
+
+function clearPressTimer() {
+	if (pressTimer !== undefined) {
+		clearTimeout(pressTimer)
+		pressTimer = undefined
+	}
+	pressOrigin = undefined
+}
+
+function onRowPointerDown(event: PointerEvent) {
+	// Left mouse button / primary touch contact only — ignore right-click,
+	// middle-click, etc.
+	if (event.button !== 0) return
+	pressOrigin = { x: event.clientX, y: event.clientY }
+	clearTimeout(pressTimer)
+	pressTimer = setTimeout(() => {
+		pressTimer = undefined
+		suppressClick = true
+		emit('toggle-selection')
+	}, LONG_PRESS_MS)
+}
+
+function onRowPointerMove(event: PointerEvent) {
+	if (!pressOrigin) return
+	const dx = event.clientX - pressOrigin.x
+	const dy = event.clientY - pressOrigin.y
+	if (Math.hypot(dx, dy) > LONG_PRESS_MOVE_TOLERANCE_PX) clearPressTimer()
+}
+
+function onRowClick() {
+	if (suppressClick) {
+		suppressClick = false
+		return
+	}
+	if (props.selectionActive) emit('toggle-selection')
+}
+
+onBeforeUnmount(clearPressTimer)
 
 const messages = defineMessages({
 	moreOptions: {
@@ -115,23 +175,37 @@ function formatFileSize(bytes: number): string {
 
 <template>
 	<div
-		class="clickable-card group/replay-row grid grid-cols-[auto_auto_minmax(0,3fr)_minmax(0,4fr)_auto] items-center gap-2 p-3 bg-bg-raised border border-solid border-surface-4 rounded-[20px] transition-[filter] ease-out min-h-20"
-		:class="{ '!border-brand': selected }"
+		class="clickable-card select-none grid items-center gap-2 p-3 bg-bg-raised border border-solid border-surface-4 rounded-[20px] transition-[filter] ease-out min-h-20"
+		:class="[
+			selectionActive
+				? 'grid-cols-[auto_auto_minmax(0,3fr)_minmax(0,4fr)_auto] cursor-pointer'
+				: 'grid-cols-[auto_minmax(0,3fr)_minmax(0,4fr)_auto]',
+			{ '!border-brand': selected },
+		]"
+		@pointerdown="onRowPointerDown"
+		@pointermove="onRowPointerMove"
+		@pointerup="clearPressTimer"
+		@pointerleave="clearPressTimer"
+		@pointercancel="clearPressTimer"
+		@click="onRowClick"
 	>
 		<!--
 			Modrinth Studios addition: bulk-selection checkbox — mirrors the
 			Library instance card's circular selection toggle (same visual
-			language), reveal-on-hover unless a selection is already active
-			somewhere in the list, in which case every row keeps its checkbox
-			visible so it reads as "you're in selection mode" rather than
-			needing to re-hover each row.
+			language). Only shown once selection mode is actually active
+			(hold-to-select on any row starts it — see `onRowPointerDown`);
+			it's a discrete, still-clickable target for precision/keyboard
+			use, but once selection is active a plain click anywhere else on
+			the row toggles it too (`onRowClick`), so this is a convenience,
+			not the only way in.
 		-->
 		<button
+			v-if="selectionActive"
 			type="button"
-			class="flex items-center justify-center size-6 shrink-0 rounded-full border-0 bg-transparent p-0 cursor-pointer opacity-0 transition-opacity duration-150 ease-out group-hover/replay-row:opacity-100 focus-visible:opacity-100"
-			:class="{ '!opacity-100': selected || selectionActive }"
+			class="flex items-center justify-center size-6 shrink-0 rounded-full border-0 bg-transparent p-0 cursor-pointer"
 			:aria-label="formatMessage(selected ? messages.deselect : messages.select)"
 			:aria-pressed="selected"
+			@pointerdown.stop
 			@click.stop="emit('toggle-selection')"
 		>
 			<span
@@ -220,7 +294,13 @@ function formatFileSize(bytes: number): string {
 			</template>
 			<span class="shrink-0 font-normal">{{ formatFileSize(replay.size) }}</span>
 		</div>
-		<div class="flex gap-1 justify-end">
+		<div class="flex gap-1 justify-end" @pointerdown.stop @click.stop>
+			<!--
+				Modrinth Studios addition: `@pointerdown.stop`/`@click.stop`
+				above keep the row's hold-to-select / click-to-toggle
+				handlers from firing when someone's actually just trying to
+				open this menu.
+			-->
 			<!--
 				Modrinth Studios: deliberately no Play/Launch button here. Neither
 				ReplayMod nor Flashback expose any way to launch Minecraft

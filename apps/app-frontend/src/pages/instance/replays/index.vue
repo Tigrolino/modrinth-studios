@@ -103,6 +103,8 @@
 						v-if="item.type === 'header'"
 						:label="item.label"
 						:count="item.count"
+						:is-open="!collapsedGroups[item.id]"
+						@toggle="toggleGroupCollapsed(item.id)"
 					/>
 					<ReplayItem
 						v-else
@@ -343,6 +345,17 @@ const groupByModel = computed<string>({
 	},
 })
 
+// Modrinth Studios addition: per-group collapse state, keyed by the same
+// `header:${key}` id used in `displayItems` below — mirrors the Screenshots
+// tab's own `collapsedGroups` (screenshots-page/index.vue).
+const collapsedGroups = useStorage<Record<string, boolean>>('replays-collapsed-groups', {})
+function toggleGroupCollapsed(headerId: string) {
+	collapsedGroups.value = {
+		...collapsedGroups.value,
+		[headerId]: !collapsedGroups.value[headerId],
+	}
+}
+
 const sortOptions = computed<ComboboxOption<string>[]>(() => [
 	{ value: 'newest', label: formatMessage(messages.sortNewest) },
 	{ value: 'oldest', label: formatMessage(messages.sortOldest) },
@@ -426,10 +439,14 @@ const displayItems = computed<DisplayItem[]>(() => {
 
 	return order.flatMap((key): DisplayItem[] => {
 		const bucket = buckets.get(key)!
-		return [
-			{ type: 'header', id: `header:${key}`, label: key, count: bucket.length },
-			...bucket.map((replay): DisplayItem => ({ type: 'replay', replay })),
-		]
+		const id = `header:${key}`
+		const header: DisplayItem = { type: 'header', id, label: key, count: bucket.length }
+		// Modrinth Studios addition: a collapsed group only contributes its
+		// header to the virtualized list — its rows are skipped entirely
+		// rather than rendered-but-hidden, the same "not in the list at all"
+		// approach `visibleInstances` uses elsewhere for offscreen items.
+		if (collapsedGroups.value[id]) return [header]
+		return [header, ...bucket.map((replay): DisplayItem => ({ type: 'replay', replay }))]
 	})
 })
 
