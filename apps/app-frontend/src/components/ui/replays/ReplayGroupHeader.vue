@@ -17,6 +17,16 @@
 	already reserved for it — the gap this was supposed to avoid, showing
 	up both above a group's first replay and between two consecutive
 	collapsed group headers.
+
+	Content is bottom-aligned (`items-end`) within that 80px box rather
+	than vertically centered — centering a short single line of text in an
+	80px-tall box splits the empty space evenly above *and* below the
+	text, which visually reads as a big gap both before AND after every
+	header (the text itself is only ~20px tall). Pinning it to the bottom
+	consolidates all of that empty space above the header instead, so it
+	reads as one gap — "space before this new section" — and the header's
+	text sits right up against whatever comes directly after it, open
+	group or collapsed neighbor alike.
 -->
 <script setup lang="ts">
 import { DropdownIcon } from '@modrinth/assets'
@@ -42,7 +52,7 @@ const messages = defineMessages({
 <template>
 	<button
 		type="button"
-		class="flex h-20 w-full cursor-pointer items-center gap-2 border-0 bg-transparent px-1 text-left"
+		class="flex h-20 w-full cursor-pointer items-end gap-2 border-0 bg-transparent px-1 pb-2 text-left"
 		:aria-expanded="isOpen"
 		:aria-label="
 			formatMessage(isOpen ? messages.collapseGroup : messages.expandGroup, { label: props.label })
