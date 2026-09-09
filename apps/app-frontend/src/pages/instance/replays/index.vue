@@ -95,7 +95,13 @@
 			<div ref="listContainer" class="relative w-full" :style="{ height: `${totalHeight}px` }">
 				<div
 					v-for="(item, index) in visibleItems"
-					:key="item.type === 'header' ? item.id : `${item.replay.kind}-${item.replay.fileName}`"
+					:key="
+						item.type === 'header'
+							? item.id
+							: item.type === 'header-batch'
+								? item.headers.map((header) => header.id).join(',')
+								: `${item.replay.kind}-${item.replay.fileName}`
+					"
 					class="absolute inset-x-0"
 					:style="{ transform: `translateY(${visibleTop + index * REPLAY_ROW_HEIGHT}px)` }"
 				>
@@ -105,6 +111,11 @@
 						:count="item.count"
 						:is-open="!collapsedGroups[item.id]"
 						@toggle="toggleGroupCollapsed(item.id)"
+					/>
+					<ReplayGroupHeaderBatch
+						v-else-if="item.type === 'header-batch'"
+						:headers="item.headers"
+						@toggle="toggleGroupCollapsed"
 					/>
 					<ReplayItem
 						v-else
@@ -202,6 +213,7 @@ import dayjs from 'dayjs'
 import { computed, ref } from 'vue'
 
 import ReplayGroupHeader from '@/components/ui/replays/ReplayGroupHeader.vue'
+import ReplayGroupHeaderBatch from '@/components/ui/replays/ReplayGroupHeaderBatch.vue'
 import ReplayItem from '@/components/ui/replays/ReplayItem.vue'
 import RenameReplayModal from '@/components/ui/replays/RenameReplayModal.vue'
 import { get_full_path } from '@/helpers/instance'
@@ -214,8 +226,11 @@ import { instanceKeys, instanceReplaysQueryOptions } from '../query-options'
 type ReplaySort = 'newest' | 'oldest' | 'name' | 'duration' | 'size'
 type ReplayGroupBy = 'none' | 'source' | 'date'
 
+type GroupHeaderInfo = { id: string; label: string; count: number }
+
 type DisplayItem =
 	| { type: 'header'; id: string; label: string; count: number }
+	| { type: 'header-batch'; headers: GroupHeaderInfo[] }
 	| { type: 'replay'; replay: Replay }
 
 const messages = defineMessages({
@@ -437,7 +452,7 @@ const displayItems = computed<DisplayItem[]>(() => {
 		bucket.push(replay)
 	}
 
-	return order.flatMap((key): DisplayItem[] => {
+	const flat = order.flatMap((key): DisplayItem[] => {
 		const bucket = buckets.get(key)!
 		const id = `header:${key}`
 		const header: DisplayItem = { type: 'header', id, label: key, count: bucket.length }
@@ -448,7 +463,64 @@ const displayItems = computed<DisplayItem[]>(() => {
 		if (collapsedGroups.value[id]) return [header]
 		return [header, ...bucket.map((replay): DisplayItem => ({ type: 'replay', replay }))]
 	})
+
+	return mergeCollapsedHeaderRuns(flat)
 })
+
+// Modrinth Studios addition: every item in the virtualized list — headers
+// included — occupies a fixed REPLAY_ROW_HEIGHT slot (see below), so a run
+// of several consecutive collapsed group headers used to mean several
+// consecutive *mostly-empty* 88px boxes, each one only ~20px of actual
+// text sitting inside 68px of dead space it couldn't share with its
+// neighbor (see ReplayGroupHeader.vue's own comment on why that dead space
+// can't just be trimmed off one side — the fixed slot size is what the
+// virtualizer's position math depends on). An open group's header is never
+// part of a run, since it's immediately followed by a 'replay' entry, not
+// another header — so this only ever touches runs of collapsed headers,
+// and a lone collapsed header (not adjacent to another one) stays exactly
+// as it already rendered. For runs of 2+, headers are packed
+// MAX_HEADERS_PER_BATCH_SLOT at a time into shared slots (ReplayGroupHeaderBatch.vue),
+// which stacks them tightly in one flex column — there's no per-header
+// dead space to fight over when several headers share one box instead of
+// each reserving and centering within its own.
+const MAX_HEADERS_PER_BATCH_SLOT = 3
+
+function mergeCollapsedHeaderRuns(flat: DisplayItem[]): DisplayItem[] {
+	const merged: DisplayItem[] = []
+	let run: Extract<DisplayItem, { type: 'header' }>[] = []
+
+	function flushRun() {
+		if (run.length === 0) return
+		if (run.length === 1) {
+			merged.push(run[0])
+		} else {
+			for (let i = 0; i < run.length; i += MAX_HEADERS_PER_BATCH_SLOT) {
+				const chunk = run.slice(i, i + MAX_HEADERS_PER_BATCH_SLOT)
+				if (chunk.length === 1) {
+					merged.push(chunk[0])
+				} else {
+					merged.push({
+						type: 'header-batch',
+						headers: chunk.map(({ id, label, count }) => ({ id, label, count })),
+					})
+				}
+			}
+		}
+		run = []
+	}
+
+	for (const item of flat) {
+		if (item.type === 'header') {
+			run.push(item)
+		} else {
+			flushRun()
+			merged.push(item)
+		}
+	}
+	flushRun()
+
+	return merged
+}
 
 // ReplayItem's card is `min-h-20` (80px) with single-line/truncated content
 // throughout, so it doesn't grow with content — 88px accounts for that plus
