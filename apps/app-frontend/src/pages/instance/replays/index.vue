@@ -91,12 +91,31 @@
 				Group headers (see `displayItems`) ride the same virtualized
 				list as ordinary rows, just rendered as `ReplayGroupHeader`
 				instead when an item's `type` is `'header'`.
+
+				Modrinth Studios addition: opening/closing a group animates,
+				even though rows are positioned with an absolute `transform:
+				translateY(...)` rather than normal document flow. Each row's
+				translateY is its fixed offset within the *whole* virtual
+				list (`offsets[i]` from useVirtualScroll) — scrolling moves
+				the real scroll container, not this value, so it only
+				changes when a group's open/collapsed state actually shifts
+				items above it. That makes a plain CSS `transition` on
+				`transform` safe to leave on unconditionally: it does nothing
+				during normal scrolling (nothing to transition) and animates
+				every row sliding to its new position exactly when a group
+				toggles. `totalHeight` (the container's own height) gets the
+				same treatment so the scrollbar/content height doesn't jump
+				either.
 			-->
-			<div ref="listContainer" class="relative w-full" :style="{ height: `${totalHeight}px` }">
+			<div
+				ref="listContainer"
+				class="relative w-full transition-[height] duration-200 ease-out"
+				:style="{ height: `${totalHeight}px` }"
+			>
 				<div
 					v-for="(item, index) in visibleItems"
 					:key="item.type === 'header' ? item.id : `${item.replay.kind}-${item.replay.fileName}`"
-					class="absolute inset-x-0"
+					class="absolute inset-x-0 transition-transform duration-200 ease-out"
 					:style="{
 						transform: `translateY(${visibleTop + visibleItemLayout[index].offset}px)`,
 					}"
