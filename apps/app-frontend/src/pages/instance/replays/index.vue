@@ -83,62 +83,39 @@
 				</Combobox>
 			</div>
 			<!--
-				Modrinth Studios addition: virtualized. See the
-				`useVirtualScroll` call below for why — rendering every
-				ReplayItem at once mounted (and thumbnail-fetched) all of
-				them simultaneously, which is what caused the multi-second
-				freeze on instances with hundreds/thousands of replays.
-				Group headers (see `displayItems`) ride the same virtualized
-				list as ordinary rows, just rendered as `ReplayGroupHeader`
-				instead when an item's `type` is `'header'`.
-
-				Modrinth Studios addition: opening/closing a group animates,
-				even though rows are positioned with an absolute `transform:
-				translateY(...)` rather than normal document flow. Each row's
-				translateY is its fixed offset within the *whole* virtual
-				list (`offsets[i]` from useVirtualScroll) — scrolling moves
-				the real scroll container, not this value, so it only
-				changes when a group's open/collapsed state actually shifts
-				items above it. That makes a plain CSS `transition` on
-				`transform` safe to leave on unconditionally: it does nothing
-				during normal scrolling (nothing to transition) and animates
-				every row sliding to its new position exactly when a group
-				toggles. `totalHeight` (the container's own height) gets the
-				same treatment so the scrollbar/content height doesn't jump
-				either.
+				Modrinth Studios addition: groups render in normal document
+				flow (a plain v-for, no per-group absolute positioning) —
+				exactly how the Screenshots tab lays out its own groups (see
+				screenshots-page/index.vue's `virtualizedScreenshotGroups`
+				and group.vue). Only the ROWS inside an open group are
+				virtualized (`renderedReplays`/`virtualRowsTop` below,
+				windowed the same way Screenshots windows its photo grid),
+				since one group here can still hold hundreds of replays.
+				Keeping groups themselves in normal flow is also what makes
+				ReplayGroupSection's open/close animation actually work —
+				see its own comment for why the earlier absolutely-positioned
+				single-list approach couldn't animate at all.
 			-->
-			<div
-				ref="listContainer"
-				class="relative w-full transition-[height] duration-200 ease-out"
-				:style="{ height: `${totalHeight}px` }"
-			>
-				<div
-					v-for="(item, index) in visibleItems"
-					:key="item.type === 'header' ? item.id : `${item.replay.kind}-${item.replay.fileName}`"
-					class="absolute inset-x-0 transition-transform duration-200 ease-out"
-					:style="{
-						transform: `translateY(${visibleTop + visibleItemLayout[index].offset}px)`,
-					}"
-				>
-					<ReplayGroupHeader
-						v-if="item.type === 'header'"
-						:label="item.label"
-						:count="item.count"
-						:is-open="!collapsedGroups[item.id]"
-						@toggle="toggleGroupCollapsed(item.id)"
-					/>
-					<ReplayItem
-						v-else
-						:replay="item.replay"
-						:instance-id="instance.id"
-						:selected="selectedKeys.has(selectionKey(item.replay))"
-						:selection-active="selectedKeys.size > 0"
-						@toggle-selection="toggleSelection(item.replay)"
-						@open-folder="openFolder(item.replay)"
-						@rename="startRename(item.replay)"
-						@delete="promptDelete(item.replay)"
-					/>
-				</div>
+			<div ref="listContainer" class="flex w-full flex-col">
+				<ReplayGroupSection
+					v-for="group in virtualizedReplayGroups"
+					:key="group.id"
+					:label="group.label"
+					:replays="group.replays"
+					:rendered-replays="group.renderedReplays"
+					:rows-height="group.rowsHeight"
+					:virtual-rows-top="group.virtualRowsTop"
+					:collapsed="!!collapsedGroups[group.id]"
+					:hide-header="isHeaderHidden"
+					:instance-id="instance.id"
+					:selected-keys="selectedKeys"
+					:selection-active="selectedKeys.size > 0"
+					@update:collapsed="toggleGroupCollapsed(group.id)"
+					@toggle-selection="toggleSelection"
+					@open-folder="openFolder"
+					@rename="startRename"
+					@delete="promptDelete"
+				/>
 			</div>
 		</div>
 		<EmptyState
@@ -213,8 +190,8 @@ import {
 	Input,
 	ReadyTransition,
 	useReadyState,
+	useScrollViewport,
 	useVIntl,
-	useVirtualScroll,
 } from '@modrinth/ui'
 import { useQuery, useQueryClient } from '@tanstack/vue-query'
 import { confirm, open } from '@tauri-apps/plugin-dialog'
@@ -222,8 +199,7 @@ import { useStorage } from '@vueuse/core'
 import dayjs from 'dayjs'
 import { computed, ref } from 'vue'
 
-import ReplayGroupHeader from '@/components/ui/replays/ReplayGroupHeader.vue'
-import ReplayItem from '@/components/ui/replays/ReplayItem.vue'
+import ReplayGroupSection from '@/components/ui/replays/ReplayGroupSection.vue'
 import RenameReplayModal from '@/components/ui/replays/RenameReplayModal.vue'
 import { get_full_path } from '@/helpers/instance'
 import { deleteReplay, importReplay, type Replay } from '@/helpers/replays'
@@ -234,10 +210,6 @@ import { instanceKeys, instanceReplaysQueryOptions } from '../query-options'
 
 type ReplaySort = 'newest' | 'oldest' | 'name' | 'duration' | 'size'
 type ReplayGroupBy = 'none' | 'source' | 'date'
-
-type DisplayItem =
-	| { type: 'header'; id: string; label: string; count: number }
-	| { type: 'replay'; replay: Replay }
 
 const messages = defineMessages({
 	heading: {
@@ -367,7 +339,7 @@ const groupByModel = computed<string>({
 })
 
 // Modrinth Studios addition: per-group collapse state, keyed by the same
-// `header:${key}` id used in `displayItems` below — mirrors the Screenshots
+// `header:${key}` id used in `replayGroups` below — mirrors the Screenshots
 // tab's own `collapsedGroups` (screenshots-page/index.vue).
 const collapsedGroups = useStorage<Record<string, boolean>>('replays-collapsed-groups', {})
 function toggleGroupCollapsed(headerId: string) {
@@ -434,14 +406,28 @@ function dateGroupOf(replay: Replay): string {
 	return recorded.format('MMMM YYYY')
 }
 
-// Modrinth Studios addition: groups are built by walking the *already
-// sorted* list and bucketing as we go, rather than sorting groups
-// separately afterwards — a group's position then naturally follows
-// wherever its first (by the active sort) replay falls, with no extra
-// group-ordering logic needed.
-const displayItems = computed<DisplayItem[]>(() => {
+// Modrinth Studios addition: groups render in normal document flow (see
+// the template) — the same architecture the Screenshots tab uses for its
+// own groups (screenshots-page/index.vue's `screenshotGroupLayouts` /
+// `virtualizedScreenshotGroups`), copied here row-list-shaped instead of
+// grid-shaped. `replayGroups` builds the groups themselves (by walking the
+// *already sorted* list and bucketing as we go, so a group's position
+// naturally follows wherever its first — by the active sort — replay
+// falls); `replayGroupLayouts` gives each one a `top`/`height` in the
+// page's overall flow; `virtualizedReplayGroups` then windows the ROWS
+// inside whichever groups are actually near the viewport, exactly like
+// Screenshots windows the photos inside its own groups.
+interface ReplayGroupData {
+	id: string
+	label: string
+	replays: Replay[]
+}
+
+const isHeaderHidden = computed(() => groupBy.value === 'none')
+
+const replayGroups = computed<ReplayGroupData[]>(() => {
 	if (groupBy.value === 'none') {
-		return sortedReplays.value.map((replay) => ({ type: 'replay', replay }))
+		return [{ id: 'all', label: '', replays: sortedReplays.value }]
 	}
 
 	const groupKeyOf = groupBy.value === 'source' ? sourceGroupOf : dateGroupOf
@@ -458,47 +444,85 @@ const displayItems = computed<DisplayItem[]>(() => {
 		bucket.push(replay)
 	}
 
-	return order.flatMap((key): DisplayItem[] => {
-		const bucket = buckets.get(key)!
-		const id = `header:${key}`
-		const header: DisplayItem = { type: 'header', id, label: key, count: bucket.length }
-		// Modrinth Studios addition: a collapsed group only contributes its
-		// header to the virtualized list — its rows are skipped entirely
-		// rather than rendered-but-hidden, the same "not in the list at all"
-		// approach `visibleInstances` uses elsewhere for offscreen items.
-		if (collapsedGroups.value[id]) return [header]
-		return [header, ...bucket.map((replay): DisplayItem => ({ type: 'replay', replay }))]
-	})
+	return order.map((key) => ({ id: `header:${key}`, label: key, replays: buckets.get(key)! }))
 })
 
 // ReplayItem's card is `min-h-20` (80px) with single-line/truncated content
 // throughout, so it doesn't grow with content — 88px accounts for that plus
 // the 8px (`gap-2`) row spacing the old flex layout used.
 const REPLAY_ROW_HEIGHT = 88
+// Matches ReplayGroupHeader's own `h-11` (44px).
+const REPLAY_GROUP_HEADER_HEIGHT = 44
+// Breathing room between one group's content and the next group's header —
+// mirrors Screenshots' own SCREENSHOT_GROUP_SPACING.
+const REPLAY_GROUP_SPACING = 12
+// How far past the visible viewport (in px) a group's rows still get
+// rendered — mirrors Screenshots' own SCREENSHOT_GROUP_OVERSCAN, sized down
+// a bit since replay rows are single-column (narrower render cost per row).
+const REPLAY_GROUP_OVERSCAN = 1200
 
-// Modrinth Studios addition: group headers get their own, much shorter,
-// row height instead of sharing ReplayItem's 88px. Forcing every header
-// into a full 88px slot (an earlier version of this fix) meant a run of
-// several consecutive collapsed headers was really several mostly-empty
-// boxes stacked on each other — no amount of aligning a header's content
-// within its own box could close a gap that was really just unused slot
-// space. `useVirtualScroll` now accepts a per-item height function
-// (see `packages/ui/src/composables/virtual-scroll.ts`), so headers can
-// just be short — every header, in any run length or open/collapsed
-// state, sits in the same compact 44px slot with no leftover space to
-// show up as a gap.
-const HEADER_ROW_HEIGHT = 44
-
-function displayItemHeight(item: DisplayItem): number {
-	return item.type === 'header' ? HEADER_ROW_HEIGHT : REPLAY_ROW_HEIGHT
+interface ReplayGroupLayout extends ReplayGroupData {
+	top: number
+	height: number
+	isOpen: boolean
+	rowsHeight: number
+	rowsTop: number
 }
 
-const { listContainer, totalHeight, visibleTop, visibleItems, visibleItemLayout } =
-	useVirtualScroll(displayItems, {
-		itemHeight: displayItemHeight,
-		bufferSize: 10,
-		initialItemCount: 30,
+const replayGroupLayouts = computed<ReplayGroupLayout[]>(() => {
+	const layouts: ReplayGroupLayout[] = []
+	let top = 0
+	for (const group of replayGroups.value) {
+		const isOpen = isHeaderHidden.value || !collapsedGroups.value[group.id]
+		const headerHeight = isHeaderHidden.value ? 0 : REPLAY_GROUP_HEADER_HEIGHT
+		const rowsHeight = group.replays.length * REPLAY_ROW_HEIGHT
+		const rowsTop = top + headerHeight
+		const height = headerHeight + (isOpen ? rowsHeight : 0) + REPLAY_GROUP_SPACING
+		layouts.push({ ...group, top, height, isOpen, rowsHeight, rowsTop })
+		top += height
+	}
+	return layouts
+})
+
+const { listContainer, relativeScrollTop, scrollContainer, viewportHeight } = useScrollViewport()
+
+interface VirtualizedReplayGroupLayout extends ReplayGroupLayout {
+	renderedReplays: Replay[]
+	virtualRowsTop: number
+}
+
+const virtualizedReplayGroups = computed<VirtualizedReplayGroupLayout[]>(() => {
+	const hasViewport = Boolean(listContainer.value && scrollContainer.value)
+	const viewportStart = hasViewport
+		? Math.max(0, relativeScrollTop.value - REPLAY_GROUP_OVERSCAN)
+		: 0
+	const viewportEnd = hasViewport
+		? relativeScrollTop.value + viewportHeight.value + REPLAY_GROUP_OVERSCAN
+		: REPLAY_GROUP_OVERSCAN
+
+	return replayGroupLayouts.value.map((layout) => {
+		const isInRenderRange = layout.top + layout.height >= viewportStart && layout.top <= viewportEnd
+		if (!layout.isOpen || layout.replays.length === 0 || !isInRenderRange) {
+			return { ...layout, renderedReplays: [], virtualRowsTop: 0 }
+		}
+
+		const rowCount = layout.replays.length
+		const firstRow = Math.min(
+			rowCount,
+			Math.max(0, Math.floor((viewportStart - layout.rowsTop) / REPLAY_ROW_HEIGHT)),
+		)
+		const lastRow = Math.min(
+			rowCount,
+			Math.max(firstRow, Math.ceil((viewportEnd - layout.rowsTop) / REPLAY_ROW_HEIGHT)),
+		)
+
+		return {
+			...layout,
+			renderedReplays: layout.replays.slice(firstRow, lastRow),
+			virtualRowsTop: firstRow * REPLAY_ROW_HEIGHT,
+		}
 	})
+})
 
 // Modrinth Studios addition: bulk selection, keyed the same way the row
 // `:key` already is (kind + file name is unique per instance).

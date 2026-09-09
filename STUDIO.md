@@ -1446,13 +1446,25 @@ every visit after that is one fast query.
 Also added: **sort** (newest/oldest/name/duration/file size) and **group by** (server/world, or date)
 controls, plus **multi-select with bulk delete** — `replays/index.vue`, `ReplayItem.vue` (now takes
 `selected`/`selection-active` props and a circular checkbox mirroring the Library instance cards' own
-selection toggle), and a new `ReplayGroupHeader.vue`. Deliberately mirrors the Screenshots tab's own
-toolbar (`Combobox` sort/group dropdowns, `FloatingActionBar` for the bulk-action bar) rather than
-inventing a different pattern. Group headers ride the *same* virtualized list as ordinary rows (an
-item's `type` field picks which component renders) rather than a second, variable-height virtualizer
-— `useVirtualScroll` assumes a single fixed item height for everything in its array, so headers are
-just given the same row height as a replay card; see the comment on `ReplayGroupHeader.vue` for why
-that trade-off was made instead of writing a new virtualizer.
+selection toggle), `ReplayGroupHeader.vue`, and `ReplayGroupSection.vue`. Deliberately mirrors the
+Screenshots tab's own toolbar (`Combobox` sort/group dropdowns, `FloatingActionBar` for the bulk-action
+bar) rather than inventing a different pattern.
+
+Group *layout* also mirrors the Screenshots tab directly, after an earlier version (one flat
+`useVirtualScroll` list spanning headers and rows together, picking `ReplayGroupHeader` vs `ReplayItem`
+per item by a `type` field) turned out unable to animate open/close at all: everything below a toggled
+group was absolutely positioned by array index, so toggling didn't just resize that group, it
+reassigned every row below it to a different index — nothing for the DOM to recognize as "the same
+element moving," so there was nothing continuous to transition. Screenshots never hits that because its
+groups are normal, in-flow blocks; toggling one only changes that block's own height, and the browser's
+layout engine reflows everything below it for free. Replays now does the same: `replayGroups` /
+`replayGroupLayouts` / `virtualizedReplayGroups` in `replays/index.vue` are the row-list-shaped
+counterparts of Screenshots' `screenshotGroupLayouts` / `virtualizedScreenshotGroups` — groups render
+in normal flow (a plain `v-for`, see the template), and only the ROWS inside an open group are
+virtualized (windowed the same way Screenshots windows its own photo grid). `ReplayGroupSection.vue`
+wraps a group's `ReplayGroupHeader` plus its virtualized rows in a `grid-template-rows: 0fr → 1fr`
+collapse (copied from the shared `Accordion` component Screenshots' own `section.vue` already uses),
+which is what makes the open/close animation actually work.
 
 **Why there's still no "launch straight into a replay" button.** Investigated this properly before
 deciding against it. Neither ReplayMod nor Flashback expose any command-line flag, config option, or
