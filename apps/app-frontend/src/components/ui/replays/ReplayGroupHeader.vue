@@ -5,10 +5,18 @@
 	list uses (`useVirtualScroll` from `@modrinth/ui`) assumes every item in
 	its flat array is the same height, and giving headers their own shorter
 	height would need a variable-height virtualizer this codebase doesn't
-	have. Content is bottom-aligned within that fixed height instead, so the
-	visible gap reads as "space before this new section" (above the header)
-	rather than "space between the header and its own group's first row"
-	(below it).
+	have.
+
+	The root element sets an *explicit* height (`h-20`, 80px — the same
+	80px a ReplayItem card renders at within its own 88px slot, via its
+	`min-h-20`) rather than `h-full`: the wrapper `index.vue` renders this
+	inside (`<div class="absolute inset-x-0">`) never gets an explicit
+	height itself (it's only positioned via `transform: translateY(...)`),
+	so `h-full` silently resolved to nothing and this button collapsed to
+	its own text's height instead of the 88px slot the virtualizer had
+	already reserved for it — the gap this was supposed to avoid, showing
+	up both above a group's first replay and between two consecutive
+	collapsed group headers.
 -->
 <script setup lang="ts">
 import { DropdownIcon } from '@modrinth/assets'
@@ -34,7 +42,7 @@ const messages = defineMessages({
 <template>
 	<button
 		type="button"
-		class="flex h-full w-full cursor-pointer items-end gap-2 border-0 bg-transparent px-1 pb-2 text-left"
+		class="flex h-20 w-full cursor-pointer items-center gap-2 border-0 bg-transparent px-1 text-left"
 		:aria-expanded="isOpen"
 		:aria-label="
 			formatMessage(isOpen ? messages.collapseGroup : messages.expandGroup, { label: props.label })
