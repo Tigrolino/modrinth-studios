@@ -6,8 +6,14 @@ export interface ScrollViewportOptions {
 	onResize?: () => void
 }
 
-export interface VirtualScrollOptions {
-	itemHeight: number
+export interface VirtualScrollOptions<T = unknown> {
+	// Modrinth Studios addition: `itemHeight` may also be a per-item function
+	// so a list can mix item types of different heights (e.g. the Replays
+	// tab's compact group headers alongside its taller replay cards) without
+	// every item being forced into the same fixed slot. The numeric form is
+	// unchanged and stays the fast path for every existing (uniform-height)
+	// caller.
+	itemHeight: number | ((item: T, index: number) => number)
 	bufferSize?: number
 	initialItemCount?: number
 	enabled?: Ref<boolean>
@@ -179,7 +185,7 @@ export function useScrollViewport(options: ScrollViewportOptions = {}) {
 	}
 }
 
-export function useVirtualScroll<T>(items: Ref<T[]>, options: VirtualScrollOptions) {
+export function useVirtualScroll<T>(items: Ref<T[]>, options: VirtualScrollOptions<T>) {
 	const {
 		itemHeight,
 		bufferSize = 5,
@@ -200,7 +206,47 @@ export function useVirtualScroll<T>(items: Ref<T[]>, options: VirtualScrollOptio
 		onScroll: checkNearEnd,
 	})
 
-	const totalHeight = computed(() => items.value.length * itemHeight)
+	// Modrinth Studios addition: variable-height support. `offsets` holds the
+	// cumulative top offset of every item plus one trailing entry for the
+	// total height (so `offsets[i+1] - offsets[i]` is item i's own height);
+	// it's only computed at all when `itemHeight` is a function, so the
+	// original fixed-height callers (every one before this addition) pay
+	// nothing extra — they keep the plain `index * itemHeight` arithmetic
+	// below.
+	const offsets = computed<number[] | null>(() => {
+		if (typeof itemHeight !== 'function') return null
+		const heights = items.value
+		const result = new Array<number>(heights.length + 1)
+		result[0] = 0
+		for (let i = 0; i < heights.length; i++) {
+			result[i + 1] = result[i] + itemHeight(heights[i], i)
+		}
+		return result
+	})
+
+	function heightOf(index: number): number {
+		if (typeof itemHeight === 'function') return itemHeight(items.value[index], index)
+		return itemHeight
+	}
+
+	// Largest index `i` such that `offsets[i] <= target` (offsets is
+	// non-decreasing since heights are always >= 0).
+	function findOffsetIndex(target: number): number {
+		const off = offsets.value!
+		let lo = 0
+		let hi = off.length - 1
+		while (lo < hi) {
+			const mid = (lo + hi + 1) >> 1
+			if (off[mid] <= target) lo = mid
+			else hi = mid - 1
+		}
+		return Math.min(lo, items.value.length - 1)
+	}
+
+	const totalHeight = computed(() => {
+		if (offsets.value) return offsets.value[offsets.value.length - 1]
+		return items.value.length * (itemHeight as number)
+	})
 
 	const visibleRange = computed(() => {
 		if (enabled && !enabled.value) {
@@ -209,6 +255,19 @@ export function useVirtualScroll<T>(items: Ref<T[]>, options: VirtualScrollOptio
 
 		if (!listContainer.value || !scrollContainer.value) {
 			return { start: 0, end: Math.min(items.value.length, initialItemCount) }
+		}
+
+		if (offsets.value) {
+			if (items.value.length === 0) return { start: 0, end: 0 }
+			const off = offsets.value
+			const start = findOffsetIndex(relativeScrollTop.value)
+			const viewportBottom = relativeScrollTop.value + viewportHeight.value
+			let end = start
+			while (end < items.value.length && off[end] < viewportBottom) end++
+
+			const rangeStart = Math.max(0, start - bufferSize)
+			const rangeEnd = Math.min(items.value.length, end + bufferSize)
+			return { start: rangeStart, end: rangeEnd }
 		}
 
 		const start = Math.floor(relativeScrollTop.value / itemHeight)
@@ -227,13 +286,31 @@ export function useVirtualScroll<T>(items: Ref<T[]>, options: VirtualScrollOptio
 		}
 	})
 
-	const visibleTop = computed(() =>
-		enabled && !enabled.value ? 0 : visibleRange.value.start * itemHeight,
-	)
+	const visibleTop = computed(() => {
+		if (enabled && !enabled.value) return 0
+		if (offsets.value) return offsets.value[visibleRange.value.start]
+		return visibleRange.value.start * (itemHeight as number)
+	})
 
 	const visibleItems = computed(() =>
 		items.value.slice(visibleRange.value.start, visibleRange.value.end),
 	)
+
+	// Modrinth Studios addition: per-visible-item offset (relative to
+	// `visibleTop`) and height, for variable-height lists — a fixed-height
+	// list can keep deriving position from `index * itemHeight` directly, so
+	// this is only meaningful (non-null entries) when `itemHeight` is a
+	// function.
+	const visibleItemLayout = computed(() => {
+		const { start, end } = visibleRange.value
+		const top = visibleTop.value
+		const result: { offset: number; height: number }[] = []
+		for (let i = start; i < end; i++) {
+			const itemTop = offsets.value ? offsets.value[i] - top : (i - start) * (itemHeight as number)
+			result.push({ offset: itemTop, height: heightOf(i) })
+		}
+		return result
+	})
 
 	function checkNearEnd() {
 		if (!onNearEnd || !listContainer.value || !viewportHeight.value) return
@@ -256,6 +333,7 @@ export function useVirtualScroll<T>(items: Ref<T[]>, options: VirtualScrollOptio
 		visibleRange,
 		visibleTop,
 		visibleItems,
+		visibleItemLayout,
 		resetScrollState,
 		syncScrollState,
 	}

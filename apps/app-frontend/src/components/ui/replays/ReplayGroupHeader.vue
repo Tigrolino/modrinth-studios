@@ -1,32 +1,27 @@
 <!--
 	Modrinth Studios addition: a collapsible section-header row for the
-	Replays tab's group-by view (see replays/index.vue). Kept at the same
-	fixed height as a real ReplayItem row on purpose — the virtualizer this
-	list uses (`useVirtualScroll` from `@modrinth/ui`) assumes every item in
-	its flat array is the same height, and giving headers their own shorter
-	height would need a variable-height virtualizer this codebase doesn't
-	have.
+	Replays tab's group-by view (see replays/index.vue). Two earlier
+	versions of this file tried to make a header look right while still
+	occupying the SAME fixed 88px slot every ReplayItem row does — first by
+	centering its content in that box, then by bottom-aligning it — and
+	both approaches only ever moved *where* the box's leftover ~60px of
+	dead space sat, never got rid of it. That was fine for a single open
+	group (bottom-aligning happened to put the dead space where nothing
+	needed it), but a run of several consecutive collapsed headers meant
+	several of those mostly-empty boxes stacked on each other, which read
+	as a big, uneven gap "between sections" no per-header alignment tweak
+	could close (the dead space was trapped inside each header's own slot,
+	not shared with its neighbor).
 
-	The root element sets an *explicit* height (`h-20`, 80px — the same
-	80px a ReplayItem card renders at within its own 88px slot, via its
-	`min-h-20`) rather than `h-full`: the wrapper `index.vue` renders this
-	inside (`<div class="absolute inset-x-0">`) never gets an explicit
-	height itself (it's only positioned via `transform: translateY(...)`),
-	so `h-full` silently resolved to nothing and this button collapsed to
-	its own text's height instead of the 88px slot the virtualizer had
-	already reserved for it — the gap this was supposed to avoid, showing
-	up both above a group's first replay and between two consecutive
-	collapsed group headers.
-
-	Content is bottom-aligned (`items-end`) within that 80px box rather
-	than vertically centered — centering a short single line of text in an
-	80px-tall box splits the empty space evenly above *and* below the
-	text, which visually reads as a big gap both before AND after every
-	header (the text itself is only ~20px tall). Pinning it to the bottom
-	consolidates all of that empty space above the header instead, so it
-	reads as one gap — "space before this new section" — and the header's
-	text sits right up against whatever comes directly after it, open
-	group or collapsed neighbor alike.
+	The real fix was to stop pretending a header needs the same height as
+	a replay card at all. `useVirtualScroll` (see
+	`packages/ui/src/composables/virtual-scroll.ts`) now accepts a
+	per-item height function, so headers get their own short, uniform
+	HEADER_ROW_HEIGHT slot (see replays/index.vue) instead of ReplayItem's
+	88px — every header, whether it's alone, part of a long collapsed run,
+	or sitting right above an open group's first row, gets the exact same
+	small amount of padding. Centering the content in that shorter box is
+	enough on its own now; there's no large slack left to distribute.
 -->
 <script setup lang="ts">
 import { DropdownIcon } from '@modrinth/assets'
@@ -52,7 +47,7 @@ const messages = defineMessages({
 <template>
 	<button
 		type="button"
-		class="flex h-20 w-full cursor-pointer items-end gap-2 border-0 bg-transparent px-1 pb-2 text-left"
+		class="flex h-11 w-full cursor-pointer items-center gap-2 border-0 bg-transparent px-1 text-left"
 		:aria-expanded="isOpen"
 		:aria-label="
 			formatMessage(isOpen ? messages.collapseGroup : messages.expandGroup, { label: props.label })
