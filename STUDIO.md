@@ -1421,6 +1421,57 @@ short version is the same here: this fork no longer touches the Screenshots tab 
 Screenshots-thumbnail-specific file were restored to their exact pre-Studio (stock upstream) state.
 Nothing about the Screenshots tab in this fork is Studio code anymore.
 
+## Replays tab: metadata cache, sort/group/bulk-delete, and why there's no "launch into a replay"
+
+The virtualization/concurrency fixes above stopped the Replays tab from freezing, but didn't stop
+it from being slow *every single time* it was opened — `list_replays` still opened and parsed every
+replay's zip metadata on every visit, with no memory of having done that same work last time. Fine
+for a handful of replays, still a multi-second wait for someone with ~900 of them, every time they
+click the tab.
+
+Fixed the same way the Screenshots tab already solves this for itself (`reconcile_source_screenshots`
+in `packages/app-lib/src/api/instance/screenshots/reconciliation.rs`): a persistent, on-disk index
+instead of a full re-scan every time. `studio_replay_metadata_cache` (new table, own Studio migration
+— see `studio-migrations/20260909120000_studio-replay-metadata-cache.sql`) stores each replay's parsed
+metadata keyed by `(instance_id, kind, file_name)`, with `file_size`/`modified_at` as a cheap staleness
+check. `list_replays` (`packages/app-lib/src/api/replays.rs`) now only opens a replay's zip when it's
+new or its size/mtime changed since it was last cached; everything else comes back from one indexed
+`SELECT`. Unlike Screenshots' own index, this doesn't do SHA1-based rename detection — a renamed
+replay is simply treated as new and its zip re-read once (the old row for the vanished name gets
+pruned the same pass), which is an acceptable trade-off for something that isn't renamed nearly as
+often as it's just *opened*. First load after upgrading (or after adding a big batch of replays at
+once) still pays the full parse cost, bounded by the existing `REPLAY_METADATA_READ_CONCURRENCY = 16`;
+every visit after that is one fast query.
+
+Also added: **sort** (newest/oldest/name/duration/file size) and **group by** (server/world, or date)
+controls, plus **multi-select with bulk delete** — `replays/index.vue`, `ReplayItem.vue` (now takes
+`selected`/`selection-active` props and a circular checkbox mirroring the Library instance cards' own
+selection toggle), and a new `ReplayGroupHeader.vue`. Deliberately mirrors the Screenshots tab's own
+toolbar (`Combobox` sort/group dropdowns, `FloatingActionBar` for the bulk-action bar) rather than
+inventing a different pattern. Group headers ride the *same* virtualized list as ordinary rows (an
+item's `type` field picks which component renders) rather than a second, variable-height virtualizer
+— `useVirtualScroll` assumes a single fixed item height for everything in its array, so headers are
+just given the same row height as a replay card; see the comment on `ReplayGroupHeader.vue` for why
+that trade-off was made instead of writing a new virtualizer.
+
+**Why there's still no "launch straight into a replay" button.** Investigated this properly before
+deciding against it. Neither ReplayMod nor Flashback expose any command-line flag, config option, or
+file association for opening a specific replay directly — both only support picking one by hand from
+their own in-game screen after Minecraft has already started, confirmed against ReplayMod's own docs,
+forums, and source, and Flashback's repo. Vanilla Minecraft's own `--quickPlaySingleplayer` (what the
+*Worlds* tab's launch button actually uses — see `QuickPlayType::Singleplayer` in
+`packages/app-lib/src/launcher/args.rs`) doesn't transfer either: it loads an existing folder from
+`saves/`, and a replay isn't backed by one — both mods read straight from the `.mcpr`/replay zip
+through their own custom screen, never registering it as a real world. That leaves two real ways to
+fake it from outside the mod: simulate the in-game clicks needed to open the replay viewer and pick
+the file (works without touching the mods, but is coordinate/resolution/mod-version-fragile and
+untestable from here), or ship a companion mod that hooks ReplayMod's/Flashback's *internal*
+(non-public) classes to open a replay on startup (more reliable once working, but ReplayMod alone
+ships a separate build per Minecraft version with no shared API — "compatible with every version"
+would mean an unbounded number of builds chasing every mod update forever, not a one-time cost).
+Decided neither was worth shipping; sort/group/bulk-delete above is the answer to "make the tab more
+useful" instead.
+
 ## Releasing an update
 
 1. Bump `version` in `apps/app-frontend/package.json` (that's what

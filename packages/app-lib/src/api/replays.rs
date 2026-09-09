@@ -8,10 +8,13 @@
 //! upstream Modrinth code touched) so it should never conflict with future
 //! `git merge`s from upstream.
 
+use crate::state::State;
 use crate::util::io;
 use crate::{Result, ErrorKind};
 use futures::stream::{self, StreamExt};
 use serde::{Deserialize, Serialize};
+use sqlx::Row;
+use std::collections::{HashMap, HashSet};
 use std::io::Read;
 use std::path::{Path, PathBuf};
 
@@ -42,6 +45,27 @@ impl ReplayKind {
 
     fn all() -> [ReplayKind; 2] {
         [ReplayKind::ReplayMod, ReplayKind::Flashback]
+    }
+
+    // Modrinth Studios addition: a stable string key for
+    // `studio_replay_metadata_cache` — kept separate from `serde`'s
+    // `snake_case` rename (which would also work, "replay_mod"/"flashback")
+    // so the DB's on-disk format never silently changes just because a
+    // `#[serde(...)]` attribute above changes for some unrelated (e.g. JSON
+    // wire format) reason.
+    fn db_key(self) -> &'static str {
+        match self {
+            ReplayKind::ReplayMod => "replay_mod",
+            ReplayKind::Flashback => "flashback",
+        }
+    }
+
+    fn from_db_key(value: &str) -> Option<Self> {
+        match value {
+            "replay_mod" => Some(ReplayKind::ReplayMod),
+            "flashback" => Some(ReplayKind::Flashback),
+            _ => None,
+        }
     }
 }
 
@@ -88,18 +112,29 @@ pub async fn has_replays(instance: &Path) -> Result<bool> {
     Ok(false)
 }
 
-pub async fn list_replays(instance: &Path) -> Result<Vec<Replay>> {
-    // Two-phase: first collect cheap filesystem info for every replay (fast,
-    // just directory listing + stat calls), then read each replay's embedded
-    // metadata JSON separately. That second part means opening a zip archive
-    // per file, which is slow enough (a few ms to tens of ms each) that doing
-    // it one file at a time made this tab take a very long time for anyone
-    // with hundreds of replays. `read_zip_metadata_json` is synchronous/
-    // blocking, so each one is farmed out to tokio's blocking thread pool via
-    // `spawn_blocking`, with a bounded number running concurrently at once
-    // (see `REPLAY_METADATA_READ_CONCURRENCY` below) rather than either
-    // waiting on each other one at a time or all racing at once with no
-    // limit.
+pub async fn list_replays(
+    instance: &Path,
+    instance_id: &str,
+) -> Result<Vec<Replay>> {
+    // Three-phase: first collect cheap filesystem info for every replay
+    // (fast, just directory listing + stat calls), then check
+    // `studio_replay_metadata_cache` for each one (one indexed SELECT,
+    // regardless of how many replays there are), and only for whatever's
+    // left — new replays, or ones whose size/mtime changed since they were
+    // last cached — open its zip archive and read the embedded metadata
+    // JSON. That last part is slow enough (a few ms to tens of ms each) that
+    // doing it for every replay on every single visit to this tab (which is
+    // what used to happen — there was no cache at all) made this tab take a
+    // very long time for anyone with hundreds/thousands of replays, the same
+    // problem the Screenshots tab already solved for itself by keeping an
+    // on-disk index instead of re-scanning from scratch every time (see
+    // `reconcile_source_screenshots`). `read_zip_metadata_json` is
+    // synchronous/blocking, so each one still gets farmed out to tokio's
+    // blocking thread pool via `spawn_blocking`, with a bounded number
+    // running concurrently at once (see `REPLAY_METADATA_READ_CONCURRENCY`
+    // below) rather than either waiting on each other one at a time or all
+    // racing at once with no limit — this part is unchanged, it just now
+    // runs on a much smaller list most of the time.
     let mut entries = Vec::new();
 
     for kind in ReplayKind::all() {
@@ -157,6 +192,26 @@ pub async fn list_replays(instance: &Path) -> Result<Vec<Replay>> {
         }
     }
 
+    // Modrinth Studios addition: check the cache before opening anything.
+    // A hit (same file_size/modified_at as what's on disk right now) means
+    // this replay's zip doesn't need to be touched at all this time.
+    let state = State::get().await?;
+    let cached = load_replay_metadata_cache(&state, instance_id).await?;
+
+    let mut needs_parse = Vec::new();
+    for (index, (_, replay)) in entries.iter_mut().enumerate() {
+        let hit = cached.get(&(replay.kind, replay.file_name.clone())).filter(
+            |cached_row| {
+                cached_row.file_size == replay_size_as_i64(replay.size)
+                    && cached_row.modified_at == replay.modified
+            },
+        );
+        match hit {
+            Some(cached_row) => apply_cached_metadata(replay, cached_row),
+            None => needs_parse.push(index),
+        }
+    }
+
     // Modrinth Studios addition: cap how many replay archives get opened and
     // read for metadata at once, rather than firing one `spawn_blocking` per
     // replay and letting all of them race each other with no limit. That was
@@ -168,7 +223,10 @@ pub async fn list_replays(instance: &Path) -> Result<Vec<Replay>> {
     // frontend ever gets a chance to render. Bounding concurrency means the
     // reads that *are* running can actually make progress instead of all
     // fighting over the same disk and CPU, while still running many in
-    // parallel rather than one at a time.
+    // parallel rather than one at a time. Now that the cache above already
+    // filters this down to just new/changed replays, this bound mostly
+    // matters again on the very first load (or after adding a big batch of
+    // replays at once) rather than every single visit.
     // Collecting owned `PathBuf`s first (rather than mapping `entries.iter()`
     // directly into the `async move` below) sidesteps a real rustc
     // limitation: a closure that both borrows from an outer iterator *and*
@@ -177,11 +235,13 @@ pub async fn list_replays(instance: &Path) -> Result<Vec<Replay>> {
     // `stream::iter`/`buffer_unordered` — the same reason the equivalent
     // scan in `screenshots/operations.rs` maps over `sources.into_iter()`
     // (owned values) rather than `sources.iter()`.
-    let paths: Vec<PathBuf> =
-        entries.iter().map(|(path, _)| path.clone()).collect();
+    let paths: Vec<(usize, PathBuf)> = needs_parse
+        .iter()
+        .map(|&index| (index, entries[index].0.clone()))
+        .collect();
 
     let metadata_results: Vec<(usize, std::io::Result<Vec<u8>>)> = stream::iter(
-        paths.into_iter().enumerate().map(|(index, path)| async move {
+        paths.into_iter().map(|(index, path)| async move {
             let result = tokio::task::spawn_blocking(move || {
                 read_zip_metadata_json(&path)
             })
@@ -204,10 +264,177 @@ pub async fn list_replays(instance: &Path) -> Result<Vec<Replay>> {
         }
     }
 
+    if let Err(error) = write_replay_metadata_cache(
+        &state,
+        instance_id,
+        &entries,
+        &needs_parse,
+        &cached,
+    )
+    .await
+    {
+        // Modrinth Studios addition: the cache is purely a speed
+        // optimization — a write failure (e.g. a locked database at just
+        // the wrong moment) shouldn't turn into a hard error for the whole
+        // tab. Worst case, this list is fully re-derived again next time.
+        tracing::warn!("Failed to update replay metadata cache: {error}");
+    }
+
     let mut replays: Vec<Replay> =
         entries.into_iter().map(|(_, replay)| replay).collect();
     replays.sort_by(|a, b| b.modified.cmp(&a.modified));
     Ok(replays)
+}
+
+fn replay_size_as_i64(size: u64) -> i64 {
+    i64::try_from(size).unwrap_or(i64::MAX)
+}
+
+/// Modrinth Studios addition: one row of `studio_replay_metadata_cache`.
+struct CachedReplayMetadata {
+    file_size: i64,
+    modified_at: i64,
+    duration_ms: Option<i64>,
+    recorded_at: Option<i64>,
+    minecraft_version: Option<String>,
+    server_name: Option<String>,
+    singleplayer: Option<bool>,
+    world_name: Option<String>,
+    display_name: Option<String>,
+}
+
+fn apply_cached_metadata(replay: &mut Replay, cached: &CachedReplayMetadata) {
+    replay.duration_ms = cached.duration_ms.map(|value| value as u64);
+    replay.recorded_at = cached.recorded_at;
+    replay.minecraft_version = cached.minecraft_version.clone();
+    replay.server_name = cached.server_name.clone();
+    replay.singleplayer = cached.singleplayer;
+    replay.world_name = cached.world_name.clone();
+    if let Some(display_name) = &cached.display_name {
+        replay.name = display_name.clone();
+    }
+}
+
+async fn load_replay_metadata_cache(
+    state: &State,
+    instance_id: &str,
+) -> Result<HashMap<(ReplayKind, String), CachedReplayMetadata>> {
+    let rows = sqlx::query(
+        "SELECT kind, file_name, file_size, modified_at, duration_ms, recorded_at,
+                minecraft_version, server_name, singleplayer, world_name, display_name
+         FROM studio_replay_metadata_cache WHERE instance_id = ?",
+    )
+    .bind(instance_id)
+    .fetch_all(&state.pool)
+    .await?;
+
+    let mut cache = HashMap::with_capacity(rows.len());
+    for row in rows {
+        let kind_key: String = row.try_get("kind")?;
+        let Some(kind) = ReplayKind::from_db_key(&kind_key) else {
+            continue;
+        };
+        let file_name: String = row.try_get("file_name")?;
+        let singleplayer: Option<i64> = row.try_get("singleplayer")?;
+        cache.insert(
+            (kind, file_name),
+            CachedReplayMetadata {
+                file_size: row.try_get("file_size")?,
+                modified_at: row.try_get("modified_at")?,
+                duration_ms: row.try_get("duration_ms")?,
+                recorded_at: row.try_get("recorded_at")?,
+                minecraft_version: row.try_get("minecraft_version")?,
+                server_name: row.try_get("server_name")?,
+                singleplayer: singleplayer.map(|value| value != 0),
+                world_name: row.try_get("world_name")?,
+                display_name: row.try_get("display_name")?,
+            },
+        );
+    }
+    Ok(cache)
+}
+
+/// Writes a fresh cache row for every replay whose metadata was just
+/// (re-)parsed, and prunes rows for replays that no longer exist on disk
+/// (deleted, or renamed — a rename produces a new `file_name`, so the old
+/// row would otherwise never get revisited by anything). No-ops without
+/// touching the database at all when there's nothing to write or prune,
+/// which is the common case once everything is already cached.
+async fn write_replay_metadata_cache(
+    state: &State,
+    instance_id: &str,
+    entries: &[(PathBuf, Replay)],
+    needs_parse: &[usize],
+    cached: &HashMap<(ReplayKind, String), CachedReplayMetadata>,
+) -> Result<()> {
+    let current_keys: HashSet<(ReplayKind, &str)> = entries
+        .iter()
+        .map(|(_, replay)| (replay.kind, replay.file_name.as_str()))
+        .collect();
+    let stale: Vec<(ReplayKind, &str)> = cached
+        .keys()
+        .map(|(kind, file_name)| (*kind, file_name.as_str()))
+        .filter(|key| !current_keys.contains(key))
+        .collect();
+
+    if needs_parse.is_empty() && stale.is_empty() {
+        return Ok(());
+    }
+
+    let mut tx = state.pool.begin().await?;
+    let now = chrono::Utc::now().timestamp();
+
+    for &index in needs_parse {
+        let (_, replay) = &entries[index];
+        sqlx::query(
+            "INSERT INTO studio_replay_metadata_cache
+                (instance_id, kind, file_name, file_size, modified_at, duration_ms,
+                 recorded_at, minecraft_version, server_name, singleplayer, world_name,
+                 display_name, cached_at)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+             ON CONFLICT(instance_id, kind, file_name) DO UPDATE SET
+                file_size = excluded.file_size,
+                modified_at = excluded.modified_at,
+                duration_ms = excluded.duration_ms,
+                recorded_at = excluded.recorded_at,
+                minecraft_version = excluded.minecraft_version,
+                server_name = excluded.server_name,
+                singleplayer = excluded.singleplayer,
+                world_name = excluded.world_name,
+                display_name = excluded.display_name,
+                cached_at = excluded.cached_at",
+        )
+        .bind(instance_id)
+        .bind(replay.kind.db_key())
+        .bind(&replay.file_name)
+        .bind(replay_size_as_i64(replay.size))
+        .bind(replay.modified)
+        .bind(replay.duration_ms.map(|value| value as i64))
+        .bind(replay.recorded_at)
+        .bind(&replay.minecraft_version)
+        .bind(&replay.server_name)
+        .bind(replay.singleplayer.map(|value| value as i64))
+        .bind(&replay.world_name)
+        .bind(&replay.name)
+        .bind(now)
+        .execute(&mut *tx)
+        .await?;
+    }
+
+    for (kind, file_name) in stale {
+        sqlx::query(
+            "DELETE FROM studio_replay_metadata_cache
+             WHERE instance_id = ? AND kind = ? AND file_name = ?",
+        )
+        .bind(instance_id)
+        .bind(kind.db_key())
+        .bind(file_name)
+        .execute(&mut *tx)
+        .await?;
+    }
+
+    tx.commit().await?;
+    Ok(())
 }
 
 fn pretty_name(file_name: &str) -> String {

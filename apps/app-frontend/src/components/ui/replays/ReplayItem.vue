@@ -5,7 +5,14 @@
 	new row style, so the Replays tab looks consistent with the Worlds tab.
 -->
 <script setup lang="ts">
-import { EditIcon, FolderOpenIcon, MoreVerticalIcon, TrashIcon, VideoIcon } from '@modrinth/assets'
+import {
+	CheckIcon,
+	EditIcon,
+	FolderOpenIcon,
+	MoreVerticalIcon,
+	TrashIcon,
+	VideoIcon,
+} from '@modrinth/assets'
 import {
 	BulletDivider,
 	commonMessages,
@@ -19,15 +26,28 @@ import { onMounted, ref } from 'vue'
 
 import { getReplayThumbnail, type Replay } from '@/helpers/replays'
 
-const props = defineProps<{
-	replay: Replay
-	instanceId: string
-}>()
+const props = withDefaults(
+	defineProps<{
+		replay: Replay
+		instanceId: string
+		selected?: boolean
+		// Modrinth Studios addition: whether *any* replay is currently
+		// selected across the whole list — keeps every row's checkbox
+		// visible (not just the hovered one) once a selection is active, the
+		// same reveal behavior the Library's instance cards use.
+		selectionActive?: boolean
+	}>(),
+	{
+		selected: false,
+		selectionActive: false,
+	},
+)
 
 const emit = defineEmits<{
 	'open-folder': []
 	rename: []
 	delete: []
+	'toggle-selection': []
 }>()
 
 const { formatMessage } = useVIntl()
@@ -55,6 +75,8 @@ const messages = defineMessages({
 		id: 'app.instance.replays.more-options',
 		defaultMessage: 'More options',
 	},
+	select: { id: 'app.instance.replays.select', defaultMessage: 'Select' },
+	deselect: { id: 'app.instance.replays.deselect', defaultMessage: 'Deselect' },
 	openFolder: {
 		id: 'app.instance.replays.open-folder',
 		defaultMessage: 'Open folder',
@@ -93,8 +115,36 @@ function formatFileSize(bytes: number): string {
 
 <template>
 	<div
-		class="clickable-card grid grid-cols-[auto_minmax(0,3fr)_minmax(0,4fr)_auto] items-center gap-2 p-3 bg-bg-raised border border-solid border-surface-4 rounded-[20px] transition-[filter] ease-out min-h-20"
+		class="clickable-card group/replay-row grid grid-cols-[auto_auto_minmax(0,3fr)_minmax(0,4fr)_auto] items-center gap-2 p-3 bg-bg-raised border border-solid border-surface-4 rounded-[20px] transition-[filter] ease-out min-h-20"
+		:class="{ '!border-brand': selected }"
 	>
+		<!--
+			Modrinth Studios addition: bulk-selection checkbox — mirrors the
+			Library instance card's circular selection toggle (same visual
+			language), reveal-on-hover unless a selection is already active
+			somewhere in the list, in which case every row keeps its checkbox
+			visible so it reads as "you're in selection mode" rather than
+			needing to re-hover each row.
+		-->
+		<button
+			type="button"
+			class="flex items-center justify-center size-6 shrink-0 rounded-full border-0 bg-transparent p-0 cursor-pointer opacity-0 transition-opacity duration-150 ease-out group-hover/replay-row:opacity-100 focus-visible:opacity-100"
+			:class="{ '!opacity-100': selected || selectionActive }"
+			:aria-label="formatMessage(selected ? messages.deselect : messages.select)"
+			:aria-pressed="selected"
+			@click.stop="emit('toggle-selection')"
+		>
+			<span
+				class="relative flex items-center justify-center size-5 rounded-full"
+				:class="
+					selected
+						? 'bg-brand'
+						: 'border-2 border-solid border-secondary bg-transparent hover:border-primary'
+				"
+			>
+				<CheckIcon v-if="selected" class="size-3.5 [stroke-width:3]" />
+			</span>
+		</button>
 		<div
 			class="flex items-center justify-center size-12 shrink-0 overflow-hidden !rounded-[14px]"
 			:class="

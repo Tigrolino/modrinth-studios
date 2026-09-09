@@ -33,7 +33,7 @@ pub async fn replays_has_any(instance_id: &str) -> Result<bool> {
 #[tauri::command]
 pub async fn replays_list(instance_id: &str) -> Result<Vec<Replay>> {
     let instance = get_full_path(instance_id).await?;
-    Ok(replays::list_replays(&instance).await?)
+    Ok(replays::list_replays(&instance, instance_id).await?)
 }
 
 #[tauri::command]

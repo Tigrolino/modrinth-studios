@@ -79,6 +79,13 @@ const STUDIO_MIGRATIONS: &[StudioMigration] = &[
             "../../studio-migrations/20260830120000_studio-discord-rpc-settings.sql"
         ),
     },
+    StudioMigration {
+        version: 20260909120000,
+        description: "studio-replay-metadata-cache",
+        sql: include_str!(
+            "../../studio-migrations/20260909120000_studio-replay-metadata-cache.sql"
+        ),
+    },
 ];
 
 async fn ensure_table(pool: &Pool<Sqlite>) -> crate::Result<()> {
