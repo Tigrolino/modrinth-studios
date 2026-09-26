@@ -1,0 +1,12 @@
+# Maps each package's source (en-US) locale file to where its translated
+# copies live, for scripts/i18n-icu-contract.ts's "prune-local" command
+# (pnpm --filter <pkg> run intl:prune-local). This used to be crowdin.yml,
+# feeding Modrinth's Crowdin-based translation sync — this fork doesn't use
+# Crowdin, so only the mapping the local pruning check still needs is kept.
+files:
+  - source: /apps/app-frontend/src/locales/en-US/*.json
+    dest: /app/%original_file_name%
+    translation: /apps/app-frontend/src/locales/%locale%/%original_file_name%
+  - source: /packages/ui/src/locales/en-US/*.json
+    dest: /ui/%original_file_name%
+    translation: /packages/ui/src/locales/%locale%/%original_file_name%
