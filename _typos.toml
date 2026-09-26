@@ -1,14 +1,5 @@
 [files]
-extend-exclude = [
-  "**/src/locales/",
-  "apps/frontend/",
-  "patches/",
-  "packages/utils/",
-  "packages/ui/",
-  "packages/blog/",
-  # contains payment card IDs like `IY1VMST1MOXS` which are flagged
-  "apps/labrinth/src/queue/payouts/mod.rs"
-]
+extend-exclude = ["**/src/locales/", "patches/", "packages/utils/", "packages/ui/"]
 
 [default]
 extend-ignore-re = [

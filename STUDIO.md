@@ -1496,11 +1496,10 @@ useful" instead.
 2. `git tag studio-v0.1.2 && git push myfork studio-v0.1.2` (match the number you just set, bump
    each time).
 3. `.github/workflows/studio-release.yml` builds the Windows app, signs it with our updater key,
-   and publishes a GitHub release — to the separate **public releases repo**
-   (`Tigrolino/modrinth-studios-releases`), not this private source repo — with the files the
+   and publishes a GitHub release on this repo (`Tigrolino/modrinth-studios`) with the files the
    in-app updater expects.
 4. Everyone running the app gets the update prompt automatically (Modrinth's built-in updater,
-   pointed at `Tigrolino/modrinth-studios-releases` releases instead of Modrinth's own servers).
+   pointed at `Tigrolino/modrinth-studios` releases instead of Modrinth's own servers).
 
 ### Windows update install mode
 
@@ -1524,70 +1523,48 @@ If it still fails, the launcher's own logs are the next thing to check —
 failed update), search for `Pending update install`. `Ok` vs the exact error on `Err` narrows it
 down a lot faster than guessing.
 
-### Why releases live in a separate public repo
+### Releases live on this repo — and that requires it to stay public
 
-The source stays in this private repo, but release *artifacts* (the installer, `latest.json`,
-signatures) are published to a second, public, code-free repo. Two reasons this is necessary,
-not just a preference:
+Earlier versions of this fork published releases to a separate `modrinth-studios-releases` repo
+while this one was private, for one hard technical reason: Tauri's updater sends a plain
+unauthenticated request to `releases/latest/download/latest.json`, and GitHub does not support
+token auth on that URL shape at all (only its separate asset-by-ID REST API supports tokens,
+which the built-in updater doesn't use). A private repo's release URLs simply don't work for
+that request, logged in or not.
 
-- **Friends without GitHub access to this repo need a plain download link.** A public repo's
-  release page and `releases/download/...` URLs work for anyone, logged in or not.
-- **The in-app updater can't authenticate against a private repo anyway.** Tauri's updater sends
-  a plain unauthenticated request to `releases/latest/download/latest.json`. GitHub does not
-  support token auth on that URL shape for private repos at all (only its separate
-  asset-by-ID REST API supports tokens, which the built-in updater doesn't use) — so a private
-  releases repo would break auto-updates for everyone, including you.
-
-Making *this* repo public instead was the simpler alternative (Modrinth App's own license is
-GPL-3.0, so there's no real confidentiality being protected by staying private), but the
-two-repo split was chosen instead so the source stays private.
+That's been consolidated: releases now publish directly to this repo
+(`Tigrolino/modrinth-studios`), which only works because the repo itself is public. **If this
+repo ever goes private again, both the in-app updater and anyone downloading a release without
+a GitHub login will break until it's public again.** There's no way around that short of going
+back to the separate-repo split — it's a direct consequence of removing it.
 
 ### One-time repo setup for releases
 
-**1. Create the public releases repo.** On GitHub, create a new repository named
-`modrinth-studios-releases` under the `Tigrolino` account, set to **Public**, initialized with a
-README (so it has a `main` branch — the release workflow needs one to exist). Nothing else needs
-to go in it; it only ever holds releases created by the workflow below.
-
-**2. Create a token that can publish releases there.** The workflow's default `GITHUB_TOKEN` is
-auto-scoped to the repo the workflow runs in (this private repo) and can't touch a different
-repo, so a personal token is needed instead:
-
-- GitHub → Settings (your account, not the repo) → Developer settings → Fine-grained tokens →
-  Generate new token.
-- Resource owner: `Tigrolino`. Repository access: "Only select repositories" →
-  `modrinth-studios-releases`.
-- Permissions: **Contents: Read and write** (that's the only one release creation needs).
-- Set an expiration you're comfortable renewing later, generate it, and copy the token.
-
-**3. Add it as a secret on the *private* (source) repo** — Settings → Secrets and variables →
-Actions → New repository secret:
-
-- Name: `RELEASE_REPO_TOKEN`
-- Value: the token from step 2
-
-Plus the two secrets that were already required:
+Two repo secrets, both under Settings → Secrets and variables → Actions → New repository secret:
 
 - `TAURI_SIGNING_PRIVATE_KEY`
 - `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` (blank/empty value — the key has no password)
 
-The keypair itself was generated during setup and given to you separately (not committed to
-git, on purpose — anyone with the private key could sign fake "updates" for everyone running
+The workflow's default `GITHUB_TOKEN` already has `contents: write` on this repo (see the
+`permissions:` block in `studio-release.yml`), so no extra token is needed — the release publishes
+straight to wherever the workflow is running.
+
+The signing keypair itself was generated during setup and given to you separately (not committed
+to git, on purpose — anyone with the private key could sign fake "updates" for everyone running
 the app). If it's ever lost, generate a new one with `pnpm tauri signer generate`, update
 `plugins.updater.pubkey` in `apps/app/tauri-release.conf.json` with the new public key, and
 re-save the two secrets above.
 
-There's no real code-signing certificate here (Modrinth's own builds use a paid DigiCert cert
-we don't have access to), so Windows SmartScreen will show an "unknown publisher" warning on
-install. That's expected for a private, unlisted build — just click through it.
+There's no real code-signing certificate here (Modrinth's own builds use a paid DigiCert cert we
+don't have access to), so Windows SmartScreen will show an "unknown publisher" warning on
+install — expected for an unofficial build, just click through it.
 
-**Giving friends the download link**: once a release has published, send them
-`https://github.com/Tigrolino/modrinth-studios-releases/releases/latest` — no GitHub account
-needed to download from a public repo's release page.
+**Giving people the download link**: once a release has published, send them
+`https://github.com/Tigrolino/modrinth-studios/releases/latest`.
 
 ## Licensing note
 
-Modrinth App is source-available but not permissively licensed for redistribution (see
-`COPYING.md`/`LICENSE` in this repo). Since this fork stays private and is only ever shared
-directly with people you know, that's a non-issue in practice — just don't make the repo public
-or distribute builds beyond your friend group.
+Modrinth App's code is GPL-3.0 (LGPL-3.0 for `packages/api-client`) — see `COPYING.md` and each
+package's own `LICENSE` file in this repo. Modrinth's branding (the wrench-in-labyrinth logo,
+cover images) isn't covered by that license and has been stripped from this fork; anything with
+that branding still attached would need Rinth, Inc.'s permission to redistribute.

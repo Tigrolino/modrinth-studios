@@ -1,71 +1,40 @@
-# Modrinth Monorepo
+# Modrinth Studios
 
-This is the Modrinth monorepo — it contains all Modrinth projects, both frontend and backend. When entering a project, either to edit or analyse, you should read its AGENTS.md.
+This is a personal fork of the Modrinth App (desktop launcher only — the upstream monorepo also includes Modrinth's website and backend, both of which have been stripped out of this repo since they're not part of what gets built here). See [STUDIO.md](STUDIO.md) for what's actually been changed from upstream and why.
 
 ## Architecture
 
-- **Monorepo tooling:** [Turborepo](https://turbo.build/) (`turbo.jsonc`) + [pnpm workspaces](https://pnpm.io/workspaces) (`pnpm-workspace.yaml`)
-- **Frontend:** Vue 3 / Nuxt 3, Tailwind CSS v3
-- **Backend:** Rust (Labrinth API), Postgres, Clickhouse
+- **Monorepo tooling:** [Turborepo](https://turbo.build/) (`turbo.jsonc`) + [pnpm workspaces](https://pnpm.io/workspaces) (`pnpm-workspace.yaml`) for the frontend, a Cargo workspace (`Cargo.toml`) for Rust
+- **Frontend:** Vue 3, Tailwind CSS v3
+- **Backend logic:** Rust, embedded in the app itself via `packages/app-lib` — there's no server
 - **Indentation:** Use TAB everywhere, never spaces
 
 ### Apps (`apps/`)
 
-| App               | Description                    |
-| ----------------- | ------------------------------ |
-| `frontend`        | Main Modrinth website (Nuxt 3) |
-| `app-frontend`    | Desktop/app frontend (Vue 3)   |
-| `app`             | Desktop/app shell (Tauri)      |
-| `app-playground`  | Testing playground for app     |
-| `labrinth`        | Backend API service            |
-| `daedalus_client` | Daedalus client implementation |
-| `docs`            | Documentation site (Astro)     |
+| App            | Description                |
+| -------------- | --------------------------- |
+| `app`          | Desktop app shell (Tauri)  |
+| `app-frontend` | Desktop app frontend (Vue) |
 
 ### Packages (`packages/`)
 
-| Package            | Description                                           |
-| ------------------ | ----------------------------------------------------- |
-| `ui`               | Shared Vue component library (`@modrinth/ui`)         |
-| `assets`           | Styling and auto-generated icons (`@modrinth/assets`) |
-| `api-client`       | API client for Nuxt, Tauri, and Node/browser          |
-| `app-lib`          | Shared app library                                    |
-| `blog`             | Blog system and changelog data                        |
-| `utils`            | Shared utility functions (mostly deprecated)          |
-| `moderation`       | Moderation utilities                                  |
-| `daedalus`         | Daedalus protocol                                     |
-| `tooling-config`   | ESLint, Prettier, TypeScript configs                  |
-| `ariadne`          | Analytics library                                     |
-| `modrinth-log`     | Logging utilities                                     |
-| `modrinth-maxmind` | MaxMind GeoIP                                         |
-| `modrinth-util`    | General utilities                                     |
-| `muralpay`         | Payment processing                                    |
-| `path-util`        | Path utilities                                        |
-| `sqlx-tracing`     | SQLx query tracing                                    |
-
-## Pre-PR Commands
-
-Run these from the **root** folder before opening a pull request - do not run these after each prompt the user gives you, only run when asked, ask the user a question if they want to run it if the user indicates that they are about to create a pull request.
-
-- **Website:** `pnpm prepr:frontend:web`
-- **App frontend:** `pnpm prepr:frontend:app`
-- **Frontend libs:** `pnpm prepr:frontend:lib`
-- **All frontend (app+web):** `pnpm prepr`
-- **Labrinth (backend):** See `apps/labrinth/AGENTS.md`
-
-The website and app `prepr` commands
+| Package          | Description                                    |
+| ---------------- | ----------------------------------------------- |
+| `ui`             | Shared Vue component library (`@modrinth/ui`)  |
+| `assets`         | Styling and auto-generated icons (`@modrinth/assets`) |
+| `api-client`     | API client for the app                         |
+| `app-lib`        | Core launcher logic — instances, mods, auth, etc. |
+| `utils`          | Shared utility functions (mostly deprecated — prefer `api-client` types) |
+| `daedalus`       | Daedalus protocol (Minecraft version metadata) |
+| `ariadne`        | Analytics library                              |
+| `path-util`      | Path utilities                                 |
+| `modrinth-content-management` | Content management helpers       |
+| `serde-binhum`   | Binary/human serialization helper              |
 
 ## Dev Commands
 
-- **Website:** `pnpm web:dev` (copy `.env` template in `apps/frontend/` first)
-- **App:** `pnpm app:dev` (copy `.env` template in `packages/app-lib/` first)
+- **App:** `pnpm app:dev` (copy `packages/app-lib/.env.prod` to `packages/app-lib/.env` first)
 - **Storybook (packages/ui):** `pnpm storybook`
-
-## Project-Specific Instructions
-
-Each project may have its own file with detailed instructions:
-
-- [`apps/labrinth/AGENTS.md`](apps/labrinth/AGENTS.md) — Backend API
-- [`apps/frontend/AGENTS.md`](apps/frontend/AGENTS.md) - Frontend Website
 
 ## Code Guidelines
 
@@ -87,7 +56,7 @@ Each project may have its own file with detailed instructions:
 ### General
 
 - Do not create new non-source code files (e.g. Bash scripts, SQL scripts) unless explicitly prompted to
-- For Frontend, when doing lint checks, only use the `prepr` commands, do not use `typecheck` or `tsc` etc.
+- For frontend lint checks, use the `prepr:frontend:app` command, not `typecheck` or `tsc` etc.
 - Types in `@modrinth/utils` are considered highly outdated, if a component needs them, check if you can switch said component to use types from `packages/api-client`
 - When provided problems, do not say "I didn't introduce these problems" (shifting the blame/effort) - just fix them.
 
