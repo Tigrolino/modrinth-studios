@@ -57,12 +57,13 @@
 <script setup>
 import { injectLoadingState, TextLogo } from '@modrinth/ui'
 import { convertFileSrc } from '@tauri-apps/api/core'
-import { computed, ref, watch } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 
 import ProgressBar from '@/components/ui/ProgressBar.vue'
 import { useAppEvent } from '@/composables/use-app-event'
 import { SPLASH_PREVIEW_DURATION_MS, splashPreviewActive } from '@/composables/use-splash-preview'
 import { useStudioAppearance } from '@/composables/use-studio-appearance'
+import { debugStartup } from '@/helpers/startup-debug'
 
 const doneLoading = ref(false)
 const loadingProgress = ref(0)
@@ -129,14 +130,17 @@ const MIN_DISPLAY_MS = 500
 const mountedAt = Date.now()
 
 const loading = injectLoadingState()
+onMounted(() => debugStartup('Splash mounted'))
 
 function onAfterLeave() {
+	debugStartup('Splash fade completed', { displayedMs: Date.now() - mountedAt })
 	loading.setEnabled(true)
 }
 
 watch(
 	[loading.barEnabled, loading.pending],
 	([barEnabled, pending]) => {
+		debugStartup('Splash loading state changed', { barEnabled, pending })
 		if (barEnabled) {
 			return
 		}
@@ -149,12 +153,15 @@ watch(
 
 		const elapsed = Date.now() - mountedAt
 		const delay = Math.max(0, MIN_DISPLAY_MS - elapsed)
+		debugStartup('Splash dismissal scheduled', { delayMs: delay, displayedMs: elapsed })
 
 		setTimeout(() => {
 			if (loading.pending.value) {
+				debugStartup('Splash dismissal deferred: new loading work')
 				return
 			}
 			doneLoading.value = true
+			debugStartup('Splash fade started', { displayedMs: Date.now() - mountedAt })
 		}, delay)
 	},
 	{ immediate: true },

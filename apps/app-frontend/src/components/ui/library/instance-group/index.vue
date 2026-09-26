@@ -64,7 +64,7 @@ const props = withDefaults(
 
 const { formatMessage } = useVIntl()
 const appSettings = useAppSettings()
-const compactMode = computed(() => appSettings.getFeatureFlag('compact_instance_cards'))
+const compactMode = computed(() => appSettings.compactInstanceCards)
 const { addNotification } = injectNotificationManager()
 const {
 	isSectionCollapsed,
@@ -151,7 +151,9 @@ const columnCount = computed(() =>
 // edge to edge.
 const cardWidth = computed(() => minCardWidth.value)
 const cardHeight = computed(() =>
-	compactMode.value ? remSize.value * 3.875 : Math.max(0, cardWidth.value) + remSize.value * 3.375,
+	compactMode.value
+		? remSize.value * 3.875 + 2
+		: Math.max(0, cardWidth.value) + remSize.value * 3.375,
 )
 const gridHeight = computed(() =>
 	Math.max(

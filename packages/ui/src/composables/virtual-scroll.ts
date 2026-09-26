@@ -196,6 +196,7 @@ export function useVirtualScroll<T>(items: Ref<T[]>, options: VirtualScrollOptio
 	} = options
 
 	const {
+		containerOffset,
 		listContainer,
 		relativeScrollTop,
 		resetScrollState,
@@ -312,6 +313,15 @@ export function useVirtualScroll<T>(items: Ref<T[]>, options: VirtualScrollOptio
 		return result
 	})
 
+	function scrollToIndex(index: number) {
+		if (index < 0 || index >= items.value.length) return
+		syncScrollState()
+		if (!listContainer.value || !scrollContainer.value) return
+		const top = containerOffset.value + index * itemHeight - (viewportHeight.value - itemHeight) / 2
+		scrollContainer.value.scrollTo({ top: Math.max(0, top), behavior: 'instant' })
+		syncScrollState()
+	}
+
 	function checkNearEnd() {
 		if (!onNearEnd || !listContainer.value || !viewportHeight.value) return
 
@@ -334,6 +344,7 @@ export function useVirtualScroll<T>(items: Ref<T[]>, options: VirtualScrollOptio
 		visibleTop,
 		visibleItems,
 		visibleItemLayout,
+		scrollToIndex,
 		resetScrollState,
 		syncScrollState,
 	}

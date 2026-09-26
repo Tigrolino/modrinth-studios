@@ -50,9 +50,6 @@
   "app.action-bar.install.summary.download-failed": {
     "message": "Preuzimanje nije završeno"
   },
-  "app.action-bar.install.summary.instance-not-found": {
-    "message": "Instanca nije pronađena"
-  },
   "app.action-bar.install.summary.invalid-file-path": {
     "message": "Put do datoteke nije ispravan"
   },
@@ -91,9 +88,6 @@
   },
   "app.action-bar.install.updating-shared-content": {
     "message": "Ažuriranje deljenog sadržaja"
-  },
-  "app.action-bar.installs": {
-    "message": "Instalacije"
   },
   "app.action-bar.make-primary-instance": {
     "message": "Učini primarnom instancom"

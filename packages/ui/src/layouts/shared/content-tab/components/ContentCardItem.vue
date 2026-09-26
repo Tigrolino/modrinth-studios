@@ -2,7 +2,7 @@
 import {
 	ArrowLeftRightIcon,
 	DownloadIcon,
-	LinkIcon,
+	Link2Icon,
 	LockIcon,
 	MoreVerticalIcon,
 	SpinnerIcon,
@@ -124,6 +124,8 @@ const props = withDefaults(defineProps<Props>(), {
 
 const selected = defineModel<boolean>('selected')
 
+const projectTitle = computed(() => props.project.title.replace(/§[0-9a-fk-orx]/gi, ''))
+
 const emit = defineEmits<{
 	'update:enabled': [value: boolean]
 	select: [value: boolean, event?: MouseEvent]
@@ -190,7 +192,7 @@ const installTooltip = computed(() => {
 			<Checkbox
 				v-if="showCheckbox"
 				:model-value="selected ?? false"
-				:aria-label="formatMessage(messages.selectProject, { project: project.title })"
+				:aria-label="formatMessage(messages.selectProject, { project: projectTitle })"
 				:disabled="isDisabled"
 				class="shrink-0"
 				@update:model-value="(value, event) => emit('select', value, event)"
@@ -203,7 +205,7 @@ const installTooltip = computed(() => {
 				<div v-tooltip="installTooltip" class="relative flex shrink-0 items-center">
 					<Avatar
 						:src="project.icon_url"
-						:alt="project.title"
+						:alt="projectTitle"
 						size="3rem"
 						no-shadow
 						class="rounded-2xl border border-surface-5"
@@ -233,18 +235,17 @@ const installTooltip = computed(() => {
 							class="truncate font-semibold leading-6 text-contrast !decoration-contrast"
 							:class="{ 'hover:underline': projectLink }"
 						>
-							{{ project.title }}
+							{{ projectTitle }}
 						</AutoLink>
 						<slot name="title-badges" />
 						<span
 							v-if="synced && hideActions"
 							v-tooltip="syncStatusLabel"
-							:aria-label="syncStatusLabel"
 							role="img"
-							class="inline-flex size-5 shrink-0 cursor-help items-center justify-center"
+							class="inline-flex shrink-0 cursor-help items-center justify-center rounded-full border border-solid border-brand-blue bg-highlight-blue px-2.5 py-1 text-brand-blue"
 							tabindex="0"
 						>
-							<LinkIcon class="size-4 text-blue" aria-hidden="true" />
+							<Link2Icon class="size-5" aria-hidden="true" />
 						</span>
 						<span
 							v-if="isClientOnly"
@@ -373,12 +374,11 @@ const installTooltip = computed(() => {
 			<span
 				v-if="synced"
 				v-tooltip="syncStatusLabel"
-				:aria-label="syncStatusLabel"
 				role="img"
 				tabindex="0"
-				class="inline-flex size-9 shrink-0 cursor-help items-center justify-center rounded-xl text-blue focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-brand-shadow"
+				class="inline-flex shrink-0 cursor-help items-center justify-center rounded-full border border-solid border-brand-blue bg-highlight-blue px-2.5 py-1 text-brand-blue focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-brand-shadow"
 			>
-				<LinkIcon class="size-5" aria-hidden="true" />
+				<Link2Icon class="size-5" aria-hidden="true" />
 			</span>
 
 			<!-- Fixed width container to reserve space for update/switch version button -->
@@ -448,7 +448,7 @@ const installTooltip = computed(() => {
 				"
 				:model-value="enabled"
 				:disabled="isToggleDisabled"
-				:aria-label="project.title"
+				:aria-label="projectTitle"
 				class="my-auto"
 				@update:model-value="(val) => emit('update:enabled', val as boolean)"
 			/>
