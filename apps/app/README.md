@@ -1,5 +1,3 @@
-# ![Modrinth App](/.github/assets/app_cover.png)
-
 ## Modrinth App
 
 The Modrinth App is a desktop application for managing your Minecraft mods. It is built with [Tauri](https://tauri.app/) and [Vue](https://vuejs.org/).

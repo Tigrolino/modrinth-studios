@@ -1,50 +1,58 @@
-# ![Modrinth Studios](/.github/assets/monorepo_cover.png)
+# Modrinth Studios
 
-## Modrinth Studios
+Modrinth Studios is a fork of the [Modrinth App](https://modrinth.com/app), the official Minecraft mod/modpack launcher, with a set of extra features layered on top: a Replays tab for ReplayMod and Flashback recordings, shared Minecraft folders between instances, a rewritten Storage page, custom Discord Rich Presence, playtime correction, and a full appearance system covering accent colors, custom backgrounds, transparency, and window icons. It started as a personal project and grew from there.
 
-This is a private fork of the [Modrinth](https://github.com/modrinth/code) monorepo. It's the same codebase as the real Modrinth app and website, plus a set of custom features layered on top for personal use and for a small group of friends. It isn't affiliated with Modrinth or Rinth, Inc., and it isn't public.
+This isn't affiliated with Modrinth or Rinth, Inc. in any way. If you're looking for the real thing, it's at [modrinth.com](https://modrinth.com), and the official app download is [here](https://modrinth.com/app).
 
-If you somehow ended up here and you're just looking for Modrinth, the real thing lives at [modrinth.com](https://modrinth.com) and you can download the official app [here](https://modrinth.com/app).
+## What's different from upstream
 
-### What's actually different
+The features above are the headline changes, but there's more detail than fits in a README: why each one was built the way it was, and the bugs that came up along the way. All of that lives in [STUDIO.md](STUDIO.md), which gets updated whenever something changes and is the closest thing this fork has to a real changelog.
 
-The short version: same launcher, with a Replays tab, shared Minecraft folders between instances, a redesigned Storage page, custom Discord Rich Presence, playtime correction, and a full appearance system (custom accent colors, backgrounds, transparency, window icon). A couple of upstream bugs around scroll performance and modpack install speed got fixed along the way too.
+## Repository layout
 
-The long version, including why each thing was built the way it was and every bug that came up fixing it, lives in [STUDIO.md](STUDIO.md). That file is the real changelog for this fork and is kept up to date every time something changes.
+This started as a full clone of Modrinth's monorepo, which also contains the website, the backend API, and several internal tools. None of that is needed to build the desktop app, so it's been trimmed out — what's left is just the app itself and the packages it actually depends on:
+
+- `apps/app` — the Tauri/Rust shell
+- `apps/app-frontend` — the Vue UI
+- `packages/app-lib` — the core launcher logic (instance management, mod downloads, auth, etc.)
+- `packages/ui`, `packages/assets`, `packages/utils`, `packages/api-client` — shared frontend packages
+- `packages/daedalus`, `packages/ariadne`, and a few smaller Rust crates — supporting libraries the app depends on
 
 ## Development
 
-This repo is structured the same way upstream Modrinth's is. The two packages that matter for this fork:
+```sh
+pnpm install
+cp packages/app-lib/.env.prod packages/app-lib/.env
+pnpm app:dev
+```
 
-- Desktop app: `apps/app` (Tauri/Rust) and `apps/app-frontend` (Vue). Run it with `pnpm app:dev` after copying `packages/app-lib/.env.prod` to `packages/app-lib/.env`.
-- Website and API: `apps/frontend` and `apps/labrinth`, carried along from upstream and mostly untouched here.
+That gets you a dev build with hot reload. Modrinth's own contributor guide for the desktop app is still accurate for the parts of the codebase inherited from upstream, and worth a read before making changes: [docs.modrinth.com/contributing/theseus](https://docs.modrinth.com/contributing/theseus/).
 
-Modrinth's own contributor docs for these still apply and are worth reading before touching anything: the [desktop app guide](https://docs.modrinth.com/contributing/theseus/) and the [website guide](https://docs.modrinth.com/contributing/knossos/).
-
-Before adding or changing anything, read the "How this is structured" section at the top of [STUDIO.md](STUDIO.md) first. It explains how this fork stays mergeable with upstream and a gotcha with Tauri commands that has caused real bugs twice already.
+Before touching anything, read the "How this is structured" section at the top of [STUDIO.md](STUDIO.md) — it explains how this fork stays mergeable with upstream, and a Tauri command registration gotcha that's caused real bugs more than once.
 
 ## Pulling in upstream updates
 
-`main` tracks real Modrinth (`origin`) untouched. `studio` is the branch with everything custom on it, and it's what actually gets built and released. To pull in a new Modrinth release:
+`main` tracks real Modrinth (`origin`) untouched. `studio` is the branch with everything custom on it, and it's what actually gets built and released.
 
 ```sh
 git checkout main
 git pull origin main
 git checkout studio
 git merge main
-git push myfork studio
 ```
 
-Then bump the version and tag a release, both covered in STUDIO.md's "Releasing an update" section.
+STUDIO.md's "Releasing an update" section covers bumping the version and tagging a release after that.
+
+## License
+
+Modrinth's code is split across packages, each under its own license — GPL-3.0 for `apps/app`, `apps/app-frontend`, `packages/ui`, `packages/assets`, and `packages/utils`; LGPL-3.0 for `packages/api-client`. Check the `LICENSE` file in a given package for specifics. Everything changed or added in this fork stays under the same terms as the code it touches.
+
+Modrinth's branding — the wrench-in-labyrinth logo, cover images, and so on — isn't covered by that and can't be reused without permission from Rinth, Inc. See [COPYING.md](COPYING.md) for the full list of what that covers; this fork doesn't ship any of it.
 
 ## Security
 
-This is a private fork run for personal use. If something looks like a real security issue in the parts of the code inherited from upstream Modrinth, it should go through Modrinth's own [responsible disclosure process](https://modrinth.com/legal/security), not this repo.
+If you find a security issue in code inherited from upstream Modrinth, report it through Modrinth's own [disclosure process](https://modrinth.com/legal/security) rather than here. This fork doesn't run any of its own backend services or handle user data beyond what the official app already does.
 
 ## Support
 
-There's no support channel for this fork beyond whoever's running it. For anything related to actual Modrinth (the website, the official app, accounts, mods), use their [support page](https://support.modrinth.com) or [Discord](https://discord.modrinth.com).
-
-## License and branding
-
-Modrinth's code is source-available but not licensed for redistribution, and its branding (logo, cover images, and so on) can't be reused without permission. See [COPYING.md](COPYING.md) for the details. This fork stays private and is only ever shared directly with people who already know what it is, which is what keeps that a non-issue in practice. It's not published anywhere public and builds aren't distributed outside that.
+There's no formal support channel for this fork. For anything about the actual Modrinth platform — the website, the official app, accounts — use their [support page](https://support.modrinth.com) or [Discord](https://discord.modrinth.com).
