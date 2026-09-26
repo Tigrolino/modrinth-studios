@@ -1497,10 +1497,10 @@ useful" instead.
    each time).
 3. `.github/workflows/studio-release.yml` builds the Windows app, signs it with our updater key,
    and publishes a GitHub release — to the separate **public releases repo**
-   (`speedzing/modrinth-studios-releases`), not this private source repo — with the files the
+   (`Tigrolino/modrinth-studios-releases`), not this private source repo — with the files the
    in-app updater expects.
 4. Everyone running the app gets the update prompt automatically (Modrinth's built-in updater,
-   pointed at `speedzing/modrinth-studios-releases` releases instead of Modrinth's own servers).
+   pointed at `Tigrolino/modrinth-studios-releases` releases instead of Modrinth's own servers).
 
 ### Windows update install mode
 
@@ -1545,7 +1545,7 @@ two-repo split was chosen instead so the source stays private.
 ### One-time repo setup for releases
 
 **1. Create the public releases repo.** On GitHub, create a new repository named
-`modrinth-studios-releases` under the `speedzing` account, set to **Public**, initialized with a
+`modrinth-studios-releases` under the `Tigrolino` account, set to **Public**, initialized with a
 README (so it has a `main` branch — the release workflow needs one to exist). Nothing else needs
 to go in it; it only ever holds releases created by the workflow below.
 
@@ -1555,7 +1555,7 @@ repo, so a personal token is needed instead:
 
 - GitHub → Settings (your account, not the repo) → Developer settings → Fine-grained tokens →
   Generate new token.
-- Resource owner: `speedzing`. Repository access: "Only select repositories" →
+- Resource owner: `Tigrolino`. Repository access: "Only select repositories" →
   `modrinth-studios-releases`.
 - Permissions: **Contents: Read and write** (that's the only one release creation needs).
 - Set an expiration you're comfortable renewing later, generate it, and copy the token.
@@ -1582,7 +1582,7 @@ we don't have access to), so Windows SmartScreen will show an "unknown publisher
 install. That's expected for a private, unlisted build — just click through it.
 
 **Giving friends the download link**: once a release has published, send them
-`https://github.com/speedzing/modrinth-studios-releases/releases/latest` — no GitHub account
+`https://github.com/Tigrolino/modrinth-studios-releases/releases/latest` — no GitHub account
 needed to download from a public repo's release page.
 
 ## Licensing note

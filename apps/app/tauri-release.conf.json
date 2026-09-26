@@ -14,7 +14,7 @@
 		"updater": {
 			"pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEI0NzRGMjlCNjRBMDgyN0MKUldSOGdxQmttL0owdEwzeVhaUk9OMERsMk01cTVhakhRUlkraUdPblY2ZmdIcDRvS0d3M2N3SkcK",
 			"endpoints": [
-				"https://github.com/speedzing/modrinth-studios-releases/releases/latest/download/latest.json"
+				"https://github.com/Tigrolino/modrinth-studios-releases/releases/latest/download/latest.json"
 			],
 			"windows": {
 				"installMode": "passive"

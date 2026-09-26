@@ -87,7 +87,7 @@ jobs:
           # Publish to the separate public releases-only repo instead of
           # this (private) source repo — see the comment at the top of this
           # file and STUDIO.md for why.
-          owner: speedzing
+          owner: Tigrolino
           repo: modrinth-studios-releases
           # The releases repo has no commit matching this tag (it's a
           # different git history entirely), so tell the action which
@@ -96,7 +96,7 @@ jobs:
           tagName: ${{ github.ref_name }}
           releaseName: 'Modrinth Studios ${{ github.ref_name }}'
           releaseBody: |
-            Auto-built from speedzing/modrinth-studios@${{ github.sha }}. Friends running the
+            Auto-built from Tigrolino/modrinth-studios@${{ github.sha }}. Friends running the
             app can update from Settings once this release finishes publishing.
           releaseDraft: false
           prerelease: false
