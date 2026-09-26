@@ -84,3 +84,7 @@ packages/tooling-config/script-utils/import-sort.js
 # (e.g. pnpm's temp-file cleanup failing with EPERM on certain network/FUSE
 # mounts).
 _tmp_*
+
+# Old, unedited STUDIO.md kept around locally as a personal history/reference.
+# Not meant for the repo.
+STUDIO_HISTORY.md
