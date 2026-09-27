@@ -4,6 +4,14 @@ Modrinth Studios is a fork of the [Modrinth App](https://modrinth.com/app), the 
 
 This isn't affiliated with Modrinth or Rinth, Inc. in any way. If you're looking for the real thing, it's at [modrinth.com](https://modrinth.com), and the official app download is [here](https://modrinth.com/app).
 
+## AI notice
+
+This fork was coded with AI. I've reviewed every function and made sure I understand and
+approve of the changes, but there may still be issues I haven't discovered - if you come across
+anything that seems incorrect or broken, please report it to me.
+
+I also want to be transparent about my views on AI. I don't fully support its use in every context, and I believe there are areas where it shouldn't be used, such as the creation of images or videos. However, I found that adding these QoL features made the Modrinth launcher much more useful to me, which is why I decided to make this fork. I wanted to be upfront about how AI was used in the project and provide some context for why I chose to use it.
+
 ## What's different from upstream
 
 The list above covers the highlights, but [STUDIO.md](STUDIO.md) goes into more detail on each one and is kept up to date as things change.
