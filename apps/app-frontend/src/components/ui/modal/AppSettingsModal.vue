@@ -295,8 +295,8 @@ const { data: appInfo } = useQuery({
 // upstream commit this fork last synced with — shown here (with a link to
 // it on GitHub) instead of a version number that doesn't really exist.
 // Update this pair whenever pulling newer upstream changes in.
-const UPSTREAM_BASE_COMMIT = 'dcc3b8a10'
-const UPSTREAM_BASE_DATE = '2026-09-23'
+const UPSTREAM_BASE_COMMIT = '23ab5cdc3'
+const UPSTREAM_BASE_DATE = '2026-09-27'
 function openUpstreamCommit() {
 	void openUrl(`https://github.com/modrinth/code/commit/${UPSTREAM_BASE_COMMIT}`)
 }
