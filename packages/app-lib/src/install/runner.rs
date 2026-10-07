@@ -1248,7 +1248,9 @@ async fn apply_post_install_edit(
         edit.icon_path = Some(icon_path);
     }
 
-    crate::api::instance::edit(
+    // Modrinth Studios: don't rename the folder mid-install (see
+    // edit_keep_folder).
+    crate::api::instance::edit_keep_folder(
         instance_id,
         crate::state::instances::commands::EditInstance {
             name: edit.name,
