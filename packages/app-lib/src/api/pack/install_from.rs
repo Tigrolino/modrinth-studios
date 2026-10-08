@@ -644,7 +644,10 @@ pub async fn set_instance_information(
         }
         _ => None,
     };
-    crate::api::instance::edit(
+    // Modrinth Studios: never rename the folder mid-install (see
+    // edit_keep_folder); it's still busy and Windows refuses with
+    // "Access is denied".
+    crate::api::instance::edit_keep_folder(
         &instance_id,
         EditInstance {
             install_stage: Some(InstanceInstallStage::PackInstalling),

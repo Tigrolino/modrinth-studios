@@ -385,7 +385,7 @@ pub(super) async fn apply_shared_instance_update(
         .await?;
     }
 
-    crate::api::instance::edit(
+    crate::api::instance::edit_keep_folder(
         instance_id,
         crate::state::EditInstance {
             name: Some(data.name.clone()),
@@ -713,7 +713,7 @@ pub(super) async fn apply_shared_instance_content(
         }
     }
 
-    crate::api::instance::edit(
+    crate::api::instance::edit_keep_folder(
         instance_id,
         crate::state::EditInstance {
             name: Some(data.name.clone()),

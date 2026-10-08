@@ -232,7 +232,7 @@ async fn import_atlauncher_unmanaged(
         }
         _ => None,
     };
-    crate::api::instance::edit(
+    crate::api::instance::edit_keep_folder(
         instance_id,
         EditInstance {
             install_stage: Some(InstanceInstallStage::PackInstalling),
