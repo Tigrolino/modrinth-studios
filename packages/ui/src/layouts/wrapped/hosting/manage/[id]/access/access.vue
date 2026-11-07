@@ -91,6 +91,14 @@
 			:friend-ids="friendIds"
 			:search-users="searchInviteUsers"
 			:can-grant="canManageUsers"
+			:target-label="isPteroServer ? 'Panel account email' : undefined"
+			:target-placeholder="isPteroServer ? 'name@example.com' : undefined"
+			:target-help="
+				isPteroServer
+					? 'They get a Pterodactyl panel invite at this email (an account is created if needed).'
+					: undefined
+			"
+			:hide-add-as-friend="isPteroServer"
 			:permission-denied-message="permissionDeniedMessage"
 			@grant="grantAccess"
 		/>
@@ -427,7 +435,16 @@ function findMemberByTarget(target: string) {
 	)
 }
 
+// Modrinth Studios: Pterodactyl subusers are invited by email, not Modrinth account.
+const isPteroServer = String(serverId ?? '').startsWith('ptero-')
+
 async function searchInviteUsers(query: string): Promise<ServerAccessInviteSuggestion[]> {
+	if (isPteroServer) {
+		const email = query.trim()
+		return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)
+			? [{ id: `email:${email}`, username: email }]
+			: []
+	}
 	const users = await client.labrinth.users_v3.search(query)
 	return users.map((user) => ({
 		id: user.id,
@@ -607,7 +624,7 @@ async function grantAccess(payload: GrantServerAccessPayload) {
 				role: formatRole(payload.role),
 			}),
 		})
-		if (payload.addAsFriend) await sendFriendRequest(user.id)
+		if (payload.addAsFriend && !isPteroServer) await sendFriendRequest(user.id)
 	} catch (error) {
 		addNotification({
 			type: 'error',

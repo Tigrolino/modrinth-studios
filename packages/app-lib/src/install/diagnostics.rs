@@ -4,9 +4,10 @@ use super::model::{
     InstallPhaseDetails, InstallPhaseId, InstallProgress,
 };
 use super::store;
-use crate::state::{ModrinthCredentials, State};
+use crate::state::{DirectoryInfo, ModrinthCredentials, State};
+use crate::util::io::format_bytes;
 use regex::{Captures, Regex};
-use sqlx::Row;
+use sqlx::{Row, SqlitePool};
 use std::fmt::Write as _;
 use std::io::{Read, Seek, SeekFrom};
 use std::net::{Ipv4Addr, Ipv6Addr};
@@ -14,6 +15,36 @@ use std::path::{Path, PathBuf};
 use std::time::SystemTime;
 
 const INSTALL_SUPPORT_LOG_TAIL_BYTES: u64 = 128 * 1024;
+
+/// Constructs large futures outside the caller's polling frame.
+#[inline(never)]
+pub(super) fn install_step<
+    T,
+    F: std::future::Future<Output = crate::Result<T>>,
+>(
+    job_id: uuid::Uuid,
+    step: &'static str,
+    create: impl FnOnce() -> F,
+) -> impl std::future::Future<Output = crate::Result<T>> {
+    tracing::debug!(
+        %job_id,
+        step,
+        future_size_bytes = std::mem::size_of::<F>(),
+        "Preparing install step future"
+    );
+    let future = Box::pin(create());
+    async move {
+        tracing::info!(%job_id, step, "Starting install step");
+        let result = future.await;
+        tracing::info!(
+            %job_id,
+            step,
+            succeeded = result.is_ok(),
+            "Finished install step"
+        );
+        result
+    }
+}
 
 pub async fn build_job_support_details(
     job: &store::InstallJobRecord,
@@ -47,9 +78,9 @@ pub async fn build_job_support_details(
     write_content_summary(&mut details, &job.state.events);
     write_errors(&mut details, &snapshot);
     write_raw_snapshot(&mut details, &snapshot);
-    write_latest_log(&mut details, state).await;
+    write_latest_log(&mut details, &state.directories).await;
 
-    censor_support_text(details, state).await
+    censor_support_text(details, &state.pool).await
 }
 
 fn result_summary(
@@ -95,7 +126,7 @@ fn result_summary(
     }
 }
 
-fn write_environment_details(details: &mut String) {
+pub(crate) fn write_environment_details(details: &mut String) {
     let _ = writeln!(details);
     let _ = writeln!(details, "Environment");
     let _ = writeln!(details, "App version: {}", env!("CARGO_PKG_VERSION"));
@@ -411,10 +442,13 @@ fn write_raw_snapshot(details: &mut String, snapshot: &InstallJobSnapshot) {
     }
 }
 
-async fn write_latest_log(details: &mut String, state: &State) {
+pub(crate) async fn write_latest_log(
+    details: &mut String,
+    directories: &DirectoryInfo,
+) {
     let _ = writeln!(details);
     let _ = writeln!(details, "Latest launcher log excerpt");
-    match latest_launcher_log_tail(state).await {
+    match latest_launcher_log_tail(directories).await {
         Ok(Some((path, output))) => {
             let _ = writeln!(details, "File: {}", path.display());
             details.push_str(&output);
@@ -514,25 +548,6 @@ fn progress_summary(progress: &InstallProgress) -> String {
     value
 }
 
-fn format_bytes(bytes: u64) -> String {
-    const UNITS: [&str; 5] = ["B", "KiB", "MiB", "GiB", "TiB"];
-    let mut value = bytes as f64;
-    let mut unit = UNITS[0];
-    for next_unit in UNITS.iter().skip(1) {
-        if value < 1024.0 {
-            break;
-        }
-        value /= 1024.0;
-        unit = next_unit;
-    }
-
-    if unit == "B" {
-        format!("{bytes} B")
-    } else {
-        format!("{value:.1} {unit}")
-    }
-}
-
 fn json_string<T: serde::Serialize>(value: &T) -> String {
     serde_json::to_string(value)
         .map(|value| value.trim_matches('"').to_string())
@@ -540,9 +555,9 @@ fn json_string<T: serde::Serialize>(value: &T) -> String {
 }
 
 async fn latest_launcher_log_tail(
-    state: &State,
+    directories: &DirectoryInfo,
 ) -> crate::Result<Option<(PathBuf, String)>> {
-    let Some(logs_dir) = state.directories.launcher_logs_dir() else {
+    let Some(logs_dir) = directories.launcher_logs_dir() else {
         return Ok(None);
     };
 
@@ -598,11 +613,11 @@ fn read_file_tail(path: &Path, max_bytes: u64) -> crate::Result<String> {
     Ok(output)
 }
 
-async fn censor_support_text(
+pub(crate) async fn censor_support_text(
     mut text: String,
-    state: &State,
+    pool: &SqlitePool,
 ) -> crate::Result<String> {
-    for credentials in ModrinthCredentials::get_all(&state.pool).await? {
+    for credentials in ModrinthCredentials::get_all(pool).await? {
         replace_nonempty(
             &mut text,
             &credentials.session,
@@ -610,7 +625,7 @@ async fn censor_support_text(
         );
     }
 
-    for token in minecraft_tokens(&state.pool).await? {
+    for token in minecraft_tokens(pool).await? {
         replace_nonempty(&mut text, &token, "{MINECRAFT_TOKEN}");
     }
 

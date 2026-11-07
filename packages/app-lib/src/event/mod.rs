@@ -68,6 +68,11 @@ impl EventState {
     }
 
     #[cfg(feature = "tauri")]
+    pub(crate) fn try_get() -> Option<Arc<Self>> {
+        EVENT_STATE.get().cloned()
+    }
+
+    #[cfg(feature = "tauri")]
     pub fn send(&self, event: AppEvent) -> crate::Result<()> {
         let payload =
             postcard::to_allocvec(&event).map_err(EventError::from)?;
@@ -182,8 +187,7 @@ pub fn export_app_event_bindings(
             crate::install::model::InstallApiErrorDetails,
             crate::install::InstallErrorContext,
             crate::api::pack::import::ImportLauncherType,
-            crate::state::ModLoader,
-            crate::SharedInstanceUnavailableReason
+            crate::state::ModLoader
         ),
     )?;
     fix_postcard_javascript_utf8(&output.join("postcard/index.js"))?;
@@ -380,6 +384,10 @@ pub enum CommandPayload {
     RunMRPack {
         // run or install .mrpack
         path: String,
+    },
+    PlayHostingServer {
+        server_id: String,
+        world_id: String,
     },
 }
 

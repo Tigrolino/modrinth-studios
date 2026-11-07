@@ -1,14 +1,21 @@
 <template>
 	<div
-		class="flex min-h-0 flex-1 flex-col gap-4"
-		:class="
+		class="flex flex-1 flex-col gap-4"
+		:class="[
+			minLogHeight && !isFullscreen ? 'min-h-min' : 'min-h-0',
 			isFullscreen
 				? `studio-console-fullscreen fixed inset-0 z-[15] bg-surface-1 p-6 py-8 ${isApp ? 'pt-12' : ''}`
-				: ''
-		"
+				: '',
+		]"
 	>
+		<div
+			v-if="isApp && isFullscreen"
+			data-tauri-drag-region
+			class="absolute inset-x-0 top-0 h-12"
+		/>
 		<CollapsibleAdmonition
 			v-if="ctx.crashAnalysis?.value && !isFullscreen"
+			class="mb-2 shrink-0"
 			type="critical"
 			:header="crashHeader"
 			:items="crashItems"
@@ -16,7 +23,7 @@
 			@dismiss="ctx.onDismissCrash?.()"
 		/>
 
-		<div class="flex flex-col gap-2">
+		<div class="flex shrink-0 flex-col gap-2">
 			<div class="flex items-center gap-2">
 				<Input
 					v-model="searchQuery"
@@ -63,7 +70,8 @@
 
 		<BaseTerminal
 			ref="terminalRef"
-			class="min-h-0 flex-1"
+			class="flex-1"
+			:min-log-height="isFullscreen ? undefined : minLogHeight"
 			:show-input="resolvedShowInput"
 			:disable-input="resolvedInputDisabled"
 			:disable-input-tooltip="resolvedInputDisabledTooltip"
@@ -130,6 +138,10 @@ import {
 import type { ConditionalLevel } from './composables/console-filtering'
 import { injectConsoleManager } from './providers'
 import type { LogLevel, LogLine } from './types'
+
+defineProps<{
+	minLogHeight?: string
+}>()
 
 const ctx = injectConsoleManager()
 const client = injectModrinthClient()
@@ -479,7 +491,7 @@ async function handleShare() {
 }
 
 .modrinth-console-fullscreen-active .app-grid-navbar,
-.modrinth-console-fullscreen-active .app-grid-statusbar {
+.modrinth-console-fullscreen-active .app-title-bar {
 	z-index: 0 !important;
 }
 </style>

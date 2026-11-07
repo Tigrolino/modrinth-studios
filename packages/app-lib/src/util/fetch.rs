@@ -2,15 +2,16 @@
 use super::io::{self, IOError};
 use crate::event::LoadingBarId;
 use crate::event::emit::emit_loading;
+use crate::state::content_store::ContentStore;
 use crate::util::content_hash::{ContentHasher, temporary_file};
 use crate::{ErrorKind, LabrinthError};
+use anyhow::{Context, bail};
 use bytes::Bytes;
 use chrono::{DateTime, TimeDelta, Utc};
-use eyre::{Context, eyre};
 use governor::clock::{Clock, DefaultClock};
 use governor::{DefaultDirectRateLimiter, Quota, RateLimiter};
 use parking_lot::Mutex;
-use rand::Rng;
+use rand::RngExt;
 use reqwest::Method;
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
@@ -23,7 +24,7 @@ use std::sync::{Arc, LazyLock};
 use std::time::{Duration, Instant, SystemTime};
 use tokio::sync::Semaphore;
 use tokio::{fs::File, io::AsyncReadExt, io::AsyncWriteExt};
-use tracing::{debug, info};
+use tracing::{debug, info, warn};
 
 pub const DOWNLOAD_META_HEADER: &str = "modrinth-download-meta";
 
@@ -165,8 +166,8 @@ impl FenceInner {
             .checked_mul(self.block_factor)
             .unwrap_or(Self::BLOCK_DURATION_MAX_BASE);
 
-        let delta_seconds = (max - min).as_seconds_f64()
-            * rand::thread_rng().gen_range(0.0..=1.0);
+        let delta_seconds =
+            (max - min).as_seconds_f64() * rand::rng().random_range(0.0..=1.0);
         let duration =
             min + TimeDelta::milliseconds((delta_seconds * 1000.0) as i64);
 
@@ -193,6 +194,17 @@ static GLOBAL_FETCH_FENCE: LazyLock<FetchFence> =
     });
 
 const API_RETRY_AFTER_FALLBACK: Duration = Duration::from_secs(60);
+const LOCAL_API_RATE_LIMIT_WAIT: Duration = Duration::from_secs(30);
+
+tokio::task_local! {
+    static WAIT_FOR_LOCAL_API_RATE_LIMIT: ();
+}
+
+pub(crate) async fn wait_for_local_api_rate_limit<F: Future>(
+    future: F,
+) -> F::Output {
+    WAIT_FOR_LOCAL_API_RATE_LIMIT.scope((), future).await
+}
 
 // This means the unit recovery time will be:
 // replenish one unit time in seconds = (60 / (units recovered per minute))
@@ -244,11 +256,9 @@ impl ApiRateLimit {
             );
             self.block_for(retry_after);
 
-            let retry_in_seconds = self
-                .retry_in_seconds()
-                .unwrap_or_else(|| duration_seconds_ceil(retry_after));
+            let retry_in = self.retry_in().unwrap_or(retry_after);
 
-            return Err(ErrorKind::Ratelimited { retry_in_seconds }.into());
+            bail!(ErrorKind::RateLimited { retry_in });
         }
 
         self.ensure_not_blocked()
@@ -273,15 +283,15 @@ impl ApiRateLimit {
 
         self.block_for(retry_after);
 
-        Some(ErrorKind::Ratelimited {
-            retry_in_seconds: self.retry_in_seconds().unwrap_or(0),
+        Some(ErrorKind::RateLimited {
+            retry_in: self.retry_in().unwrap_or_default(),
         })
     }
 
     fn ensure_not_blocked(&self) -> crate::Result<()> {
-        if let Some(retry_in_seconds) = self.retry_in_seconds() {
+        if let Some(retry_in) = self.retry_in() {
             debug!("Hit builtin rate limiter; blocking");
-            return Err(ErrorKind::Ratelimited { retry_in_seconds }.into());
+            bail!(ErrorKind::RateLimited { retry_in });
         }
 
         Ok(())
@@ -298,14 +308,14 @@ impl ApiRateLimit {
         }
     }
 
-    fn retry_in_seconds(&self) -> Option<u64> {
+    fn retry_in(&self) -> Option<Duration> {
         let mut block_until = self.block_until.lock();
         let remaining = (*block_until)?.checked_duration_since(Instant::now());
 
         if let Some(remaining) = remaining
             && !remaining.is_zero()
         {
-            return Some(duration_seconds_ceil(remaining));
+            return Some(remaining);
         }
 
         *block_until = None;
@@ -323,12 +333,6 @@ fn parse_retry_after(value: &str, now: SystemTime) -> Option<Duration> {
 
     let retry_at = httpdate::parse_http_date(value).ok()?;
     Some(retry_at.duration_since(now).unwrap_or(Duration::ZERO))
-}
-
-fn duration_seconds_ceil(duration: Duration) -> u64 {
-    duration
-        .as_secs()
-        .saturating_add(u64::from(duration.subsec_nanos() > 0))
 }
 
 fn reqwest_client_builder_with_timeout() -> reqwest::ClientBuilder {
@@ -416,14 +420,13 @@ impl DownloadedFile {
 
     pub(crate) fn into_staged(self) -> crate::Result<StagedDownload> {
         let DownloadedFilePath::Temporary(path) = self.path else {
-            return Err(ErrorKind::InputError(
-                "Stored content cannot be staged again".to_string(),
-            )
-            .into());
+            bail!(ErrorKind::InputError(
+                "stored content cannot be staged again".to_string(),
+            ));
         };
         let path = Arc::try_unwrap(path).map_err(|_| {
             ErrorKind::InputError(
-                "Downloaded content is still in use and cannot be published"
+                "downloaded content is still in use and cannot be published"
                     .to_string(),
             )
         })?;
@@ -436,12 +439,12 @@ impl DownloadedFile {
 
     pub(crate) async fn store_file(
         &self,
-        state: &crate::State,
+        content_store: &ContentStore,
     ) -> crate::Result<crate::state::content_store::StoredFileHandle> {
         match &self.path {
             DownloadedFilePath::Stored(stored_file) => Ok(stored_file.clone()),
             DownloadedFilePath::Temporary(_) => {
-                state.content_store.store_file(self.path()).await
+                content_store.store_file(self.path()).await
             }
         }
     }
@@ -452,11 +455,9 @@ impl DownloadedFile {
         semaphore: &IoSemaphore,
     ) -> crate::Result<()> {
         let _permit = semaphore.0.acquire().await?;
-        let parent = path.parent().ok_or_else(|| {
-            ErrorKind::InputError(
-                "Download destination has no parent directory".to_string(),
-            )
-        })?;
+        let parent = path.parent().ok_or(ErrorKind::InputError(
+            "download destination has no parent directory".to_string(),
+        ))?;
         io::create_dir_all(parent).await?;
         let parent = parent.to_path_buf();
         let temporary = tokio::task::spawn_blocking(move || {
@@ -498,6 +499,7 @@ pub async fn fetch_file(
     semaphore: &FetchSemaphore,
     exec: impl sqlx::Executor<'_, Database = sqlx::Sqlite>,
     progress: Option<&mut FetchProgressFn<'_>>,
+    staging: &Path,
 ) -> crate::Result<DownloadedFile> {
     let body = fetch_advanced_with_target(
         Method::GET,
@@ -514,35 +516,13 @@ pub async fn fetch_file(
         &INSECURE_REQWEST_CLIENT,
         progress,
         true,
-        None,
+        Some(staging),
     )
     .await?;
     match body {
         FetchBody::File(file) => Ok(file),
         FetchBody::Memory(_) => unreachable!("requested a file download"),
     }
-}
-
-pub async fn fetch_file_mirrors(
-    mirrors: &[&str],
-    sha1: Option<&str>,
-    download_meta: Option<&DownloadMeta>,
-    uri_path: Option<&'static str>,
-    semaphore: &FetchSemaphore,
-    exec: impl sqlx::Executor<'_, Database = sqlx::Sqlite> + Copy,
-    progress: Option<&mut FetchProgressFn<'_>>,
-) -> crate::Result<DownloadedFile> {
-    fetch_file_mirrors_in(
-        mirrors,
-        sha1,
-        download_meta,
-        uri_path,
-        semaphore,
-        exec,
-        progress,
-        None,
-    )
-    .await
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -557,9 +537,7 @@ pub(crate) async fn fetch_file_mirrors_in(
     staging: Option<&Path>,
 ) -> crate::Result<DownloadedFile> {
     if mirrors.is_empty() {
-        return Err(
-            ErrorKind::InputError("No mirrors provided!".to_string()).into()
-        );
+        bail!(ErrorKind::InputError("no mirrors provided".to_string()));
     }
     for (index, mirror) in mirrors.iter().enumerate() {
         let body = fetch_advanced_with_target(
@@ -598,11 +576,7 @@ async fn read_file_response(
     staging: Option<&Path>,
 ) -> crate::Result<DownloadedFile> {
     use futures::StreamExt;
-    let staging = staging.map(Path::to_path_buf).or_else(|| {
-        crate::State::get_if_initialized()
-            .map(|state| state.directories.store_staging_dir())
-    });
-    let (mut file, path) = temporary_file(staging.as_deref()).await?;
+    let (mut file, path) = temporary_file(staging).await?;
     let total = response.content_length().unwrap_or(0);
     let mut stream = response.bytes_stream();
     let mut hasher = ContentHasher::default();
@@ -666,11 +640,9 @@ async fn read_memory_response(
             .try_with(|_| ())
             .is_err()
     {
-        return response
-            .bytes()
-            .await
-            .wrap_err_with(|| eyre!("failed to read response body from {url}"))
-            .map_err(Into::into);
+        return response.bytes().await.with_context(|| {
+            format!("failed to read response body from {url}")
+        });
     }
     use futures::StreamExt;
     let total_size = total_size.unwrap_or(0);
@@ -679,8 +651,8 @@ async fn read_memory_response(
     while let Some(chunk) =
         crate::install::control::download_step(stream.next()).await?
     {
-        let chunk = chunk.wrap_err_with(|| {
-            eyre!("failed to read response body from {url}")
+        let chunk = chunk.with_context(|| {
+            format!("failed to read response body from {url}")
         })?;
         bytes.extend_from_slice(&chunk);
         if let Some((bar, total)) = loading_bar
@@ -959,12 +931,15 @@ async fn fetch_advanced_with_target(
     to_file: bool,
     file_staging: Option<&Path>,
 ) -> crate::Result<FetchBody> {
-    let _permit =
-        crate::install::control::download_step(semaphore.0.acquire()).await??;
-
     let is_api_url = url.starts_with(env!("MODRINTH_API_URL"))
         || url.starts_with(env!("MODRINTH_API_URL_V3"));
     let fence_key = if is_api_url { uri_path } else { None };
+    let wait_for_local_rate_limit = is_api_url
+        && (crate::install::control::CURRENT_INSTALL
+            .try_with(|_| ())
+            .is_ok()
+            || WAIT_FOR_LOCAL_API_RATE_LIMIT.try_with(|_| ()).is_ok());
+    let mut rate_limit_deadline = None;
 
     let creds = if header
         .as_ref()
@@ -980,18 +955,55 @@ async fn fetch_advanced_with_target(
         .map(|m| (DOWNLOAD_META_HEADER.to_string(), m.to_header_value()));
 
     for attempt in 1..=(FETCH_ATTEMPTS + 1) {
-        if is_api_url {
-            GLOBAL_API_RATE_LIMIT.check()?;
-        }
-
         if let Some(fence_key) = fence_key
             && GLOBAL_FETCH_FENCE.is_blocked(fence_key)
         {
-            return Err(ErrorKind::ApiIsDownError(
+            bail!(ErrorKind::ApiIsDownError(
                 GLOBAL_FETCH_FENCE.latest_block_minutes(),
-            )
-            .into());
+            ));
         }
+
+        let _permit = loop {
+            let permit =
+                crate::install::control::download_step(semaphore.0.acquire())
+                    .await??;
+            if is_api_url && let Err(error) = GLOBAL_API_RATE_LIMIT.check() {
+                let retry_after =
+                    GLOBAL_API_RATE_LIMIT.retry_in().unwrap_or_default();
+                if wait_for_local_rate_limit {
+                    let deadline =
+                        rate_limit_deadline.get_or_insert_with(|| {
+                            Instant::now() + LOCAL_API_RATE_LIMIT_WAIT
+                        });
+                    if retry_after
+                        <= deadline.saturating_duration_since(Instant::now())
+                    {
+                        drop(permit);
+                        crate::install::control::download_step(
+                            tokio::time::sleep(retry_after),
+                        )
+                        .await?;
+                        continue;
+                    }
+                }
+                warn!(
+                    request_path = %url.split('?').next().unwrap_or(url),
+                    ?uri_path,
+                    attempt,
+                    error = %error,
+                    "Modrinth API request blocked by local rate limiter"
+                );
+                return Err(error);
+            }
+            if let Some(fence_key) = fence_key
+                && GLOBAL_FETCH_FENCE.is_blocked(fence_key)
+            {
+                bail!(ErrorKind::ApiIsDownError(
+                    GLOBAL_FETCH_FENCE.latest_block_minutes(),
+                ));
+            }
+            break permit;
+        };
 
         let mut req = client.request(method.clone(), url);
 
@@ -1014,13 +1026,31 @@ async fn fetch_advanced_with_target(
             req = req.header(name.as_str(), value.as_str());
         }
 
-        let result = crate::install::control::download_step(req.send()).await?;
+        let result = crate::install::control::download_step(async {
+            if let Some(fence_key) = fence_key
+                && GLOBAL_FETCH_FENCE.is_blocked(fence_key)
+            {
+                bail!(ErrorKind::ApiIsDownError(
+                    GLOBAL_FETCH_FENCE.latest_block_minutes(),
+                ));
+            }
+            Ok::<_, crate::Error>(req.send().await)
+        })
+        .await??;
         match result {
             Ok(resp) => {
                 if is_api_url
                     && let Some(error) =
                         GLOBAL_API_RATE_LIMIT.handle_response(&resp)
                 {
+                    warn!(
+                        request_path = %url.split('?').next().unwrap_or(url),
+                        ?uri_path,
+                        attempt,
+                        retry_after = ?resp.headers().get(reqwest::header::RETRY_AFTER),
+                        error = %error,
+                        "Modrinth API returned HTTP 429"
+                    );
                     return Err(error.into());
                 }
 
@@ -1044,7 +1074,7 @@ async fn fetch_advanced_with_target(
                         error.method = Some(method.as_str().to_string());
                         error.url = Some(url.to_string());
                         error.route = uri_path.map(str::to_string);
-                        return Err(ErrorKind::LabrinthError(error).into());
+                        return Err(error.into());
                     }
                     return Err(backup_error.into());
                 }
@@ -1082,11 +1112,10 @@ async fn fetch_advanced_with_target(
                             if attempt <= FETCH_ATTEMPTS {
                                 continue;
                             } else {
-                                return Err(ErrorKind::HashError(
+                                bail!(ErrorKind::HashError(
                                     sha1.to_string(),
                                     hash,
-                                )
-                                .into());
+                                ));
                             }
                         }
                     }
@@ -1125,9 +1154,7 @@ pub async fn fetch_mirrors(
     exec: impl sqlx::Executor<'_, Database = sqlx::Sqlite> + Copy,
 ) -> crate::Result<Bytes> {
     if mirrors.is_empty() {
-        return Err(
-            ErrorKind::InputError("No mirrors provided!".to_string()).into()
-        );
+        bail!(ErrorKind::InputError("no mirrors provided".to_string()));
     }
 
     for (index, mirror) in mirrors.iter().enumerate() {
@@ -1206,6 +1233,36 @@ pub async fn write(
         .await
         .map_err(|e| IOError::with_path(e, path))?;
     tracing::trace!("Done writing file {}", path.display());
+    Ok(())
+}
+
+pub async fn write_atomic(
+    path: &Path,
+    bytes: &[u8],
+    semaphore: &IoSemaphore,
+) -> crate::Result<()> {
+    let _permit = semaphore.0.acquire().await?;
+    let parent = path.parent().ok_or(ErrorKind::InputError(
+        "write destination has no parent directory".to_string(),
+    ))?;
+    io::create_dir_all(parent).await?;
+
+    let (mut file, temporary) = temporary_file(Some(parent)).await?;
+    file.write_all(bytes)
+        .await
+        .map_err(|e| IOError::with_path(e, path))?;
+    file.flush()
+        .await
+        .map_err(|e| IOError::with_path(e, path))?;
+    drop(file);
+
+    let path = path.to_path_buf();
+    tokio::task::spawn_blocking(move || {
+        temporary
+            .persist(&path)
+            .map_err(|error| IOError::with_path(error.error, &path))
+    })
+    .await??;
     Ok(())
 }
 

@@ -4,7 +4,7 @@ extend-exclude = [
   "patches/",
   "packages/utils/",
   "packages/ui/",
-  "apps/app-frontend/src/components/ui/settings/instances/game-settings-modal/languages.ts"
+  "apps/app-frontend/src/features/settings/syncing/game-settings-modal/languages.ts"
 ]
 
 [default]

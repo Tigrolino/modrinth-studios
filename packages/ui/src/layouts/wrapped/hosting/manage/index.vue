@@ -2,11 +2,7 @@
 	<div
 		data-pyro-server-list-root
 		class="relative mx-auto flex w-full flex-col p-6"
-		:class="
-			serverList.length && !showEmptyState
-				? 'min-h-screen mb-6'
-				: 'min-h-[calc(100vh-14.5rem)] h-full py-0'
-		"
+		:class="!showEmptyState ? 'min-h-screen mb-6' : 'min-h-[calc(100vh-14.5rem)] h-full py-0'"
 	>
 		<ServersGuestPlanModal
 			ref="guestPlanModal"
@@ -30,7 +26,6 @@
 			:regions="regions"
 			:refresh-payment-methods="fetchPaymentData"
 			:fetch-stock="fetchStock"
-			:affiliate-code="affiliateCode"
 			plan-stage
 			@purchase-success="handlePurchaseSuccess"
 			@hide="clearPurchaseIntent"
@@ -42,7 +37,12 @@
 			:site-url="props.siteUrl"
 			:products="props.products"
 		/>
-		<ResubscribeModal ref="resubscribeModal" @resubscribe="handleResubscribeConfirm" />
+		<ResubscribeModal
+			ref="resubscribeModal"
+			:payment-methods="paymentMethods"
+			:regions="regions"
+			@resubscribe="handleResubscribeConfirm"
+		/>
 
 		<div
 			v-if="hasError"
@@ -113,6 +113,8 @@
 						:placeholder="formatMessage(messages.searchPlaceholder, { count: filteredData.length })"
 						wrapper-class="w-full md:w-72"
 					/>
+					<!-- Modrinth Studios: extra actions (e.g. connect a Pterodactyl panel) -->
+					<slot name="header-actions" />
 					<Button type="colored" color="brand" @click="openPurchaseModal">
 						<PlusIcon />
 						{{ formatMessage(messages.newServerButton) }}
@@ -145,6 +147,7 @@
 						@click-new-server="openPurchaseModal"
 						@click-sign-in="handleSignIn"
 					/>
+					<slot name="header-actions" />
 				</div>
 
 				<div v-else key="list" class="flex flex-col gap-6">
@@ -224,7 +227,12 @@
 						</div>
 					</section>
 
-					<div v-if="filteredData.length === 0 && !isPollingForNewServers">
+					<!-- Modrinth Studios: extra server sources (e.g. Pterodactyl panels) -->
+					<slot name="sections" :search="searchInput" />
+
+					<div
+						v-if="filteredData.length === 0 && !isPollingForNewServers && !props.hasExternalServers"
+					>
 						{{ formatMessage(messages.noServersFound) }}
 					</div>
 				</div>
@@ -266,12 +274,15 @@ import ServersUpgradeModalWrapper from '#ui/components/billing/ServersUpgradeMod
 import type { ServerListingOwner } from '#ui/components/servers/access'
 import MedalServerListing from '#ui/components/servers/marketing/MedalServerListing.vue'
 import ServerListing from '#ui/components/servers/ServerListing.vue'
+import { serverKeys, serverListQueryOptions } from '#ui/composables/server-queries'
 import { createHostingPurchaseIntentContext, provideHostingPurchaseIntent } from '#ui/providers'
 
 const props = defineProps<{
 	stripePublishableKey: string
 	siteUrl?: string
 	products: Labrinth.Billing.Internal.Product[]
+	/** Modrinth Studios: servers from other sources are listed, so don't show the empty state. */
+	hasExternalServers?: boolean
 }>()
 
 const router = useRouter()
@@ -308,7 +319,7 @@ const messages = defineMessages({
 		defaultMessage: 'Contact Modrinth Support',
 	},
 	reloadButton: { id: 'servers.manage.reload-button', defaultMessage: 'Reload' },
-	serversTitle: { id: 'servers.manage.servers-title', defaultMessage: 'Modrinth Hosting' },
+	serversTitle: { id: 'servers.manage.servers-title', defaultMessage: 'Hosting' },
 	searchPlaceholder: {
 		id: 'servers.manage.search-placeholder',
 		defaultMessage: 'Search {count} {count, plural, one {server} other {servers}}...',
@@ -415,7 +426,6 @@ const purchaseModal = ref<InstanceType<typeof ModrinthServersPurchaseModal> | nu
 type UpgradeModalRef = ComponentPublicInstance<{ open: (id?: string) => void | Promise<void> }>
 const medalUpgradeModal = ref<UpgradeModalRef | null>(null)
 const resubscribeModal = ref<InstanceType<typeof ResubscribeModal> | null>(null)
-const affiliateCode = ref<string | null>(null)
 const selectedCurrency = ref<string>('USD')
 
 const pyroProducts = computed(() => {
@@ -461,38 +471,20 @@ async function fetchPaymentData() {
 	await Promise.all([refetchCustomer(), refetchPaymentMethods()])
 }
 
-async function fetchStock(
-	region: Archon.Servers.v1.Region,
-	request: Archon.Servers.v0.StockRequest,
-): Promise<number> {
-	const result = await client.archon.servers_v0.checkStock(region.shortcode, request)
-	return result.available
+function fetchStock(memoryMb: number[]): Promise<Archon.Servers.v1.StockResponse> {
+	return client.archon.servers_v1.getStock(memoryMb)
 }
+
+const serversQueryOptions = serverListQueryOptions(client)
 
 const {
 	data: serverResponse,
 	error: fetchError,
 	isPending: serversQueryPending,
 } = useQuery({
-	queryKey: ['servers'],
+	...serversQueryOptions,
 	queryFn: async () => {
-		const response = await client.archon.servers_v0.list({ limit: 100 })
-
-		// Fetch subscriptions for medal servers
-		const hasMedalServers = response.servers.some((s) => s.is_medal)
-		if (hasMedalServers) {
-			const subscriptions = await client.labrinth.billing_internal.getSubscriptions()
-
-			// Inject medal_expires into servers
-			for (const server of response.servers) {
-				if (server.is_medal) {
-					const sub = subscriptions.find((s) => s.metadata?.id === server.server_id)
-					if (sub) {
-						server.medal_expires = dayjs(sub.created).add(5, 'days').toISOString()
-					}
-				}
-			}
-		}
+		const response = await serversQueryOptions.queryFn()
 
 		// Check if new servers appeared (stop polling)
 		if (pollingState.value.enabled) {
@@ -530,6 +522,7 @@ const serverList = computed<Archon.Servers.v0.Server[]>(() => {
 const showEmptyState = computed(
 	() =>
 		!showServersListLoading.value &&
+		!props.hasExternalServers &&
 		ownedServerList.value.length === 0 &&
 		sharedServerList.value.length === 0 &&
 		!isPollingForNewServers.value,
@@ -772,7 +765,7 @@ watch(
 )
 
 const { data: serverFullList } = useQuery({
-	queryKey: ['servers', 'v1'],
+	queryKey: serverKeys.listV1(),
 	queryFn: () => client.archon.servers_v1.list(),
 	enabled: loggedIn,
 })
@@ -797,88 +790,19 @@ function getProductFromPriceId(priceId: string | null | undefined) {
 	)
 }
 
-function getPlanName(product: Labrinth.Billing.Internal.Product | null): string {
-	if (!product) return 'Medium plan'
-	if (product.metadata.type !== 'pyro' && product.metadata.type !== 'medal') return 'Medium plan'
-
-	switch (product.metadata.ram) {
-		case 4096:
-			return 'Small plan'
-		case 6144:
-			return 'Medium plan'
-		case 8192:
-			return 'Large plan'
-		default:
-			return 'Custom plan'
-	}
-}
-
-function getRamGb(product: Labrinth.Billing.Internal.Product | null): number | undefined {
-	if (!product) return undefined
-	if (product.metadata.type !== 'pyro' && product.metadata.type !== 'medal') return undefined
-
-	return product.metadata.ram / 1024
-}
-
-function getStorageGb(product: Labrinth.Billing.Internal.Product | null): number | undefined {
-	if (!product) return undefined
-	if (product.metadata.type !== 'pyro' && product.metadata.type !== 'medal') return undefined
-
-	return product.metadata.storage / 1024
-}
-
-function getSharedCpus(product: Labrinth.Billing.Internal.Product | null): number | undefined {
-	if (!product) return undefined
-	if (product.metadata.type !== 'pyro' && product.metadata.type !== 'medal') return undefined
-
-	return product.metadata.cpu / 2
-}
-
-function getRecurringPrice(
-	product: Labrinth.Billing.Internal.Product | null,
-	interval: Labrinth.Billing.Internal.PriceDuration,
-	preferredCurrency?: string,
-): { amount: number; currencyCode: string } | null {
-	if (!product) return null
-
-	const recurringPrices = product.prices.filter((price) => price.prices.type === 'recurring')
-	const preferredPrice = preferredCurrency
-		? recurringPrices.find((price) => price.currency_code === preferredCurrency)
-		: undefined
-	const usdPrice = recurringPrices.find((price) => price.currency_code === 'USD')
-	const selectedPrice = preferredPrice ?? usdPrice ?? recurringPrices[0]
-
-	if (!selectedPrice || selectedPrice.prices.type !== 'recurring') return null
-
-	return {
-		amount: selectedPrice.prices.intervals[interval],
-		currencyCode: selectedPrice.currency_code,
-	}
-}
-
 function openResubscribeModal(
 	serverId: string,
 	subscription: Labrinth.Billing.Internal.UserSubscription,
 	charge?: Labrinth.Billing.Internal.Charge | null,
 ) {
-	const displayInterval = charge?.subscription_interval ?? subscription.interval
-	const displayPriceId = charge?.price_id ?? subscription.price_id
-	const product = getProductFromPriceId(displayPriceId)
-	const fallbackPrice = getRecurringPrice(product, displayInterval, charge?.currency_code)
-
 	resubscribeModal.value?.show({
 		subscriptionId: subscription.id,
 		wasSuspended: !!charge?.due && dayjs(charge.due).isBefore(dayjs()),
 		serverName:
 			serverList.value.find((server) => server.server_id === serverId)?.name ?? 'this server',
-		planName: getPlanName(product),
-		ramGb: getRamGb(product),
-		storageGb: getStorageGb(product),
-		sharedCpus: getSharedCpus(product),
-		priceCents: charge?.amount ?? fallbackPrice?.amount,
-		currencyCode: charge?.currency_code ?? fallbackPrice?.currencyCode,
-		interval: displayInterval,
-		nextChargeDate: charge?.due,
+		plan: getProductFromPriceId(charge?.price_id ?? subscription.price_id),
+		regionShortcode:
+			subscription.metadata?.type === 'pyro' ? subscription.metadata.region : undefined,
 	})
 }
 

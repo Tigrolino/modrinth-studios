@@ -3,21 +3,27 @@ import {
 	BoxIcon,
 	CheckIcon,
 	CopyIcon,
+	DownloadIcon,
+	MinecraftServerIcon,
 	PauseIcon,
 	PlayIcon,
 	TrashIcon,
 	UpdatedIcon,
+	UploadIcon,
 	XIcon,
 } from '@modrinth/assets'
 import {
 	Avatar,
 	BulletDivider,
 	Button,
+	commonMessages,
 	defineMessages,
 	IconButton,
 	ProgressBar,
 	truncatedTooltip,
+	useGeneratedIconSrc,
 	useRelativeTime,
+	useServerIcon,
 	useVIntl,
 } from '@modrinth/ui'
 import { computed, useTemplateRef } from 'vue'
@@ -26,6 +32,14 @@ import { RouterLink } from 'vue-router'
 import type { DownloadManagerJob } from './use-download-manager'
 
 const props = defineProps<{ job: DownloadManagerJob }>()
+const { config: serverIconConfig, image: serverIconImage } = useServerIcon(
+	() => props.job.serverId ?? '',
+)
+const serverIconGeneratedSrc = useGeneratedIconSrc(serverIconConfig)
+const serverIcon = computed(() => serverIconGeneratedSrc.value ?? serverIconImage.value)
+const displayIcon = computed(() =>
+	props.job.serverId ? (serverIcon.value ?? MinecraftServerIcon) : props.job.iconUrl,
+)
 defineEmits<{
 	retry: [id: string]
 	cancel: [id: string]
@@ -59,6 +73,15 @@ const needsAttention = computed(
 	() => props.job.status === 'failed' || props.job.status === 'interrupted',
 )
 const complete = computed(() => props.job.status === 'succeeded' || props.job.status === 'canceled')
+const cancelLabel = computed(() =>
+	formatMessage(
+		needsAttention.value
+			? messages.dismiss
+			: props.job.kind === 'external-file' || props.job.kind === 'debug-export'
+				? commonMessages.cancelButton
+				: messages.cancel,
+	),
+)
 const instanceLink = computed(() =>
 	props.job.status === 'succeeded' && props.job.instanceId
 		? `/instance/${encodeURIComponent(props.job.instanceId)}`
@@ -83,8 +106,8 @@ const instanceLink = computed(() =>
 				@click="instanceLink && $emit('open')"
 			>
 				<Avatar
-					v-if="job.iconUrl"
-					:src="job.iconUrl"
+					v-if="displayIcon"
+					:src="displayIcon"
 					size="36px"
 					no-shadow
 					class="!rounded-xl border border-solid border-surface-5"
@@ -93,7 +116,17 @@ const instanceLink = computed(() =>
 					v-else
 					class="flex size-9 shrink-0 items-center justify-center rounded-xl border border-solid border-surface-5 bg-purple/10"
 				>
-					<BoxIcon class="size-6 text-primary" aria-hidden="true" />
+					<component
+						:is="
+							job.kind === 'shared-instance-publish'
+								? UploadIcon
+								: job.kind === 'external-file' || job.kind === 'debug-export'
+									? DownloadIcon
+									: BoxIcon
+						"
+						class="size-6 text-primary"
+						aria-hidden="true"
+					/>
 				</div>
 				<div class="flex min-w-0 flex-1 flex-col gap-1">
 					<span
@@ -104,7 +137,7 @@ const instanceLink = computed(() =>
 						{{ job.title }}
 					</span>
 					<span
-						v-if="job.taskType && job.taskType !== job.text"
+						v-if="job.kind !== 'external-file' && job.taskType && job.taskType !== job.text"
 						class="truncate text-xs font-medium leading-4 text-primary"
 					>
 						{{ job.taskType }}
@@ -119,6 +152,12 @@ const instanceLink = computed(() =>
 								: 'text-primary'
 						"
 					>
+						<template
+							v-if="job.kind === 'external-file' && job.taskType && job.taskType !== job.text"
+						>
+							<span class="min-w-0 truncate text-primary">{{ job.taskType }}</span>
+							<BulletDivider class="shrink-0 text-primary" />
+						</template>
 						<template v-if="complete && job.finishedAt">
 							<time :datetime="job.finishedAt" class="shrink-0">
 								{{ formatRelativeTime(job.finishedAt) }}
@@ -146,8 +185,8 @@ const instanceLink = computed(() =>
 				</IconButton>
 				<IconButton
 					v-if="job.canCancel || job.canceling || needsAttention"
-					v-tooltip="formatMessage(needsAttention ? messages.dismiss : messages.cancel)"
-					:label="formatMessage(needsAttention ? messages.dismiss : messages.cancel)"
+					v-tooltip="cancelLabel"
+					:label="cancelLabel"
 					type="quiet"
 					size="sm"
 					:disabled="job.busy || job.canceling"

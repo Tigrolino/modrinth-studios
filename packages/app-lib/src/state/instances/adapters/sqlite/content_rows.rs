@@ -1,5 +1,6 @@
 #![allow(dead_code)]
 
+use crate::ErrorKind;
 use crate::state::instances::{
     ContentEntry, ContentRequirement, ContentSet, ContentSetRemoteRef,
     ContentSetRemoteRefType, ContentSetStatus, ContentSetSyncProvider,
@@ -7,6 +8,7 @@ use crate::state::instances::{
     ContentUpdateCheck, InstanceFile,
 };
 use crate::state::{ModLoader, ProjectType, ReleaseChannel};
+use anyhow::bail;
 use chrono::{DateTime, TimeZone, Utc};
 use sqlx::{Executor, Sqlite, SqlitePool, Transaction};
 use std::collections::HashSet;
@@ -74,6 +76,7 @@ pub(crate) struct ContentSetSyncStateRow {
     pub latest_available_update_id: Option<String>,
     pub checked_at: Option<i64>,
     pub status: String,
+    pub applied_backtrack_version: Option<String>,
 }
 
 impl TryFrom<ContentSetSyncStateRow> for ContentSetSyncState {
@@ -84,6 +87,7 @@ impl TryFrom<ContentSetSyncStateRow> for ContentSetSyncState {
             content_set_id: row.content_set_id,
             provider: ContentSetSyncProvider::from_str(&row.provider)?,
             applied_update_id: row.applied_update_id,
+            applied_backtrack_version: row.applied_backtrack_version,
             latest_available_update_id: row.latest_available_update_id,
             checked_at: row.checked_at.and_then(optional_timestamp),
             status: ContentSetSyncStatus::from_str(&row.status)?,
@@ -454,6 +458,8 @@ pub(crate) async fn upsert_content_set_sync_state(
     let content_set_id = sync_state.content_set_id.as_str();
     let provider = sync_state.provider.as_str();
     let applied_update_id = sync_state.applied_update_id.as_deref();
+    let applied_backtrack_version =
+        sync_state.applied_backtrack_version.as_deref();
     let latest_available_update_id =
         sync_state.latest_available_update_id.as_deref();
     let checked_at = sync_state.checked_at.map(|value| value.timestamp());
@@ -467,15 +473,17 @@ pub(crate) async fn upsert_content_set_sync_state(
 			applied_update_id,
 			latest_available_update_id,
 			checked_at,
-			status
+			status,
+			applied_backtrack_version
 		)
-		VALUES (?, ?, ?, ?, ?, ?)
+		VALUES (?, ?, ?, ?, ?, ?, ?)
 		ON CONFLICT (content_set_id) DO UPDATE SET
 			provider = excluded.provider,
 			applied_update_id = excluded.applied_update_id,
 			latest_available_update_id = excluded.latest_available_update_id,
 			checked_at = excluded.checked_at,
-			status = excluded.status
+			status = excluded.status,
+			applied_backtrack_version = excluded.applied_backtrack_version
 		",
         content_set_id,
         provider,
@@ -483,6 +491,7 @@ pub(crate) async fn upsert_content_set_sync_state(
         latest_available_update_id,
         checked_at,
         status,
+        applied_backtrack_version,
     )
     .execute(&mut **tx)
     .await?;
@@ -581,11 +590,9 @@ pub(crate) async fn set_instance_file_locked(
     let file =
         get_instance_file_by_relative_path(instance_id, relative_path, pool)
             .await?
-            .ok_or_else(|| {
-                crate::ErrorKind::InputError(format!(
-                    "Unknown content file {relative_path}"
-                ))
-            })?;
+            .ok_or(ErrorKind::InputError(format!(
+                "unknown content file {relative_path}"
+            )))?;
 
     if locked {
         sqlx::query(
@@ -1387,12 +1394,10 @@ pub(crate) async fn upsert_content_update_check(
 }
 
 fn project_type_from_str(value: &str) -> crate::Result<ProjectType> {
-    ProjectType::from_name(value).ok_or_else(|| {
-        crate::ErrorKind::InputError(format!(
-            "Unknown content project type {value}"
-        ))
-        .into()
-    })
+    ProjectType::from_name(value).ok_or(
+        ErrorKind::InputError(format!("unknown content project type {value}"))
+            .into(),
+    )
 }
 
 fn timestamp(value: i64) -> DateTime<Utc> {
@@ -1407,10 +1412,9 @@ fn optional_timestamp(value: i64) -> Option<DateTime<Utc>> {
 
 fn unsigned(value: i64, column: &str) -> crate::Result<u64> {
     if value < 0 {
-        return Err(crate::ErrorKind::InputError(format!(
-            "Expected {column} to be non-negative"
-        ))
-        .into());
+        bail!(ErrorKind::InputError(format!(
+            "expected {column} to be non-negative"
+        )));
     }
 
     Ok(value as u64)

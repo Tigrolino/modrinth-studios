@@ -1,16 +1,17 @@
 #![allow(dead_code)]
 
+use crate::ErrorKind;
 use crate::state::instances::{
     ContentSet, ContentSetStatus, ContentSetSyncStatus, ContentSourceKind,
-    Instance, InstanceIconBackground, InstanceIconConfig,
-    InstanceLaunchContext, InstanceLaunchOverrides,
-    InstanceLaunchOverridesData, InstanceLink, InstanceSyncedOption,
-    InstanceSyncedOptions, SharedInstanceAttachment, SharedInstanceRole,
-    playtime_to_storage,
+    IconBackground, IconConfig, Instance, InstanceLaunchContext,
+    InstanceLaunchOverrides, InstanceLaunchOverridesData, InstanceLink,
+    InstanceSyncedOption, InstanceSyncedOptions, SharedInstanceAttachment,
+    SharedInstanceRole, playtime_to_storage,
 };
 use crate::state::{
     InstanceInstallStage, LauncherFeatureVersion, ModLoader, ReleaseChannel,
 };
+use anyhow::{Context, bail};
 use chrono::{DateTime, TimeZone, Utc};
 use serde::de::DeserializeOwned;
 use sqlx::{Executor, Sqlite, SqlitePool, Transaction};
@@ -147,8 +148,8 @@ impl TryFrom<InstanceLinkRow> for InstanceLink {
                 modpack_project_id: row.modrinth_project_id,
                 modpack_version_id: row.modrinth_version_id,
             }),
-            other => Err(crate::ErrorKind::InputError(format!(
-                "Unknown instance link kind {other}"
+            other => Err(ErrorKind::InputError(format!(
+                "unknown instance link kind {other}"
             ))
             .into()),
         }
@@ -164,7 +165,7 @@ pub(crate) struct InstanceLaunchOverridesRow {
 #[derive(Debug)]
 pub(crate) struct InstanceMetadataRecord {
     pub instance: Instance,
-    pub icon_config: Option<InstanceIconConfig>,
+    pub icon_config: Option<IconConfig>,
     pub applied_content_set: ContentSet,
     pub link: InstanceLink,
     pub shared_instance: Option<SharedInstanceAttachment>,
@@ -229,7 +230,9 @@ struct InstanceMetadataRow {
     shared_instance_server_manager_name: Option<String>,
     shared_instance_server_manager_icon_url: Option<String>,
     shared_instance_linked_user_id: Option<String>,
+    shared_instance_restored_from_remote: Option<bool>,
     shared_sync_applied_update_id: Option<String>,
+    shared_sync_applied_backtrack_version: Option<String>,
     shared_sync_latest_available_update_id: Option<String>,
     shared_sync_status: Option<String>,
     imported_name: Option<String>,
@@ -245,12 +248,9 @@ impl TryFrom<InstanceLaunchOverridesRow> for InstanceLaunchOverrides {
     fn try_from(row: InstanceLaunchOverridesRow) -> crate::Result<Self> {
         let data =
             serde_json::from_str::<InstanceLaunchOverridesData>(&row.overrides)
-                .map_err(|err| {
-                    crate::ErrorKind::InputError(format!(
-                        "Invalid launch overrides JSON: {err}"
-                    ))
-                    .as_error()
-                })?;
+                .context(ErrorKind::InputError(
+                    "invalid launch overrides JSON".to_string(),
+                ))?;
 
         Ok(data.into_launch_overrides(row.instance_id))
     }
@@ -343,8 +343,10 @@ impl InstanceMetadataRow {
             self.shared_instance_server_manager_name,
             self.shared_instance_server_manager_icon_url,
             self.shared_instance_linked_user_id,
+            self.shared_instance_restored_from_remote.unwrap_or(false),
             self.shared_sync_status,
             self.shared_sync_applied_update_id,
+            self.shared_sync_applied_backtrack_version,
             self.shared_sync_latest_available_update_id,
         )?;
         let group_ids = parse_group_ids(self.group_ids)?;
@@ -352,16 +354,15 @@ impl InstanceMetadataRow {
             launch_overrides_from_json(instance_id, self.launch_overrides)?;
         let icon_config =
             match (self.icon_config_background, self.icon_config_symbol) {
-                (Some(background), Some(symbol)) => Some(InstanceIconConfig {
+                (Some(background), Some(symbol)) => Some(IconConfig {
                     background: deserialize_icon_background(background)?,
                     symbol,
                 }),
                 (None, None) => None,
                 _ => {
-                    return Err(crate::ErrorKind::InputError(
-                        "Instance icon config is incomplete".to_string(),
-                    )
-                    .into());
+                    bail!(ErrorKind::InputError(
+                        "instance icon config is incomplete".to_string(),
+                    ));
                 }
             };
 
@@ -704,7 +705,9 @@ macro_rules! query_instance_metadata {
                     link.shared_instance_server_manager_name AS "shared_instance_server_manager_name?: String",
                     link.shared_instance_server_manager_icon_url AS "shared_instance_server_manager_icon_url?: String",
                     link.shared_instance_linked_user_id AS "shared_instance_linked_user_id?: String",
+                    link.shared_instance_restored_from_remote AS "shared_instance_restored_from_remote?: bool",
                     sync.applied_update_id AS "shared_sync_applied_update_id?: String",
+                    sync.applied_backtrack_version AS "shared_sync_applied_backtrack_version?: String",
                     sync.latest_available_update_id AS "shared_sync_latest_available_update_id?: String",
                     sync.status AS "shared_sync_status?: String",
                     link.imported_name AS "imported_name?: String",
@@ -746,7 +749,7 @@ macro_rules! query_instance_metadata {
 
 pub(crate) async fn update_instance_icon_config(
     instance_id: &str,
-    config: Option<&InstanceIconConfig>,
+    config: Option<&IconConfig>,
     tx: &mut Transaction<'_, Sqlite>,
 ) -> crate::Result<()> {
     if let Some(config) = config {
@@ -847,7 +850,7 @@ pub(crate) async fn update_instance_path_and_name(
 pub(crate) async fn update_instance_icon_if_empty(
     instance_id: &str,
     icon_path: &str,
-    config: &InstanceIconConfig,
+    config: &IconConfig,
     pool: &SqlitePool,
 ) -> crate::Result<bool> {
     let modified = Utc::now().timestamp();
@@ -877,7 +880,7 @@ pub(crate) async fn update_instance_icon_if_empty(
 }
 
 pub(crate) async fn update_recent_instance_icon_config(
-    config: &InstanceIconConfig,
+    config: &IconConfig,
     tx: &mut Transaction<'_, Sqlite>,
 ) -> crate::Result<()> {
     let background = serde_json::to_string(&config.background)?;
@@ -916,8 +919,8 @@ pub(crate) async fn update_recent_instance_icon_config(
 
 pub(crate) async fn get_recent_instance_icon_configs(
     pool: &SqlitePool,
-) -> crate::Result<Vec<InstanceIconConfig>> {
-    let rows = sqlx::query_as::<_, InstanceIconConfigRow>(
+) -> crate::Result<Vec<IconConfig>> {
+    let rows = sqlx::query_as::<_, IconConfigRow>(
         "
 		SELECT background, symbol
 		FROM recent_instance_icon_configs
@@ -930,7 +933,7 @@ pub(crate) async fn get_recent_instance_icon_configs(
 
     rows.into_iter()
         .map(|row| {
-            Ok(InstanceIconConfig {
+            Ok(IconConfig {
                 background: deserialize_icon_background(row.background)?,
                 symbol: row.symbol,
             })
@@ -939,18 +942,18 @@ pub(crate) async fn get_recent_instance_icon_configs(
 }
 
 #[derive(sqlx::FromRow)]
-struct InstanceIconConfigRow {
+struct IconConfigRow {
     background: String,
     symbol: String,
 }
 
 fn deserialize_icon_background(
     background: String,
-) -> crate::Result<InstanceIconBackground> {
+) -> crate::Result<IconBackground> {
     match serde_json::from_str(&background) {
         Ok(background) => Ok(background),
         Err(_) if background.starts_with('#') => {
-            Ok(InstanceIconBackground::Color { value: background })
+            Ok(IconBackground::Color { value: background })
         }
         Err(error) => Err(error.into()),
     }
@@ -1199,17 +1202,15 @@ pub(crate) async fn set_instance_group_order(
 
     for group_id in group_ids {
         if !seen_group_ids.insert(group_id.as_str()) {
-            return Err(crate::ErrorKind::InputError(format!(
-                "Duplicate instance group {group_id} in group order"
-            ))
-            .into());
+            bail!(ErrorKind::InputError(format!(
+                "duplicate instance group {group_id} in group order"
+            )));
         }
 
         if !existing_group_id_set.contains(group_id.as_str()) {
-            return Err(crate::ErrorKind::InputError(format!(
-                "Unknown instance group {group_id}"
-            ))
-            .into());
+            bail!(ErrorKind::InputError(format!(
+                "unknown instance group {group_id}"
+            )));
         }
 
         ordered_group_ids.push(group_id.as_str());
@@ -1342,10 +1343,7 @@ pub(crate) async fn set_instance_sync_preference(
     .await?;
 
     if !instance_exists {
-        return Err(crate::ErrorKind::InputError(
-            "Unknown instance".to_string(),
-        )
-        .into());
+        bail!(ErrorKind::InputError("unknown instance".to_string()));
     }
 
     let option_name = option.as_str();
@@ -1528,6 +1526,8 @@ pub(crate) async fn set_shared_instance_attachment(
         attachment.and_then(|value| value.server_manager_name.as_deref());
     let shared_instance_server_manager_icon_url =
         attachment.and_then(|value| value.server_manager_icon_url.as_deref());
+    let shared_instance_restored_from_remote =
+        attachment.is_some_and(|value| value.restored_from_remote);
 
     sqlx::query!(
         "
@@ -1539,9 +1539,10 @@ pub(crate) async fn set_shared_instance_attachment(
 			shared_instance_manager_id,
 			shared_instance_server_manager_name,
 			shared_instance_server_manager_icon_url,
-			shared_instance_linked_user_id
+			shared_instance_linked_user_id,
+			shared_instance_restored_from_remote
 		)
-		VALUES (?, 'unmanaged', ?, ?, ?, ?, ?, ?)
+		VALUES (?, 'unmanaged', ?, ?, ?, ?, ?, ?, ?)
 		ON CONFLICT (instance_id) DO UPDATE SET
 			link_kind = CASE
 				WHEN excluded.shared_instance_id IS NULL
@@ -1554,7 +1555,8 @@ pub(crate) async fn set_shared_instance_attachment(
 			shared_instance_manager_id = excluded.shared_instance_manager_id,
 			shared_instance_server_manager_name = excluded.shared_instance_server_manager_name,
 			shared_instance_server_manager_icon_url = excluded.shared_instance_server_manager_icon_url,
-			shared_instance_linked_user_id = excluded.shared_instance_linked_user_id
+			shared_instance_linked_user_id = excluded.shared_instance_linked_user_id,
+			shared_instance_restored_from_remote = excluded.shared_instance_restored_from_remote
 		",
         instance_id,
         shared_instance_id,
@@ -1563,8 +1565,29 @@ pub(crate) async fn set_shared_instance_attachment(
         shared_instance_server_manager_name,
         shared_instance_server_manager_icon_url,
         shared_instance_linked_user_id,
+        shared_instance_restored_from_remote,
     )
     .execute(&mut **tx)
+    .await?;
+
+    Ok(())
+}
+
+pub(crate) async fn set_shared_instance_restored_from_remote(
+    instance_id: &str,
+    restored_from_remote: bool,
+    exec: impl sqlx::Executor<'_, Database = sqlx::Sqlite>,
+) -> crate::Result<()> {
+    sqlx::query!(
+        "
+		UPDATE instance_links
+		SET shared_instance_restored_from_remote = ?
+		WHERE instance_id = ?
+		",
+        restored_from_remote,
+        instance_id,
+    )
+    .execute(exec)
     .await?;
 
     Ok(())
@@ -1790,30 +1813,27 @@ fn instance_link_columns(
 }
 
 fn required(value: Option<String>, column: &str) -> crate::Result<String> {
-    value.ok_or_else(|| {
-        crate::ErrorKind::InputError(format!(
-            "Missing required instance link column {column}"
+    value.ok_or(
+        ErrorKind::InputError(format!(
+            "missing required instance link column {column}"
         ))
-        .into()
-    })
+        .into(),
+    )
 }
 
 fn required_i64(value: Option<i64>, column: &str) -> crate::Result<i64> {
-    value.ok_or_else(|| {
-        crate::ErrorKind::InputError(format!(
-            "Missing required instance metadata column {column}"
+    value.ok_or(
+        ErrorKind::InputError(format!(
+            "missing required instance metadata column {column}"
         ))
-        .into()
-    })
+        .into(),
+    )
 }
 
 fn parse_group_ids(value: String) -> crate::Result<Vec<String>> {
-    serde_json::from_str(&value).map_err(|err| {
-        crate::ErrorKind::InputError(format!(
-            "Invalid instance groups JSON: {err}"
-        ))
-        .into()
-    })
+    serde_json::from_str(&value).context(ErrorKind::InputError(
+        "invalid instance groups JSON".to_string(),
+    ))
 }
 
 fn launch_overrides_from_json(
@@ -1837,8 +1857,10 @@ fn shared_instance_attachment(
     shared_instance_server_manager_name: Option<String>,
     shared_instance_server_manager_icon_url: Option<String>,
     shared_instance_linked_user_id: Option<String>,
+    shared_instance_restored_from_remote: bool,
     shared_sync_status: Option<String>,
     applied_update_id: Option<String>,
+    applied_backtrack_version: Option<String>,
     latest_available_update_id: Option<String>,
 ) -> crate::Result<Option<SharedInstanceAttachment>> {
     let Some(id) = shared_instance_id else {
@@ -1863,10 +1885,12 @@ fn shared_instance_attachment(
         linked_user_id: shared_instance_linked_user_id,
         status,
         applied_version: optional_i32(applied_update_id, "applied_update_id")?,
+        applied_backtrack_version,
         latest_version: optional_i32(
             latest_available_update_id,
             "latest_available_update_id",
         )?,
+        restored_from_remote: shared_instance_restored_from_remote,
     }))
 }
 
@@ -1876,10 +1900,9 @@ fn optional_i32(
 ) -> crate::Result<Option<i32>> {
     value
         .map(|value| {
-            value.parse().map_err(|err| {
-                crate::ErrorKind::InputError(format!("Invalid {column}: {err}"))
-                    .into()
-            })
+            value
+                .parse::<i32>()
+                .context(ErrorKind::InputError(format!("invalid {column}")))
         })
         .transpose()
 }
@@ -1887,9 +1910,9 @@ fn optional_i32(
 fn parse_uuid(value: Option<String>, column: &str) -> crate::Result<Uuid> {
     let value = required(value, column)?;
 
-    value.parse().map_err(|err| {
-        crate::ErrorKind::InputError(format!("Invalid {column}: {err}")).into()
-    })
+    value
+        .parse::<Uuid>()
+        .context(ErrorKind::InputError(format!("invalid {column}")))
 }
 
 fn parse_optional_uuid(
@@ -1898,10 +1921,9 @@ fn parse_optional_uuid(
 ) -> crate::Result<Option<Uuid>> {
     value
         .map(|value| {
-            value.parse().map_err(|err| {
-                crate::ErrorKind::InputError(format!("Invalid {column}: {err}"))
-                    .into()
-            })
+            value
+                .parse::<Uuid>()
+                .context(ErrorKind::InputError(format!("invalid {column}")))
         })
         .transpose()
 }
@@ -1921,12 +1943,11 @@ where
         return Ok(None);
     }
 
-    serde_json::from_str(&value).map(Some).map_err(|err| {
-        crate::ErrorKind::InputError(format!(
-            "Invalid launch override JSON in {column}: {err}"
-        ))
-        .into()
-    })
+    serde_json::from_str(&value)
+        .map(Some)
+        .context(ErrorKind::InputError(format!(
+            "invalid launch override JSON in {column}"
+        )))
 }
 
 fn timestamp(value: i64) -> DateTime<Utc> {
@@ -1941,10 +1962,9 @@ fn optional_timestamp(value: i64) -> Option<DateTime<Utc>> {
 
 fn unsigned(value: i64, column: &str) -> crate::Result<u64> {
     if value < 0 {
-        return Err(crate::ErrorKind::InputError(format!(
-            "Expected {column} to be non-negative"
-        ))
-        .into());
+        bail!(ErrorKind::InputError(format!(
+            "expected {column} to be non-negative"
+        )));
     }
 
     Ok(value as u64)

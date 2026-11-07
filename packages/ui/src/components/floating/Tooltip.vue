@@ -18,6 +18,8 @@ import {
 	tooltipFocusIn,
 	tooltipFocusOut,
 	tooltipLeave,
+	tooltipPanelEnter,
+	tooltipPanelLeave,
 	type TooltipPlacement,
 	unbindTooltipSource,
 } from '../../providers/tooltip'
@@ -43,6 +45,8 @@ const SIDES = {
 const props = withDefaults(
 	defineProps<{
 		disabled?: boolean
+		animated?: boolean
+		showArrow?: boolean
 		open?: boolean
 		theme?: string
 		placement?: TooltipPlacement
@@ -50,8 +54,9 @@ const props = withDefaults(
 		text?: string | null
 		content?: TooltipContent | null
 		panelClass?: string
+		interactive?: boolean
 	}>(),
-	{ disabled: false, theme: 'tooltip', placement: 'top' },
+	{ disabled: false, animated: true, showArrow: true, theme: 'tooltip', placement: 'top' },
 )
 
 const slots = useSlots()
@@ -63,6 +68,11 @@ const isOpen = computed(
 	() => props.reference != null && (!!props.text || props.content != null) && !props.disabled,
 )
 const referenceEl = computed(() => props.reference ?? null)
+const teleportTarget = computed(
+	() =>
+		referenceEl.value?.ownerDocument.body ??
+		(typeof document !== 'undefined' ? document.body : 'body'),
+)
 const moving = ref(false)
 const jumpKey = ref(0)
 let addedTabIndex = false
@@ -119,6 +129,7 @@ watch(
 		() => props.theme,
 		() => props.text,
 		() => props.panelClass,
+		() => props.interactive,
 		() => slots.popper,
 	],
 	() => {
@@ -166,6 +177,7 @@ function syncSource() {
 		render: slots.popper ? () => slots.popper?.() : undefined,
 		pinned: !!props.open,
 		panelClass: props.panelClass,
+		interactive: props.interactive,
 	})
 }
 
@@ -241,19 +253,27 @@ function onFocusOut(event: FocusEvent) {
 	>
 		<slot />
 	</div>
-	<Teleport v-if="hosted" to="body">
-		<Transition name="tooltip">
+	<Teleport v-if="hosted" :to="teleportTarget">
+		<Transition name="tooltip" :css="animated">
 			<div
 				v-if="isOpen"
 				:key="jumpKey"
 				ref="floating"
-				class="v-popper__inner pointer-events-none z-[100010] rounded-lg border border-solid border-surface-5 bg-surface-3 px-3 py-1.5 text-sm font-medium text-contrast card-shadow"
-				:class="[`v-popper--theme-${theme}`, moving && 'tooltip-moving', panelClass]"
+				class="v-popper__inner z-[100010] rounded-lg border border-solid border-surface-5 bg-surface-3 px-3 py-1.5 text-sm font-medium text-contrast card-shadow"
+				:class="[
+					`v-popper--theme-${theme}`,
+					moving && 'tooltip-moving',
+					!interactive && 'pointer-events-none',
+					panelClass,
+				]"
 				:style="[floatingStyles, { transformOrigin }]"
+				@mouseenter="tooltipPanelEnter"
+				@mouseleave="tooltipPanelLeave"
 			>
 				<TooltipSlot v-if="content" :render="content" />
 				<template v-else>{{ text }}</template>
 				<div
+					v-if="showArrow"
 					ref="arrowEl"
 					class="tooltip-arrow absolute size-2 border-b border-r border-0 border-solid border-surface-5 bg-surface-3"
 					:style="arrowStyles"

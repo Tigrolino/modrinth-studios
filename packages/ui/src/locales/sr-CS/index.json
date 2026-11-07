@@ -2,39 +2,6 @@
   "action.no-permission": {
     "defaultMessage": "Nemaš dozvolu."
   },
-  "affiliate.create.button": {
-    "defaultMessage": "Kreiraj partnersku/sponzorisanu vezu"
-  },
-  "affiliate.create.header": {
-    "defaultMessage": "Kreacija novog partnerskog koda"
-  },
-  "affiliate.create.title.description": {
-    "defaultMessage": "Daj svom partnerskom linku ime kako bi znao odakle ljudi dolaze!"
-  },
-  "affiliate.create.title.label": {
-    "defaultMessage": "Naslov partnerske/sponzorisane veze"
-  },
-  "affiliate.create.title.placeholder": {
-    "defaultMessage": "na primer Youtube"
-  },
-  "affiliate.create.user.description": {
-    "defaultMessage": "Ime korstnika za kojeg kreiraš partnerski link"
-  },
-  "affiliate.create.user.placeholder": {
-    "defaultMessage": "Unesi korisničko ime..."
-  },
-  "affiliate.createdBy": {
-    "defaultMessage": "Kreirano od {user}"
-  },
-  "affiliate.creating.button": {
-    "defaultMessage": "Kreacija partnerskog/sponzorisanog linka..."
-  },
-  "affiliate.revoke": {
-    "defaultMessage": "Opozovi partnerski/sponzorisani link"
-  },
-  "affiliate.viewAnalytics": {
-    "defaultMessage": "Pregled analitike"
-  },
   "app.appearance-settings.native-decorations.description": {
     "defaultMessage": "Koristi naslovnu traku i kontrole prozora tvog operativnog sistema. Restart aplikacije obavezan."
   },
@@ -62,9 +29,6 @@
   "billing.resubscribe-modal.cancel": {
     "defaultMessage": "Otkaži"
   },
-  "billing.resubscribe-modal.cpus": {
-    "defaultMessage": "{sharedCpus} zajedničkih procesora"
-  },
   "billing.resubscribe-modal.description": {
     "defaultMessage": "Upravo ćes se ponovo pretplatiti na <server-name>{serverName}</server-name>. Tvoja pretplata će biti ponovo aktivirana i tvoj server će nastaviti da radi bez prekida."
   },
@@ -77,26 +41,8 @@
   "billing.resubscribe-modal.failed-load": {
     "defaultMessage": "Greška sa učitavanjem detalja pretplate."
   },
-  "billing.resubscribe-modal.interval": {
-    "defaultMessage": "{intervalOption, select, fiveDays {/5 dana} monthly {/mesec} quarterly {/tromesečno} yearly {/godinu} other {{interval}}}"
-  },
-  "billing.resubscribe-modal.next-charge": {
-    "defaultMessage": "Tvoja sledeća naplata će biti u <charge-date>{date}</charge-date>."
-  },
-  "billing.resubscribe-modal.plan-label": {
-    "defaultMessage": "Plan"
-  },
-  "billing.resubscribe-modal.ram": {
-    "defaultMessage": "{ramGb} GB radne memorije"
-  },
   "billing.resubscribe-modal.resubscribe": {
     "defaultMessage": "Ponovno se pretplati"
-  },
-  "billing.resubscribe-modal.storage": {
-    "defaultMessage": "{storageGb} GB memorije"
-  },
-  "billing.resubscribe-modal.title": {
-    "defaultMessage": "Ponovna pretplata"
   },
   "browse.advanced-filters.apply-saved-preferences": {
     "defaultMessage": "Primeni sačuvana podešavanja"
@@ -151,9 +97,6 @@
   },
   "button.add-server-to-instance": {
     "defaultMessage": "Dodaj server instanci"
-  },
-  "button.affiliate-links": {
-    "defaultMessage": "Partnerski/sponzorisani linkovi"
   },
   "button.analytics": {
     "defaultMessage": "Analitike"
@@ -395,9 +338,6 @@
   "content.card.synced": {
     "defaultMessage": "Sinhronizovano među instancama"
   },
-  "content.card.uploaded": {
-    "defaultMessage": "Učitano"
-  },
   "content.confirm-bulk-update.admonition-body": {
     "defaultMessage": "Jesi li siguran da želiš ažuirati {count, plural, one {# projekat} few {# projekta} other {# projekata}} na najnoviju verziju? Preporučeno je ažuirati sadržaje jedan po jedan."
   },
@@ -496,9 +436,6 @@
   },
   "content.diff-modal.added-count": {
     "defaultMessage": "{count} dodano"
-  },
-  "content.diff-modal.config-files-updated": {
-    "defaultMessage": "Promenjene konfiguracione datoteke"
   },
   "content.diff-modal.diff-type.added": {
     "defaultMessage": "Dodano (zavisnost)"
@@ -656,9 +593,6 @@
   "content.managed-card.view-content": {
     "defaultMessage": "Pogledaj sadržaj"
   },
-  "content.metadata-filter.author": {
-    "defaultMessage": "Autor"
-  },
   "content.metadata-filter.environment": {
     "defaultMessage": "Okruženje"
   },
@@ -683,17 +617,8 @@
   "content.metadata-filter.update.available": {
     "defaultMessage": "Dostupno jе ažuriranjе"
   },
-  "content.metadata-filter.warning.client-depends": {
-    "defaultMessage": "Client zavisi od datoteke"
-  },
   "content.metadata-filter.warning.client-only": {
     "defaultMessage": "Samo-client sadržaj"
-  },
-  "content.metadata-filter.warning.client-retained": {
-    "defaultMessage": "Client dadoteka zadržana"
-  },
-  "content.metadata-filter.warning.none": {
-    "defaultMessage": "Nema upozorenja"
   },
   "content.metadata-filter.warnings": {
     "defaultMessage": "Upozorenja"
@@ -722,11 +647,11 @@
   "content.page-layout.failed-to-load": {
     "defaultMessage": "Greška sa pokazivanjem sadržaja"
   },
+  "content.page-layout.failed-to-load-changelog": {
+    "defaultMessage": "Učitavanje evidencije promena nije uspelo."
+  },
   "content.page-layout.filter.add": {
     "defaultMessage": "Filter"
-  },
-  "content.page-layout.filter.author-count": {
-    "defaultMessage": "{count, plural, one {# Autor} other {# Autora}}"
   },
   "content.page-layout.loading": {
     "defaultMessage": "Učitavanje sadržaja..."
@@ -1238,9 +1163,6 @@
   "external-files.permissions-card.editor.save": {
     "defaultMessage": "Sačuvaj pripisivanje"
   },
-  "external-files.permissions-card.editor.select-license-label": {
-    "defaultMessage": "Izaberi licencu..."
-  },
   "external-files.permissions-card.editor.type-label": {
     "defaultMessage": "Razlog dozvole"
   },
@@ -1631,9 +1553,6 @@
   "files.navbar.home": {
     "defaultMessage": "Početna stranica"
   },
-  "files.navbar.install-curseforge-pack": {
-    "defaultMessage": "Instaliraj modpack od CurseForge"
-  },
   "files.navbar.new-file": {
     "defaultMessage": "Nova datoteka"
   },
@@ -1769,21 +1688,6 @@
   "files.zip-url-modal.backup-name": {
     "defaultMessage": "Instalacija modpacka od CurseForge"
   },
-  "files.zip-url-modal.cf-header": {
-    "defaultMessage": "Instaliraj modpack od CurseForge"
-  },
-  "files.zip-url-modal.cf-not-found-text": {
-    "defaultMessage": "Nismo mogli da pronađemo CurseForge modpack na toj URL adresi."
-  },
-  "files.zip-url-modal.cf-not-found-title": {
-    "defaultMessage": "Modpack od CurseForge nije pronađen"
-  },
-  "files.zip-url-modal.enter-link": {
-    "defaultMessage": "Ubaci link"
-  },
-  "files.zip-url-modal.error-cf-url": {
-    "defaultMessage": "URL mora biti URL verzije CurseForge modpacka."
-  },
   "files.zip-url-modal.error-url-invalid": {
     "defaultMessage": "URL mora biti važeći."
   },
@@ -1795,24 +1699,6 @@
   },
   "files.zip-url-modal.install-failed-title": {
     "defaultMessage": "Neuspešna instalacija"
-  },
-  "files.zip-url-modal.step-copy-description": {
-    "defaultMessage": "Kopiraj URL adresu stranice verzije i nalepi je ispod."
-  },
-  "files.zip-url-modal.step-copy-title": {
-    "defaultMessage": "Kopiraj URL"
-  },
-  "files.zip-url-modal.step-find-description": {
-    "defaultMessage": "Pregledaj CurseForge i pronađi željeni modpak."
-  },
-  "files.zip-url-modal.step-find-title": {
-    "defaultMessage": "Pronađi modpack"
-  },
-  "files.zip-url-modal.step-select-description": {
-    "defaultMessage": "Idi na karticu „Datoteke” i izaberi verziju za instalaciju."
-  },
-  "files.zip-url-modal.step-select-title": {
-    "defaultMessage": "Izaberi verziju"
   },
   "files.zip-url-modal.unknown-error": {
     "defaultMessage": "Došlo je do nepoznate greške"
@@ -1967,12 +1853,6 @@
   "hosting.content.failed-to-bulk-delete": {
     "defaultMessage": "Greška sa brisanjem sadržaja"
   },
-  "hosting.content.failed-to-bulk-disable": {
-    "defaultMessage": "Nije uspelo onemogućavanje sadržaja"
-  },
-  "hosting.content.failed-to-bulk-enable": {
-    "defaultMessage": "Nije uspelo omogućavanje sadržaja"
-  },
   "hosting.content.failed-to-bulk-update": {
     "defaultMessage": "Ažuriranje sadržaja nije uspelo"
   },
@@ -1987,9 +1867,6 @@
   },
   "hosting.content.failed-to-remove": {
     "defaultMessage": "Greška sa brisanjem sadržaja"
-  },
-  "hosting.content.failed-to-toggle": {
-    "defaultMessage": "Greška sa preklapanjem {name}"
   },
   "hosting.content.failed-to-unlink": {
     "defaultMessage": "Greška sa uklanjanjem veze od modpacka"
@@ -2053,9 +1930,6 @@
   },
   "hosting.loader.reset-to-onboarding-success-title": {
     "defaultMessage": "Server vraćen na početno podešavanje"
-  },
-  "hosting.loader.support-options-title": {
-    "defaultMessage": "Opcije podrške"
   },
   "hosting.specs.burst": {
     "defaultMessage": "Preopterećuje do {cpus} procesora"
@@ -2429,12 +2303,6 @@
   "instances.managed-content-modal.enabled": {
     "defaultMessage": "Uključeno"
   },
-  "instances.managed-content-modal.external-content": {
-    "defaultMessage": "Spoljašnje"
-  },
-  "instances.managed-content-modal.external-content-description": {
-    "defaultMessage": "Ovaj fajl nije objavljen na Modrinth-u."
-  },
   "instances.managed-content-modal.header": {
     "defaultMessage": "Upravljan sadržaj"
   },
@@ -2447,8 +2315,8 @@
   "instances.managed-content-modal.open-in-slicer": {
     "defaultMessage": "Otvori u Slicer-u"
   },
-  "instances.managed-content-modal.warnings": {
-    "defaultMessage": "Upozorenja"
+  "instances.managed-content-modal.search-placeholder": {
+    "defaultMessage": "Pretraga {count, number} {count, plural, one {projekta} few {projekta} other {projekata}}"
   },
   "instances.updater-modal.badge.current": {
     "defaultMessage": "Upravo"
@@ -2533,15 +2401,6 @@
   },
   "label.changes-saved": {
     "defaultMessage": "Promene sačuvane"
-  },
-  "label.client-depends-warning": {
-    "defaultMessage": "Ovaj mod zavisi od moda na strani klijenta i može izazvati probleme prilikom pokretanja tvog servera"
-  },
-  "label.client-only-warning": {
-    "defaultMessage": "Ovo je mod za klijent i može izazvati probleme prilikom pokretanja tvog servera"
-  },
-  "label.client-retained-warning": {
-    "defaultMessage": "Ovo je mod na strani klijenta koji je instaliran kao zavisnost i može izazvati probleme prilikom pokretanja tvog servera"
   },
   "label.collections": {
     "defaultMessage": "Kolekcije"
@@ -3260,6 +3119,9 @@
   "profile.button.analytics": {
     "defaultMessage": "Pregled analitike korisnika"
   },
+  "profile.button.billing": {
+    "defaultMessage": "Upravljaj naplatom korisnika"
+  },
   "profile.button.block": {
     "defaultMessage": "Blokiraj"
   },
@@ -3271,6 +3133,15 @@
   },
   "profile.button.info": {
     "defaultMessage": "Pregled detalja korisnika"
+  },
+  "profile.button.manage-projects": {
+    "defaultMessage": "Upravljaj projektima"
+  },
+  "profile.button.unblock": {
+    "defaultMessage": "Deblokiraj"
+  },
+  "profile.collection.projects-count": {
+    "defaultMessage": "{count, plural, one {# projekat} few {# projekta} other {# projekata}}"
   },
   "profile.details.error.github-profile-message": {
     "defaultMessage": "Profil sa GitHub-a nije mogao biti preuzet. Molimo pokušajte ponovo."
@@ -3313,9 +3184,6 @@
   },
   "profile.error.not-found": {
     "defaultMessage": "Korisnik nije pronađen"
-  },
-  "profile.label.affiliate": {
-    "defaultMessage": "Partner"
   },
   "profile.label.badges": {
     "defaultMessage": "Bedževi"
@@ -3995,6 +3863,24 @@
   "project.settings.description.title": {
     "defaultMessage": "Opis"
   },
+  "project.settings.disclosures.ai.types-assets": {
+    "defaultMessage": "Sredstva"
+  },
+  "project.settings.disclosures.ai.types-code": {
+    "defaultMessage": "Kod"
+  },
+  "project.settings.disclosures.ai.types-text": {
+    "defaultMessage": "Tekst"
+  },
+  "project.settings.disclosures.telemetry.consent-always-active": {
+    "defaultMessage": "Uvek aktivno"
+  },
+  "project.settings.disclosures.telemetry.consent-opt-in": {
+    "defaultMessage": "Omogući"
+  },
+  "project.settings.disclosures.telemetry.consent-opt-out": {
+    "defaultMessage": "Odustati"
+  },
   "project.settings.environment.client_and_server.description": {
     "defaultMessage": "Ima neke funkcionalnosti i na klijentu i na serveru, čak i ako su samo delimično dostupne."
   },
@@ -4127,6 +4013,9 @@
   "project.versions.channel.release.symbol": {
     "defaultMessage": "I"
   },
+  "project.versions.filter.channel": {
+    "defaultMessage": "Kanal"
+  },
   "project.versions.filter.toggle-tooltip": {
     "defaultMessage": "Uključi/isključi filter za {filter}"
   },
@@ -4184,8 +4073,38 @@
   "report.item-type.version": {
     "defaultMessage": "verzija"
   },
+  "report.type.inappropriate": {
+    "defaultMessage": "Neprikladno"
+  },
+  "report.type.malicious": {
+    "defaultMessage": "Zlonamerno"
+  },
+  "report.type.spam": {
+    "defaultMessage": "Neželjena pošta"
+  },
   "s.bg": {
     "defaultMessage": "Pozadinski zadatak u toku"
+  },
+  "search.filter.dependency_type.embedded": {
+    "defaultMessage": "Ugrađen"
+  },
+  "search.filter.dependency_type.optional": {
+    "defaultMessage": "Opciono"
+  },
+  "search.filter.dependency_type.required": {
+    "defaultMessage": "Obavezno"
+  },
+  "search.filter.dependent_project": {
+    "defaultMessage": "Zavisni od {project}"
+  },
+  "search.filter.included_content.exclude": {
+    "defaultMessage": "Isključi"
+  },
+  "search.filter.included_content.excluded": {
+    "defaultMessage": "Isključi"
+  },
+  "search.filter.included_content.remove_project": {
+    "defaultMessage": "Ukloni projekat"
   },
   "search.filter.locked.default": {
     "defaultMessage": "Filter zaključan"
@@ -4925,12 +4844,6 @@
   "servers.backups.admonition.restoring-backup.title": {
     "defaultMessage": "Vraćanje iz backupa"
   },
-  "servers.backups.bulk-bar.aria-label": {
-    "defaultMessage": "{count, plural, one {Grupne radnje za jedan izabran backup} other {Grupna radnja za # izabranih backupa}}"
-  },
-  "servers.backups.bulk-bar.deleting": {
-    "defaultMessage": "Brisanje {total, plural, one {# backupa} other {# backupa}}..."
-  },
   "servers.backups.bulk-bar.selected-count": {
     "defaultMessage": "{count, plural, one {# backup izabran} few {# backupa izabrana} other {# backupa izabranih}}"
   },
@@ -4955,50 +4868,11 @@
   "servers.backups.empty.heading": {
     "defaultMessage": "Nema još backupa"
   },
-  "servers.backups.filtered-empty.clear-filters": {
-    "defaultMessage": "Očisti filtere"
-  },
-  "servers.backups.filtered-empty.description": {
-    "defaultMessage": "Isprobaj drugi filter ili ukloni filtere da bi vidio sve backupe."
-  },
-  "servers.backups.filtered-empty.heading": {
-    "defaultMessage": "Nema podudaranja backupa"
-  },
   "servers.backups.item.auto": {
     "defaultMessage": "Automatski"
   },
-  "servers.backups.item.backup-schedule": {
-    "defaultMessage": "Zakazan backup"
-  },
-  "servers.backups.item.creator-avatar-alt": {
-    "defaultMessage": "Avatar od {username}"
-  },
-  "servers.backups.item.creator.support": {
-    "defaultMessage": "Podrška"
-  },
-  "servers.backups.item.manual-backup": {
-    "defaultMessage": "Manualni backup"
-  },
-  "servers.backups.item.rename": {
-    "defaultMessage": "Preimenuj"
-  },
-  "servers.backups.item.restore": {
-    "defaultMessage": "Vrati"
-  },
-  "servers.backups.select-backup-aria": {
-    "defaultMessage": "Izaberi backup {name}"
-  },
   "servers.backups.toolbar.create-backup": {
     "defaultMessage": "Napravi backup"
-  },
-  "servers.backups.toolbar.filter-auto": {
-    "defaultMessage": "Automatski"
-  },
-  "servers.backups.toolbar.filter-manual": {
-    "defaultMessage": "Manualno"
-  },
-  "servers.backups.toolbar.select-all": {
-    "defaultMessage": "Izaberi sve"
   },
   "servers.busy.backup-creating": {
     "defaultMessage": "Kreacija backupa u toku"
@@ -5261,15 +5135,6 @@
   "servers.manage.servers-title": {
     "defaultMessage": "Modrinth hostiranje"
   },
-  "servers.manage.settings-hint.description": {
-    "defaultMessage": "Sada se mogu naći ovde!"
-  },
-  "servers.manage.settings-hint.dismiss": {
-    "defaultMessage": "Ne prikazuj ponovo"
-  },
-  "servers.manage.settings-hint.title": {
-    "defaultMessage": "Podešavanja tvojeg servera su pomerena"
-  },
   "servers.manage.shared-servers-title": {
     "defaultMessage": "Podeleni serveri"
   },
@@ -5480,18 +5345,6 @@
   "servers.remove-access-modal.what-happens-label": {
     "defaultMessage": "Šta se desi?"
   },
-  "servers.setup.onboarding.installation-failed.text": {
-    "defaultMessage": "Došlo je do neočekivane greške tokom instalacije. Molimo pokušaj ponovo kasnije."
-  },
-  "servers.setup.onboarding.installation-failed.title": {
-    "defaultMessage": "Neuspešna instalacija"
-  },
-  "servers.setup.onboarding.modpack-upload-failed.text": {
-    "defaultMessage": "Došlo je do neočekivane greške prilikom otpremanja. Molimo pokušaj ponovo kasnije."
-  },
-  "servers.setup.onboarding.modpack-upload-failed.title": {
-    "defaultMessage": "Otpremanje Modpack-a nije uspelo"
-  },
   "servers.setup.onboarding.setup-server.button": {
     "defaultMessage": "Podesi server"
   },
@@ -5515,9 +5368,6 @@
   },
   "servers.setup.onboarding.steps.heading": {
     "defaultMessage": "Podesi svoj server (~2 minute)"
-  },
-  "servers.setup.onboarding.uploading.progress": {
-    "defaultMessage": "Postavljanje ({percent, number}%)"
   },
   "servers.setup.onboarding.welcome.description": {
     "defaultMessage": "Tvoj server je gotov! Evo šta treba da uradiš da bi počeo da igraš!"

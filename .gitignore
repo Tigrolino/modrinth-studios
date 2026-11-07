@@ -88,3 +88,5 @@ _tmp_*
 # Old, unedited STUDIO.md kept around locally as a personal history/reference.
 # Not meant for the repo.
 STUDIO_HISTORY.md
+
+references/

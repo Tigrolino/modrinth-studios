@@ -594,7 +594,7 @@ pub async fn get_replay_thumbnail(
         tokio::task::spawn_blocking(move || read_zip_thumbnail(&path, kind))
             .await
             .map_err(|e| {
-                ErrorKind::OtherError(format!("thumbnail task panicked: {e}"))
+                anyhow::anyhow!("thumbnail task panicked: {e}")
             })?
             .ok();
 

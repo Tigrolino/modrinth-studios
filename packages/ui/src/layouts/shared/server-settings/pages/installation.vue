@@ -1,17 +1,5 @@
 <template>
 	<div class="flex flex-col gap-6">
-		<Teleport to="body">
-			<div class="relative z-[100]">
-				<ConfirmModal
-					ref="resetToOnboardingModal"
-					:title="formatMessage(messages.resetToOnboardingModalTitle)"
-					:description="formatMessage(messages.resetToOnboardingModalDescription)"
-					:proceed-label="formatMessage(messages.resetToOnboardingButton)"
-					@proceed="confirmResetToOnboarding"
-				/>
-			</div>
-		</Teleport>
-
 		<InstallationSettingsLayout
 			ref="installationSettingsLayout"
 			@reset-server="showResetServerModal"
@@ -47,38 +35,28 @@
 							@reinstall="onReinstall"
 							@browse-modpacks="onBrowseModpacks"
 						/>
-						<UploadProgressModal ref="uploadProgressModal" />
+						<ServerModpackUploadModal
+							ref="modpackUploadModal"
+							:header="modpackUploadLabel"
+							:confirm-label="modpackUploadLabel"
+							:confirm-icon="
+								modpackUploadAction === 'swap' ? ArrowLeftRightIcon : RotateCounterClockwiseIcon
+							"
+							:upload-progress="modpackUploadProgress"
+							@confirm="uploadLocalModpackWithSoftOverride"
+						/>
 					</div>
 				</Teleport>
 			</template>
 		</InstallationSettingsLayout>
-
-		<div v-if="isSiteAdmin" class="flex flex-col gap-2.5">
-			<span class="text-lg font-semibold text-contrast">
-				{{ formatMessage(messages.supportOptionsTitle) }}
-			</span>
-			<div>
-				<Button
-					v-tooltip="supportResetToOnboardingTooltip"
-					type="colored"
-					color="red"
-					:disabled="supportResetToOnboardingDisabled"
-					@click="showResetToOnboardingModal"
-				>
-					<RotateCounterClockwiseIcon class="size-5" />
-					{{ formatMessage(messages.resetToOnboardingButton) }}
-				</Button>
-			</div>
-		</div>
 	</div>
 </template>
 
 <script setup lang="ts">
-import type { Archon, Labrinth } from '@modrinth/api-client'
-import { RotateCounterClockwiseIcon } from '@modrinth/assets'
+import type { Archon, Labrinth, UploadProgress } from '@modrinth/api-client'
+import { ArrowLeftRightIcon, RotateCounterClockwiseIcon } from '@modrinth/assets'
 import {
 	commonMessages,
-	ConfirmModal,
 	defineMessages,
 	formatLoaderLabel,
 	type GameVersionOption,
@@ -91,7 +69,6 @@ import {
 	type LoaderVersionEntry,
 	provideInstallationSettings,
 	ServerSetupModal,
-	UploadProgressModal,
 	useDebugLogger,
 	useModrinthServersConsole,
 	useServerPermissions,
@@ -101,7 +78,8 @@ import { useQuery, useQueryClient } from '@tanstack/vue-query'
 import { computed, ref, useTemplateRef, watch } from 'vue'
 
 import { Button } from '#ui/components/base/buttons'
-import { injectFilePicker } from '#ui/providers/file-picker'
+import ServerModpackUploadModal from '#ui/components/servers/ServerModpackUploadModal.vue'
+import { isPterodactylServerId, pterodactylLoaders } from '#ui/utils/servers'
 
 const debug = useDebugLogger('LoaderPage')
 const client = injectModrinthClient()
@@ -121,12 +99,20 @@ const addonsQueryKey = ['content', 'list', 'v1', serverId] as const
 const tags = injectTags()
 const { formatMessage } = useVIntl()
 const serverSettings = injectServerSettings()
-const filePicker = injectFilePicker()
 const modrinthServersConsole = useModrinthServersConsole()
 const { canSetup, canResetServer, permissionDeniedMessage } = useServerPermissions()
 
-const uploadProgressModal =
-	useTemplateRef<InstanceType<typeof UploadProgressModal>>('uploadProgressModal')
+const modpackUploadModal =
+	useTemplateRef<InstanceType<typeof ServerModpackUploadModal>>('modpackUploadModal')
+const modpackUploadAction = ref<'reinstall' | 'swap'>('reinstall')
+const modpackUploadProgress = ref<UploadProgress | null>(null)
+const modpackUploadLabel = computed(() =>
+	formatMessage(
+		modpackUploadAction.value === 'swap'
+			? commonMessages.changeVersionButton
+			: commonMessages.reinstallModpackButton,
+	),
+)
 
 const messages = defineMessages({
 	resetServerTitle: {
@@ -136,7 +122,7 @@ const messages = defineMessages({
 	resetServerDescription: {
 		id: 'hosting.loader.reset-server-description',
 		defaultMessage:
-			'Removes all data on your server, including your worlds, mods, and configuration files. Backups will remain and can be restored.',
+			'Removes all data on your server, including your worlds, mods, and configuration files. Backups will remain and can be restored. Invited players will keep their access.',
 	},
 	loaderVersionLabel: {
 		id: 'hosting.loader.loader-version',
@@ -173,35 +159,6 @@ const messages = defineMessages({
 	failedToUnlink: {
 		id: 'hosting.loader.failed-to-unlink',
 		defaultMessage: 'Failed to unlink modpack',
-	},
-	supportOptionsTitle: {
-		id: 'hosting.loader.support-options-title',
-		defaultMessage: 'Support options',
-	},
-	resetToOnboardingButton: {
-		id: 'hosting.loader.reset-to-onboarding-button',
-		defaultMessage: 'Reset to onboarding',
-	},
-	resetToOnboardingModalTitle: {
-		id: 'hosting.loader.reset-to-onboarding-modal-title',
-		defaultMessage: 'Reset to onboarding',
-	},
-	resetToOnboardingModalDescription: {
-		id: 'hosting.loader.reset-to-onboarding-modal-description',
-		defaultMessage:
-			'This will send the server back into onboarding so setup can be completed again. Are you sure you want to continue?',
-	},
-	resetToOnboardingSuccessTitle: {
-		id: 'hosting.loader.reset-to-onboarding-success-title',
-		defaultMessage: 'Server reset to onboarding',
-	},
-	resetToOnboardingSuccessDescription: {
-		id: 'hosting.loader.reset-to-onboarding-success-description',
-		defaultMessage: 'The server has been returned to the onboarding flow.',
-	},
-	failedToResetToOnboarding: {
-		id: 'hosting.loader.failed-to-reset-to-onboarding',
-		defaultMessage: 'Failed to reset server to onboarding',
 	},
 })
 
@@ -266,23 +223,8 @@ const modpackVersionsQuery = useQuery({
 	enabled: computed(() => !!modpackProjectId.value),
 })
 
-const isSiteAdmin = computed(() => serverSettings.currentUserRole.value === 'admin')
-
 const editingPlatform = ref(server.value?.loader?.toLowerCase() ?? 'vanilla')
 const editingGameVersion = ref(server.value?.mc_version ?? '')
-const resetToOnboardingModal = ref<InstanceType<typeof ConfirmModal>>()
-const isResettingToOnboarding = ref(false)
-const supportResetToOnboardingDisabled = computed(
-	() => !worldId.value || isResettingToOnboarding.value || !canResetServer.value,
-)
-const supportResetToOnboardingTooltip = computed(() =>
-	!canResetServer.value ? permissionDeniedMessage.value : undefined,
-)
-
-function showResetToOnboardingModal() {
-	if (supportResetToOnboardingDisabled.value) return
-	resetToOnboardingModal.value?.show()
-}
 
 const modLoaders = ['fabric', 'forge', 'quilt', 'neoforge']
 const loaderGameVersionPlaceholder = '${modrinth.gameVersion}'
@@ -481,23 +423,69 @@ function rollbackOptimisticInstallation(snapshot: InstallationCacheSnapshot) {
 	queryClient.setQueryData(addonsQueryKey, snapshot.addons)
 }
 
-async function uploadLocalModpackWithSoftOverride() {
-	const picked = await filePicker.pickModpackFile()
-	if (!picked?.file) return false
+function promptLocalModpackUpload(action: 'reinstall' | 'swap') {
+	modpackUploadAction.value = action
+	modpackUploadModal.value?.show()
+}
 
-	const handle = client.kyros.content_v1.uploadModpackFile(
-		worldId.value!,
-		picked.file,
-		{ known: {} },
-		{ softOverride: true },
-	)
-	await uploadProgressModal.value!.track(handle)
+async function uploadLocalModpackWithSoftOverride(file: File) {
+	modpackUploadProgress.value = { loaded: 0, total: 0, progress: 0 }
+	try {
+		await client.kyros.content_v1.uploadModpackFile(
+			worldId.value!,
+			file,
+			{ known: {} },
+			{
+				softOverride: true,
+				onProgress: (progress) => (modpackUploadProgress.value = progress),
+			},
+		).promise
+	} catch (err) {
+		emit('reinstall-failed')
+		addNotification({
+			type: 'error',
+			text:
+				err instanceof Error
+					? err.message
+					: formatMessage(
+							modpackUploadAction.value === 'swap'
+								? messages.failedToChangeVersion
+								: messages.failedToReinstall,
+						),
+		})
+		return
+	} finally {
+		modpackUploadProgress.value = null
+	}
+	modpackUploadModal.value?.hide()
 	beginInstallation({
 		type: 'local_modpack',
-		filename: picked.file.name,
+		filename: file.name,
 	})
 	emit('reinstall')
-	return true
+}
+
+async function disableAddonsEverywhere(addons: Archon.Content.v1.Addon[]) {
+	const targetWorldId = worldId.value!
+	const requests: Array<() => Promise<void>> = []
+	for (const addon of addons) {
+		const request: Archon.Content.v1.SetAddonEnabledRequest = {
+			kind: addon.kind,
+			filename: addon.filename,
+			enabled: false,
+		}
+		if (!addon.disabled_server)
+			requests.push(() =>
+				client.archon.content_v1.setAddonEnabledServer(serverId, targetWorldId, request),
+			)
+		if (!addon.disabled_player)
+			requests.push(() =>
+				client.archon.content_v1.setAddonEnabledPlayer(serverId, targetWorldId, request),
+			)
+	}
+	for (let index = 0; index < requests.length; index += 8) {
+		await Promise.all(requests.slice(index, index + 8).map((request) => request()))
+	}
 }
 
 provideInstallationSettings({
@@ -550,14 +538,23 @@ provideInstallationSettings({
 	busyMessage: setupActionDisabledMessage,
 	modpack: computed(() => {
 		if (!modpack.value) return null
-		const isLocal = modpack.value.spec.platform === 'local_file'
+		const spec = modpack.value.spec
 		return {
 			iconUrl: modpack.value.icon_url,
 			title:
-				modpack.value.title ?? (isLocal ? modpack.value.spec.name : modpack.value.spec.project_id),
-			link: modpackProjectId.value ? `/project/${modpackProjectId.value}` : undefined,
+				modpack.value.title ??
+				(spec.platform === 'local_file'
+					? spec.name
+					: spec.platform === 'curseforge'
+						? spec.filename
+						: spec.project_id),
+			link: modpackProjectId.value
+				? `/project/${modpackProjectId.value}`
+				: spec.platform === 'curseforge' && spec.link
+					? `https://www.curseforge.com/minecraft/modpacks/${spec.link.slug}`
+					: undefined,
 			versionNumber: modpack.value.version_number,
-			filename: isLocal ? modpack.value.spec.filename : undefined,
+			filename: spec.platform === 'modrinth' ? undefined : spec.filename,
 			owner: modpack.value.owner
 				? {
 						id: modpack.value.owner.id,
@@ -572,7 +569,12 @@ provideInstallationSettings({
 	currentGameVersion: computed(() => server.value?.mc_version ?? ''),
 	currentLoaderVersion: computed(() => server.value?.loader_version ?? ''),
 	requiresInstallation,
-	availablePlatforms: ['vanilla', 'fabric', 'neoforge', 'forge', 'quilt', 'paper', 'purpur'],
+	// Modrinth Studios: Pterodactyl servers only offer loaders Studio can actually install.
+	availablePlatforms: computed(() =>
+		isPterodactylServerId(serverId)
+			? pterodactylLoaders(server.value)
+			: ['vanilla', 'fabric', 'neoforge', 'forge', 'quilt', 'paper', 'purpur'],
+	),
 
 	editingPlatformRef: editingPlatform,
 	editingGameVersionRef: editingGameVersion,
@@ -715,16 +717,8 @@ provideInstallationSettings({
 		if (setupActionDisabled.value) return
 		if (!modpack.value) return
 		if (modpack.value.spec.platform === 'local_file') {
-			debug('reinstallModpack: local file, opening file picker')
-			try {
-				await uploadLocalModpackWithSoftOverride()
-			} catch (err) {
-				emit('reinstall-failed')
-				addNotification({
-					type: 'error',
-					text: err instanceof Error ? err.message : formatMessage(messages.failedToReinstall),
-				})
-			}
+			debug('reinstallModpack: local file, opening upload modal')
+			promptLocalModpackUpload('reinstall')
 			return
 		}
 		if (modpack.value.spec.platform !== 'modrinth') return
@@ -766,16 +760,8 @@ provideInstallationSettings({
 	async swapModpack() {
 		if (setupActionDisabled.value) return
 		if (modpack.value?.spec.platform !== 'local_file') return
-		debug('swapModpack: local file, opening file picker')
-		try {
-			await uploadLocalModpackWithSoftOverride()
-		} catch (err) {
-			emit('reinstall-failed')
-			addNotification({
-				type: 'error',
-				text: err instanceof Error ? err.message : formatMessage(messages.failedToChangeVersion),
-			})
-		}
+		debug('swapModpack: local file, opening upload modal')
+		promptLocalModpackUpload('swap')
 	},
 
 	async unlinkModpack() {
@@ -899,12 +885,12 @@ provideInstallationSettings({
 		if (setupActionDisabled.value) return
 		debug('disableAllContent: fetching all addons')
 		const addons = await client.archon.content_v1.getAddons(serverId, worldId.value!)
-		const items = (addons.addons ?? [])
-			.filter((a) => !a.disabled)
-			.map((a) => ({ kind: a.kind, filename: a.filename }))
-		if (items.length > 0) {
-			debug('disableAllContent: disabling', items.length, 'addons')
-			await client.archon.content_v1.disableAddons(serverId, worldId.value!, items)
+		const activeAddons = (addons.addons ?? []).filter(
+			(addon) => !addon.disabled_server || !addon.disabled_player,
+		)
+		if (activeAddons.length > 0) {
+			debug('disableAllContent: disabling', activeAddons.length, 'addons')
+			await disableAddonsEverywhere(activeAddons)
 		}
 		debug('disableAllContent: done')
 	},
@@ -913,7 +899,9 @@ provideInstallationSettings({
 		if (setupActionDisabled.value) return
 		debug('disableIncompatibleContent: fetching addons')
 		const addons = await client.archon.content_v1.getAddons(serverId, worldId.value!)
-		const activeAddons = (addons.addons ?? []).filter((a) => !a.disabled)
+		const activeAddons = (addons.addons ?? []).filter(
+			(addon) => !addon.disabled_server || !addon.disabled_player,
+		)
 
 		const modrinthAddons = activeAddons.filter((a) => a.version?.id)
 		const customAddons = activeAddons.filter((a) => !a.version?.id)
@@ -936,7 +924,12 @@ provideInstallationSettings({
 
 		if (incompatibleItems.length > 0) {
 			debug('disableIncompatibleContent: disabling', incompatibleItems.length, 'addons')
-			await client.archon.content_v1.disableAddons(serverId, worldId.value!, incompatibleItems)
+			const incompatibleKeys = new Set(
+				incompatibleItems.map((item) => `${item.kind}:${item.filename}`),
+			)
+			await disableAddonsEverywhere(
+				activeAddons.filter((addon) => incompatibleKeys.has(`${addon.kind}:${addon.filename}`)),
+			)
 		}
 		debug('disableIncompatibleContent: done')
 	},
@@ -1049,38 +1042,5 @@ function onBrowseModpacks() {
 		worldId: worldId.value,
 		from: 'reset-server',
 	})
-}
-
-async function confirmResetToOnboarding() {
-	if (supportResetToOnboardingDisabled.value || !worldId.value) return
-
-	try {
-		isResettingToOnboarding.value = true
-		await client.archon.servers_v1.resetToOnboarding(serverId, worldId.value)
-		modrinthServersConsole.clear()
-		try {
-			await client.kyros.logs_v1.clear()
-		} catch (error) {
-			console.error('Failed to clear server logs:', error)
-		}
-		server.value.flows = { intro: true }
-		await Promise.all([
-			queryClient.invalidateQueries({ queryKey: ['servers', 'detail', serverId] }),
-			queryClient.invalidateQueries({ queryKey: ['servers', 'v1', 'detail', serverId] }),
-		])
-		addNotification({
-			type: 'success',
-			title: formatMessage(messages.resetToOnboardingSuccessTitle),
-			text: formatMessage(messages.resetToOnboardingSuccessDescription),
-		})
-		serverSettings.closeModal?.()
-	} catch (err) {
-		addNotification({
-			type: 'error',
-			text: err instanceof Error ? err.message : formatMessage(messages.failedToResetToOnboarding),
-		})
-	} finally {
-		isResettingToOnboarding.value = false
-	}
 }
 </script>

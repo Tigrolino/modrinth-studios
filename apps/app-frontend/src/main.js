@@ -4,7 +4,8 @@ import 'overlayscrollbars/overlayscrollbars.css'
 import '@/assets/styles/studio-overrides.css'
 
 import { installTooltipDirective } from '@modrinth/ui'
-import { VueQueryPlugin } from '@tanstack/vue-query'
+import { focusManager, VueQueryPlugin } from '@tanstack/vue-query'
+import { getCurrentWindow } from '@tauri-apps/api/window'
 import { createApp } from 'vue'
 
 import App from '@/App.vue'
@@ -37,6 +38,11 @@ initializeStudioBackgroundRotation()
 
 const app = createApp(App)
 setupErrorReporting(app, router)
+
+focusManager.setEventListener((setFocused) => {
+	const unlisten = getCurrentWindow().onFocusChanged(({ payload }) => setFocused(payload))
+	return () => void unlisten.then((stop) => stop())
+})
 
 app.use(VueQueryPlugin)
 app.use(router)

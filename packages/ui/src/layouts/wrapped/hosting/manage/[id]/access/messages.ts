@@ -164,6 +164,22 @@ export const actionLogActionMessages = defineMessages({
 		id: 'servers.access-page.activity-log-filter.action.server-plan-changed',
 		defaultMessage: 'Changed plan',
 	},
+	server_suspended: {
+		id: 'servers.access-page.activity-log-filter.action.server-suspended',
+		defaultMessage: 'Server suspended',
+	},
+	server_unsuspended: {
+		id: 'servers.access-page.activity-log-filter.action.server-unsuspended',
+		defaultMessage: 'Server unsuspended',
+	},
+	server_suspension_lifted: {
+		id: 'servers.access-page.activity-log-filter.action.server-suspension-lifted',
+		defaultMessage: 'Suspension temporarily lifted',
+	},
+	server_resuspended: {
+		id: 'servers.access-page.activity-log-filter.action.server-resuspended',
+		defaultMessage: 'Server suspended again',
+	},
 	user_invited: {
 		id: 'servers.access-page.activity-log-filter.action.user-invited',
 		defaultMessage: 'Invited user',
@@ -199,6 +215,22 @@ export const actionLogActionMessages = defineMessages({
 	addon_deleted: {
 		id: 'servers.access-page.activity-log-filter.action.addon-deleted',
 		defaultMessage: 'Deleted content',
+	},
+	addon_server_enabled: {
+		id: 'servers.access-page.activity-log-filter.action.addon-server-enabled',
+		defaultMessage: 'Changed server content enablement',
+	},
+	addon_player_enabled: {
+		id: 'servers.access-page.activity-log-filter.action.addon-player-enabled',
+		defaultMessage: 'Changed player content enablement',
+	},
+	addon_side_toggle_locked: {
+		id: 'servers.access-page.activity-log-filter.action.addon-side-toggle-locked',
+		defaultMessage: 'Changed content side toggle lock',
+	},
+	world_data_reset: {
+		id: 'servers.access-page.activity-log-filter.action.world-data-reset',
+		defaultMessage: 'Reset world data',
 	},
 	addon_updated: {
 		id: 'servers.access-page.activity-log-filter.action.addon-updated',
@@ -276,6 +308,10 @@ export const actionLogActionMessages = defineMessages({
 		id: 'servers.access-page.activity-log-filter.action.sftp-login',
 		defaultMessage: 'Logged in via SFTP',
 	},
+	sftp_credentials_rolled: {
+		id: 'servers.access-page.activity-log-filter.action.sftp-credentials-rolled',
+		defaultMessage: 'Rotated SFTP credentials',
+	},
 	console_command_executed: {
 		id: 'servers.access-page.activity-log-filter.action.console-command-executed',
 		defaultMessage: 'Ran console command',
@@ -311,5 +347,13 @@ export const actionLogActionMessages = defineMessages({
 	java_version_modified: {
 		id: 'servers.access-page.activity-log-filter.action.java-version-modified',
 		defaultMessage: 'Changed Java version',
+	},
+	studio_event: {
+		id: 'servers.access-page.activity-log-filter.action.studio-event',
+		defaultMessage: 'Other panel events',
+	},
+	studio_file_read: {
+		id: 'servers.access-page.activity-log-filter.action.studio-file-read',
+		defaultMessage: 'Opened files (hidden by default)',
 	},
 })

@@ -67,11 +67,10 @@ fn is_link_sync(path: &Path) -> bool {
 pub async fn read_link_target(path: impl AsRef<Path>) -> crate::Result<PathBuf> {
     let path = path.as_ref();
     tokio::fs::read_link(path).await.map_err(|e| {
-        crate::ErrorKind::FSError(format!(
+        anyhow::Error::new(crate::ErrorKind::FSError(format!(
             "Failed to resolve shared folder link at {}: {e}",
             path.display()
-        ))
-        .as_error()
+        )))
     })
 }
 
@@ -84,10 +83,9 @@ pub async fn remove_link(path: impl AsRef<Path>) -> crate::Result<()> {
     tokio::task::spawn_blocking(move || remove_link_sync(&path))
         .await
         .map_err(|e| {
-            crate::ErrorKind::OtherError(format!(
+            anyhow::anyhow!(
                 "shared folder unlink task panicked: {e}"
-            ))
-            .as_error()
+            )
         })??;
     Ok(())
 }
@@ -120,10 +118,9 @@ fn remove_link_sync(path: &Path) -> crate::Result<()> {
     };
 
     result.map_err(|e| {
-        crate::ErrorKind::FSError(format!(
+        anyhow::Error::new(crate::ErrorKind::FSError(format!(
             "Failed to remove shared folder link at {}: {e}",
             path.display()
-        ))
-        .as_error()
+        )))
     })
 }

@@ -1,16 +1,20 @@
 use std::{
     fmt,
+    future::Future,
     path::{Path, PathBuf},
 };
 
+use crate::ErrorKind;
 use crate::state::content_store::{FileContent, content_file_path};
 use crate::state::instances::commands::{
     ContentOrigin, InstallContent, install_stored_file,
 };
+use anyhow::{Context, bail};
 use io::IOError;
 use serde::{Deserialize, Serialize};
 
 use crate::{
+    State,
     install::{
         InstallPhaseDetails, InstallPhaseId, InstallProgress,
         InstallProgressReporter,
@@ -98,11 +102,9 @@ pub async fn get_importable_instances(
 
     let instances_folder = base_path.join(&instances_subfolder);
     let mut instances = Vec::new();
-    let mut dir = io::read_dir(&instances_folder).await.map_err(| _ | {
-        crate::ErrorKind::InputError(format!(
-            "Invalid {launcher_type} launcher path, could not find '{instances_subfolder}' subfolder."
-        ))
-    })?;
+    let mut dir = io::read_dir(&instances_folder).await.context(ErrorKind::InputError(format!(
+        "invalid {launcher_type} launcher path, could not find '{instances_subfolder}' subfolder"
+    )))?;
     while let Some(entry) = dir
         .next_entry()
         .await
@@ -122,21 +124,20 @@ pub async fn get_importable_instances(
     Ok(instances)
 }
 
-pub(crate) async fn import_instance_with_reporter(
+pub(crate) fn import_instance_with_reporter(
     instance_id: &str,
     launcher_type: ImportLauncherType,
     base_path: PathBuf,
     instance_folder: String,
     reporter: InstallProgressReporter,
-) -> crate::Result<()> {
-    import_instance_inner(
+) -> impl Future<Output = crate::Result<()>> + Send + '_ {
+    Box::pin(import_instance_inner(
         instance_id,
         launcher_type,
         base_path,
         instance_folder,
         reporter,
-    )
-    .await
+    ))
 }
 
 async fn import_instance_inner(
@@ -218,11 +219,10 @@ async fn import_instance_inner(
                 }
             }
             if !matched {
-                return Err(crate::ErrorKind::InputError(
-                    "Could not determine launcher type for the given path"
+                bail!(ErrorKind::InputError(
+                    "could not determine launcher type for the given path"
                         .to_string(),
-                )
-                .into());
+                ));
             }
             return Ok(());
         }
@@ -365,7 +365,23 @@ pub async fn recache_icon(
     }
 }
 
-pub(crate) async fn copy_dotminecraft_with_reporter(
+pub(crate) fn copy_dotminecraft_with_reporter<'a>(
+    instance_id: &'a str,
+    dotminecraft: PathBuf,
+    io_semaphore: &'a IoSemaphore,
+    reporter: InstallProgressReporter,
+    details: InstallPhaseDetails,
+) -> impl Future<Output = crate::Result<()>> + Send + 'a {
+    Box::pin(copy_dotminecraft_with_reporter_inner(
+        instance_id,
+        dotminecraft,
+        io_semaphore,
+        reporter,
+        details,
+    ))
+}
+
+async fn copy_dotminecraft_with_reporter_inner(
     instance_id: &str,
     dotminecraft: PathBuf,
     io_semaphore: &IoSemaphore,
@@ -405,8 +421,8 @@ pub(crate) async fn copy_dotminecraft_with_reporter(
         if crate::state::instance_has_running_process(&source.id, &state)
             .await?
         {
-            return Err(crate::state::content_store::input(
-                "Stop the source instance before duplicating it",
+            bail!(ErrorKind::InputError(
+                "stop the source instance before duplicating it".to_string(),
             ));
         }
         let files = crate::state::instances::commands::sync_content_files(
@@ -421,22 +437,17 @@ pub(crate) async fn copy_dotminecraft_with_reporter(
         };
         for file in files {
             if file.missing {
-                return Err(crate::state::content_store::input(format!(
-                    "Restore or repair {} before duplicating this instance",
-                    file.relative_path
-                )));
+                continue;
             }
             let stored_file =
                 match state.content_store.file_content(&file).await? {
                     FileContent::Stored { stored_file, .. } => stored_file,
                     FileContent::Unmanaged => continue,
                     FileContent::Damaged(_) => {
-                        return Err(crate::state::content_store::input(
-                            format!(
-                                "Repair {} before duplicating this instance",
-                                file.relative_path
-                            ),
-                        ));
+                        bail!(ErrorKind::InputError(format!(
+                            "repair {} before duplicating this instance",
+                            file.relative_path
+                        )));
                     }
                 };
             managed_paths.insert(content_file_path(&file));
@@ -444,9 +455,9 @@ pub(crate) async fn copy_dotminecraft_with_reporter(
                 crate::state::ProjectType::get_from_parent_folder(
                     &file.relative_path,
                 )
-                .ok_or_else(|| {
-                    crate::state::content_store::input("Invalid content path")
-                })?;
+                .ok_or(ErrorKind::InputError(
+                    "invalid content path".to_string(),
+                ))?;
             let entry = entries.iter().find(|entry| {
                 entry.file_id.as_deref() == Some(file.id.as_str())
             });
@@ -520,11 +531,9 @@ pub(crate) async fn copy_dotminecraft_with_reporter(
             let stored_file = state.content_store.store_file(&source).await?;
             let project_type =
                 crate::state::ProjectType::get_from_parent_folder(&relative)
-                    .ok_or_else(|| {
-                        crate::state::content_store::input(
-                            "Invalid imported content path",
-                        )
-                    })?;
+                    .ok_or(ErrorKind::InputError(
+                        "invalid imported content path".to_string(),
+                    ))?;
             install_stored_file(
                 instance_id,
                 InstallContent {
@@ -541,7 +550,7 @@ pub(crate) async fn copy_dotminecraft_with_reporter(
             .await?;
         } else {
             let target_instance = crate::state::instances::adapters::sqlite::instance_rows::get_instance_by_id(instance_id, &state.pool).await?
-				.ok_or_else(|| crate::state::content_store::input("Unknown destination instance"))?;
+				.ok_or(ErrorKind::InputError("unknown destination instance".to_string()))?;
             let target = state
                 .content_store
                 .instance_path(&target_instance.path, &relative)
@@ -550,8 +559,8 @@ pub(crate) async fn copy_dotminecraft_with_reporter(
                 .await
                 .is_ok_and(|metadata| metadata.file_type().is_symlink())
             {
-                return Err(crate::state::content_store::input(
-                    "Import cannot overwrite a symbolic link",
+                bail!(ErrorKind::InputError(
+                    "import cannot overwrite a symbolic link".to_string(),
                 ));
             }
             let same_file = tokio::fs::try_exists(&target).await?
@@ -589,14 +598,14 @@ pub(crate) async fn copy_dotminecraft_with_reporter(
 pub(crate) async fn finish_import(
     instance_id: &str,
     dotminecraft: PathBuf,
-    io_semaphore: &IoSemaphore,
+    state: &State,
     reporter: InstallProgressReporter,
     details: InstallPhaseDetails,
 ) -> crate::Result<()> {
     copy_dotminecraft_with_reporter(
         instance_id,
         dotminecraft,
-        io_semaphore,
+        &state.io_semaphore,
         reporter.clone(),
         details,
     )
@@ -606,44 +615,41 @@ pub(crate) async fn finish_import(
         instance_id,
         false,
         Some(reporter),
+        state,
     )
     .await?;
 
     Ok(())
 }
 
-/// Recursively get a list of all subfiles in src
-/// uses async recursion
-
-#[async_recursion::async_recursion]
+/// Lists descendant files without following symlinks or recursing on the stack.
 #[tracing::instrument]
 pub async fn get_all_subfiles(
     src: &Path,
     include_empty_dirs: bool,
 ) -> crate::Result<Vec<PathBuf>> {
-    let metadata = tokio::fs::symlink_metadata(src).await?;
-    if !metadata.is_dir() || metadata.file_type().is_symlink() {
-        return Ok(vec![src.to_path_buf()]);
-    }
-
     let mut files = Vec::new();
-    let mut dir = io::read_dir(&src).await?;
+    let mut pending = vec![src.to_path_buf()];
+    while let Some(path) = pending.pop() {
+        let metadata = tokio::fs::symlink_metadata(&path).await?;
+        if !metadata.is_dir() || metadata.file_type().is_symlink() {
+            files.push(path);
+            continue;
+        }
 
-    let mut has_files = false;
-    while let Some(child) = dir
-        .next_entry()
-        .await
-        .map_err(|e| IOError::with_path(e, src))?
-    {
-        has_files = true;
-        let src_child = child.path();
-        files.append(
-            &mut get_all_subfiles(&src_child, include_empty_dirs).await?,
-        );
-    }
-
-    if !has_files && include_empty_dirs {
-        files.push(src.to_path_buf());
+        let mut dir = io::read_dir(&path).await?;
+        let children_start = pending.len();
+        while let Some(child) = dir
+            .next_entry()
+            .await
+            .map_err(|error| IOError::with_path(error, &path))?
+        {
+            pending.push(child.path());
+        }
+        if pending.len() == children_start && include_empty_dirs {
+            files.push(path);
+        }
+        pending[children_start..].reverse();
     }
 
     Ok(files)

@@ -23,19 +23,18 @@ import {
 } from '@modrinth/ui'
 import { arrayBufferToBase64 } from '@modrinth/utils'
 import { useQuery } from '@tanstack/vue-query'
-import { type DragDropEvent, getCurrentWebview } from '@tauri-apps/api/webview'
 import { computedAsync } from '@vueuse/core'
-import type { Ref } from 'vue'
-import { computed, inject, onMounted, onUnmounted, ref, useTemplateRef, watch } from 'vue'
+import { computed, onMounted, onUnmounted, ref, useTemplateRef, watch } from 'vue'
 
 import EarsModIcon from '@/assets/skins/ears-mod.png'
-import type AccountsCard from '@/components/ui/AccountsCard.vue'
 import EditSkinModal from '@/components/ui/skin/EditSkinModal.vue'
 import VirtualSkinSectionList from '@/components/ui/skin/VirtualSkinSectionList.vue'
 import { useAppSettings } from '@/composables/use-app-settings.ts'
 import { handleSevereError } from '@/composables/use-error.js'
+import { injectMinecraftAccounts } from '@/features/minecraft-accounts/context'
 import { trackEvent } from '@/helpers/analytics'
 import { check_reachable, get_default_user, login as login_flow, users } from '@/helpers/auth'
+import { listenNativeDragDrop, type NativeDragDropEvent } from '@/helpers/native-drag-drop'
 import { cleanupUnusedPreviews } from '@/helpers/rendering/skin-previews'
 import type { Cape, Skin, SkinTextureUrl } from '@/helpers/skins.ts'
 import {
@@ -54,7 +53,7 @@ import {
 	set_custom_skin_order,
 } from '@/helpers/skins.ts'
 import { hasPride26Badge } from '@/helpers/user-campaigns.ts'
-import { useRootBreadcrumb } from '@/providers/breadcrumbs'
+import { useRootBreadcrumb } from '@/shared/breadcrumbs'
 import { appMessages } from '@/utils/app-messages'
 
 useRootBreadcrumb({
@@ -126,6 +125,18 @@ const messages = defineMessages({
 	chaosCubedSection: {
 		id: 'app.skins.section.chaos-cubed',
 		defaultMessage: 'Chaos Cubed',
+	},
+	dungeonsHeroSection: {
+		id: 'app.skins.section.dungeons-hero',
+		defaultMessage: 'Dungeons Hero',
+	},
+	dungeonsIIHeroSection: {
+		id: 'app.skins.section.dungeons-ii-hero',
+		defaultMessage: 'Dungeons II Hero',
+	},
+	wildernessBoundSection: {
+		id: 'app.skins.section.wilderness-bound',
+		defaultMessage: 'Wilderness Bound',
 	},
 	rateLimitTitle: {
 		id: 'app.skins.rate-limit.title',
@@ -217,7 +228,7 @@ const skins = ref<Skin[]>([])
 const capes = ref<Cape[]>([])
 const offline = ref(!navigator.onLine)
 
-const accountsCard = inject('accountsCard') as Ref<typeof AccountsCard>
+const minecraftAccounts = injectMinecraftAccounts()
 const currentUser = ref(undefined)
 const currentUserId = ref<string | undefined>(undefined)
 
@@ -467,7 +478,16 @@ function isSkinActive(skin: Skin) {
 }
 
 function getErrorMessage(error: unknown) {
-	return error instanceof Error ? error.message : String(error)
+	if (error instanceof Error) return error.message
+	if (
+		typeof error === 'object' &&
+		error !== null &&
+		'message' in error &&
+		typeof error.message === 'string'
+	) {
+		return error.message
+	}
+	return String(error)
 }
 
 function isMinecraftSkinRateLimitError(error: unknown) {
@@ -499,6 +519,12 @@ function getDefaultSkinSectionTitle(section?: string) {
 			return formatMessage(messages.tinyTakeoverSection)
 		case 'Chaos Cubed':
 			return formatMessage(messages.chaosCubedSection)
+		case 'Dungeons Hero':
+			return formatMessage(messages.dungeonsHeroSection)
+		case 'Dungeons II Hero':
+			return formatMessage(messages.dungeonsIIHeroSection)
+		case 'Wilderness Bound':
+			return formatMessage(messages.wildernessBoundSection)
 		case 'Default skins':
 			return formatMessage(messages.defaultSkinsSection)
 		default:
@@ -560,7 +586,7 @@ function setLocallyEquippedSkin(skinToApply: Skin) {
 	originalSelectedSkin.value =
 		skins.value.find((skin) => skinsMatch(skin, skinToApply)) ?? skinToApply
 	selectedSkin.value = originalSelectedSkin.value
-	void accountsCard.value?.setEquippedSkin(originalSelectedSkin.value)
+	void minecraftAccounts.value?.setEquippedSkin(originalSelectedSkin.value)
 }
 
 function insertLocalSkin(savedSkin: Skin) {
@@ -616,7 +642,7 @@ function updateLocalSkin(savedSkin: Skin, applied: boolean, previousSkin?: Skin)
 
 		originalSelectedSkin.value = locallyEquippedSkin
 		selectedSkin.value = locallyEquippedSkin
-		void accountsCard.value?.setEquippedSkin(locallyEquippedSkin)
+		void minecraftAccounts.value?.setEquippedSkin(locallyEquippedSkin)
 	} else {
 		const locallySavedSkin =
 			skins.value.find((skin) => skin.texture_key === savedSkin.texture_key) ?? savedSkin
@@ -707,7 +733,7 @@ async function preserveExternalSkins(skinsToPersist: Skin[]) {
 
 		if (skinsMatchIgnoringSource(originalSelectedSkin.value, skin)) {
 			originalSelectedSkin.value = preservedSkin
-			void accountsCard.value?.setEquippedSkin(preservedSkin)
+			void minecraftAccounts.value?.setEquippedSkin(preservedSkin)
 		}
 
 		preservedSkins.push(preservedSkin)
@@ -742,8 +768,8 @@ function schedulePendingSkinRefresh() {
 			return
 		}
 
-		if (accountsCard.value) {
-			await accountsCard.value.refreshValues()
+		if (minecraftAccounts.value) {
+			await minecraftAccounts.value.refreshValues()
 		}
 
 		await loadCapes()
@@ -812,15 +838,15 @@ async function loadCurrentUser() {
 }
 
 async function login() {
-	accountsCard.value.setLoginDisabled(true)
+	minecraftAccounts.value?.setLoginDisabled(true)
 	const loggedIn = await login_flow().catch(handleSevereError)
 
-	if (loggedIn && accountsCard) {
-		await accountsCard.value.refreshValues()
+	if (loggedIn && minecraftAccounts.value) {
+		await minecraftAccounts.value.refreshValues()
 	}
 
 	trackEvent('AccountLogIn')
-	accountsCard.value.setLoginDisabled(false)
+	minecraftAccounts.value?.setLoginDisabled(false)
 }
 
 function openAddSkinFileBrowser() {
@@ -873,30 +899,28 @@ function isPositionOverAddSkinButton(position: { x: number; y: number }) {
 	return x >= rect.left && x <= rect.right && y >= rect.top && y <= rect.bottom
 }
 
-async function handleAddSkinNativeDragDrop(event: { payload: DragDropEvent }) {
+async function handleAddSkinNativeDragDrop(event: NativeDragDropEvent) {
 	if (isSkinManagementReadOnly.value) return
 
-	const payload = event.payload
-
-	if (payload.type === 'leave') {
+	if (event.type === 'leave') {
 		isDraggingSkinFile.value = false
 		isAddSkinButtonDragActive.value = false
 		return
 	}
 
-	if (payload.type === 'enter') {
-		isDraggingSkinFile.value = payload.paths.some(isSkinImagePath)
+	if (event.type === 'enter') {
+		isDraggingSkinFile.value = event.paths.some(isSkinImagePath)
 	}
 
-	if (payload.type === 'enter' || payload.type === 'over') {
+	if (event.type === 'enter' || event.type === 'over') {
 		isAddSkinButtonDragActive.value =
-			isDraggingSkinFile.value && isPositionOverAddSkinButton(payload.position)
+			isDraggingSkinFile.value && isPositionOverAddSkinButton(event.position)
 		return
 	}
 
-	const hasSkinPath = payload.paths.some(isSkinImagePath)
+	const hasSkinPath = event.paths.some(isSkinImagePath)
 	const shouldUpload =
-		(isDraggingSkinFile.value || hasSkinPath) && isPositionOverAddSkinButton(payload.position)
+		(isDraggingSkinFile.value || hasSkinPath) && isPositionOverAddSkinButton(event.position)
 
 	isDraggingSkinFile.value = false
 	isAddSkinButtonDragActive.value = false
@@ -905,7 +929,7 @@ async function handleAddSkinNativeDragDrop(event: { payload: DragDropEvent }) {
 		return
 	}
 
-	const skinPath = payload.paths.find(isSkinImagePath)
+	const skinPath = event.paths.find(isSkinImagePath)
 
 	if (!skinPath) {
 		return
@@ -917,7 +941,7 @@ async function handleAddSkinNativeDragDrop(event: { payload: DragDropEvent }) {
 	} catch (error) {
 		addNotification({
 			title: formatMessage(messages.droppedFileErrorTitle),
-			text: error instanceof Error ? error.message : formatMessage(messages.droppedFileErrorText),
+			text: getErrorMessage(error) || formatMessage(messages.droppedFileErrorText),
 			type: 'error',
 		})
 	}
@@ -957,7 +981,7 @@ async function onAddSkinDrop(event: DragEvent) {
 
 async function setupAddSkinDragDropListener() {
 	try {
-		const unlisten = await getCurrentWebview().onDragDropEvent(handleAddSkinNativeDragDrop)
+		const unlisten = await listenNativeDragDrop(handleAddSkinNativeDragDrop)
 
 		if (isUnmounted) {
 			unlisten()
@@ -1043,7 +1067,7 @@ async function checkUserChanges() {
 	try {
 		const defaultId = await get_default_user()
 		if (defaultId !== currentUserId.value) {
-			await accountsCard.value?.refreshValues()
+			await minecraftAccounts.value?.refreshValues()
 			await loadCurrentUser()
 			await loadCapes()
 			await loadSkins()
@@ -1277,13 +1301,13 @@ await loadSkins()
 				</div>
 			</div>
 			<Button
-				v-show="accountsCard"
+				v-show="minecraftAccounts"
 				type="colored"
 				color="brand"
-				:disabled="accountsCard.loginDisabled"
+				:disabled="minecraftAccounts?.loginDisabled"
 				@click="login"
 			>
-				<SpinnerIcon v-if="accountsCard.loginDisabled" class="animate-spin" />
+				<SpinnerIcon v-if="minecraftAccounts?.loginDisabled" class="animate-spin" />
 				<WindowsIcon v-else />
 				{{ formatMessage(messages.signInButton) }}
 			</Button>

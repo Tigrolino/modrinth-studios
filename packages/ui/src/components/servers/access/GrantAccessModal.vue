@@ -8,14 +8,14 @@
 		<div class="flex flex-col gap-6">
 			<div class="flex flex-col gap-2">
 				<label class="font-semibold text-contrast" for="grant-access-target">
-					{{ formatMessage(messages.targetLabel) }}
+					{{ props.targetLabel ?? formatMessage(messages.targetLabel) }}
 				</label>
 				<Combobox
 					id="grant-access-target"
 					:model-value="undefined"
 					:options="suggestionOptions"
-					:search-placeholder="formatMessage(messages.targetPlaceholder)"
-					:placeholder="formatMessage(messages.targetPlaceholder)"
+					:search-placeholder="props.targetPlaceholder ?? formatMessage(messages.targetPlaceholder)"
+					:placeholder="props.targetPlaceholder ?? formatMessage(messages.targetPlaceholder)"
 					:no-options-message="targetLookupMessage"
 					:min-search-length-to-open="suggestionMinimumLength"
 					:disable-search-filter="usesRemoteLookup"
@@ -55,7 +55,7 @@
 					</template>
 				</Combobox>
 				<span class="m-0 text-base text-primary">
-					{{ formatMessage(messages.targetHelp) }}
+					{{ props.targetHelp ?? formatMessage(messages.targetHelp) }}
 				</span>
 			</div>
 
@@ -174,6 +174,11 @@ const props = withDefaults(
 		searchUsers?: (query: string) => Promise<ServerAccessInviteSuggestion[]>
 		canGrant?: boolean
 		permissionDeniedMessage?: string
+		/** Modrinth Studios: overrides for non-Modrinth servers (e.g. Pterodactyl subusers by email). */
+		targetLabel?: string
+		targetPlaceholder?: string
+		targetHelp?: string
+		hideAddAsFriend?: boolean
 	}>(),
 	{
 		members: () => [],
@@ -315,7 +320,9 @@ const hasResolvedTarget = computed(() => {
 		normalizedSuggestionUsername === normalizedValue
 	)
 })
-const showAddAsFriend = computed(() => canAddAsFriend.value && !targetComboboxOpen.value)
+const showAddAsFriend = computed(
+	() => !props.hideAddAsFriend && canAddAsFriend.value && !targetComboboxOpen.value,
+)
 const canAddAsFriend = computed(
 	() => hasResolvedTarget.value && !!matchedSuggestion.value && !targetIsFriend.value,
 )

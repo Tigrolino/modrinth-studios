@@ -1,12 +1,14 @@
 use std::path::PathBuf;
 
 use crate::{
+    ErrorKind,
     event::{
         CommandPayload,
         emit::{emit_command, emit_warning},
     },
     util::io,
 };
+use anyhow::{Context, bail};
 use url::form_urlencoded;
 use urlencoding::decode;
 
@@ -30,6 +32,21 @@ pub async fn handle_url(sublink: &str) -> crate::Result<CommandPayload> {
         Some(("server", id)) => {
             CommandPayload::InstallServer { id: id.to_string() }
         }
+        Some(("hosting", path)) => {
+            let (server_id, world_id) = path.split_once('/').ok_or(
+                ErrorKind::InputError("missing hosting world ID".to_string()),
+            )?;
+            let server_id = uuid::Uuid::parse_str(server_id).context(
+                ErrorKind::InputError("invalid hosting server ID".to_string()),
+            )?;
+            let world_id = uuid::Uuid::parse_str(world_id).context(
+                ErrorKind::InputError("invalid hosting world ID".to_string()),
+            )?;
+            CommandPayload::PlayHostingServer {
+                server_id: server_id.to_string(),
+                world_id: world_id.to_string(),
+            }
+        }
         // /share/{invite_id}
         Some(("share", raw)) => {
             let (raw, _) = raw.split_once('?').unwrap_or((raw, ""));
@@ -43,10 +60,10 @@ pub async fn handle_url(sublink: &str) -> crate::Result<CommandPayload> {
                         "Invalid UTF-8 in shared instance invite path: {e}"
                     ))
                     .await?;
-                    return Err(crate::ErrorKind::InputError(format!(
-                        "Invalid UTF-8 in shared instance invite path: {e}"
-                    ))
-                    .into());
+                    return Err(e).context(ErrorKind::InputError(
+                        "invalid UTF-8 in shared instance invite path"
+                            .to_string(),
+                    ));
                 }
             }
         }
@@ -72,11 +89,10 @@ pub async fn handle_url(sublink: &str) -> crate::Result<CommandPayload> {
                     "Invalid command, cannot launch both a server and a singleplayer world",
                 )
                 .await?;
-                return Err(crate::ErrorKind::InputError(
-                    "Cannot launch both a server and a singleplayer world"
+                bail!(ErrorKind::InputError(
+                    "cannot launch both a server and a singleplayer world"
                         .to_string(),
-                )
-                .into());
+                ));
             }
 
             match decode(raw) {
@@ -90,10 +106,9 @@ pub async fn handle_url(sublink: &str) -> crate::Result<CommandPayload> {
                         "Invalid UTF-8 in instance path: {e}"
                     ))
                     .await?;
-                    return Err(crate::ErrorKind::InputError(format!(
-                        "Invalid UTF-8 in instance path: {e}"
-                    ))
-                    .into());
+                    return Err(e).context(ErrorKind::InputError(
+                        "invalid UTF-8 in instance path".to_string(),
+                    ));
                 }
             }
         }
@@ -102,10 +117,9 @@ pub async fn handle_url(sublink: &str) -> crate::Result<CommandPayload> {
                 "Invalid command, unrecognized path: {sublink}"
             ))
             .await?;
-            return Err(crate::ErrorKind::InputError(format!(
-                "Invalid command, unrecognized path: {sublink}"
-            ))
-            .into());
+            bail!(ErrorKind::InputError(format!(
+                "invalid command, unrecognized path {sublink}"
+            )));
         }
     })
 }
@@ -135,11 +149,10 @@ pub async fn parse_command(
             path.display()
         ))
         .await?;
-        Err(crate::ErrorKind::InputError(format!(
-            "Invalid command, unrecognized filetype: {}",
+        bail!(ErrorKind::InputError(format!(
+            "invalid command, unrecognized filetype {}",
             path.display()
-        ))
-        .into())
+        )))
     }
 }
 

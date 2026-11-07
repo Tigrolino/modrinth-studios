@@ -5,13 +5,14 @@ use crate::state::instances::{
     adapters::sqlite::{content_rows, instance_rows},
 };
 use crate::state::{
-    InstanceIconConfig, InstanceInstallStage, LauncherFeatureVersion,
-    ModLoader, ReleaseChannel, State,
+    IconConfig, InstanceInstallStage, LauncherFeatureVersion, ModLoader,
+    ReleaseChannel, State,
 };
 use crate::util::fetch;
 use crate::util::io;
 use chrono::Utc;
 use serde::{Deserialize, Serialize};
+use sqlx::SqlitePool;
 use tracing::{info, trace};
 use uuid::Uuid;
 
@@ -23,7 +24,7 @@ pub struct CreateInstance {
     pub loader: ModLoader,
     pub loader_version: Option<String>,
     pub icon_path: Option<String>,
-    pub icon_config: Option<InstanceIconConfig>,
+    pub icon_config: Option<IconConfig>,
     pub link: InstanceLink,
 }
 
@@ -49,6 +50,7 @@ pub(crate) async fn create_instance(
                 &input.game_version,
                 input.loader,
                 input.loader_version.as_deref(),
+                &state.directories,
             )
             .await?
             .map(|value| value.id)
@@ -191,7 +193,9 @@ pub(crate) async fn resolve_instance_path(
     let mut path = base_path.clone();
     let mut full_path = state.directories.instances_dir().join(&path);
 
-    if path_available(&path, &full_path, exclude_instance_id, state).await? {
+    if path_available(&path, &full_path, exclude_instance_id, &state.pool)
+        .await?
+    {
         return Ok((path, full_path));
     }
 
@@ -200,7 +204,8 @@ pub(crate) async fn resolve_instance_path(
         path = format!("{base_path} ({which})");
         full_path = state.directories.instances_dir().join(&path);
 
-        if path_available(&path, &full_path, exclude_instance_id, state).await?
+        if path_available(&path, &full_path, exclude_instance_id, &state.pool)
+            .await?
         {
             return Ok((path, full_path));
         }
@@ -213,7 +218,7 @@ async fn path_available(
     path: &str,
     full_path: &std::path::Path,
     exclude_instance_id: Option<&str>,
-    state: &State,
+    pool: &SqlitePool,
 ) -> crate::Result<bool> {
     // Check the database first, not the filesystem: a path already owned by
     // `exclude_instance_id` itself is always available *to that instance*,
@@ -221,7 +226,9 @@ async fn path_available(
     // own current folder) — this is the one case a pure `full_path.exists()`
     // check can never get right, since the folder existing is exactly what's
     // supposed to happen when a rename resolves back to a no-op.
-    if let Some(existing) = instance_rows::get_instance_by_path(path, &state.pool).await? {
+    if let Some(existing) =
+        instance_rows::get_instance_by_path(path, pool).await?
+    {
         return Ok(exclude_instance_id == Some(existing.id.as_str()));
     }
 

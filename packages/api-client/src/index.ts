@@ -37,14 +37,15 @@ export { GenericModrinthClient } from './platform/generic'
 export type { NuxtClientConfig } from './platform/nuxt'
 export { NuxtCircuitBreakerStorage, NuxtModrinthClient } from './platform/nuxt'
 export { GenericSyncClient } from './platform/sync-generic'
+export { setWebSocketFactory, type WebSocketFactory } from './platform/websocket-generic'
 export type { TauriClientConfig } from './platform/tauri'
 export { TauriModrinthClient } from './platform/tauri'
 export { XHRUploadClient } from './platform/xhr-upload-client'
 export { clearNodeAuthState, nodeAuthState, setNodeAuthState } from './state/node-auth'
 export * from './types'
 export { withJWTRetry } from './utils/jwt-retry'
-export { getNodeWebSocketUrl } from './utils/node-url'
-export { pingWebSocketUrl, type WebSocketPingOptions } from './utils/pingtest'
+export { getNodeBaseUrl, getNodeWebSocketUrl } from './utils/node-url'
+export { WebSocketPinger, type WebSocketPingOptions } from './utils/pingtest'
 export {
 	type ParsedSseEvent,
 	type ParsedSseItem,

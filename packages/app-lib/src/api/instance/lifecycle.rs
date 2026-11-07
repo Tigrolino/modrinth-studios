@@ -1,20 +1,44 @@
+use crate::ErrorKind;
 use crate::event::InstancePayloadType;
 use crate::event::emit::emit_instance;
 use crate::state::instances::adapters::sqlite::instance_rows;
 use crate::state::{
-    CreateInstance, EditInstance, InstanceIconConfig, InstanceLink,
-    InstanceMetadata, InstanceSyncedOption, ModLoader, State,
+    CreateInstance, EditInstance, IconConfig, InstanceLink, InstanceMetadata,
+    InstanceSyncedOption, ModLoader, State,
 };
 
-#[tracing::instrument]
+use std::future::Future;
+
 #[allow(clippy::too_many_arguments)]
-pub(crate) async fn create(
+pub(crate) fn create(
     name: String,
     game_version: String,
     modloader: ModLoader,
     loader_version: Option<String>,
     icon_path: Option<String>,
-    icon_config: Option<InstanceIconConfig>,
+    icon_config: Option<IconConfig>,
+    link: InstanceLink,
+) -> impl Future<Output = crate::Result<InstanceMetadata>> + Send + 'static {
+    Box::pin(create_inner(
+        name,
+        game_version,
+        modloader,
+        loader_version,
+        icon_path,
+        icon_config,
+        link,
+    ))
+}
+
+#[tracing::instrument]
+#[allow(clippy::too_many_arguments)]
+async fn create_inner(
+    name: String,
+    game_version: String,
+    modloader: ModLoader,
+    loader_version: Option<String>,
+    icon_path: Option<String>,
+    icon_config: Option<IconConfig>,
     link: InstanceLink,
 ) -> crate::Result<InstanceMetadata> {
     let state = State::get().await?;
@@ -41,12 +65,12 @@ pub(crate) async fn create(
 
         crate::state::get_instance(&instance.id, &state.pool)
             .await?
-            .ok_or_else(|| {
-                crate::ErrorKind::InputError(
-                    "Created instance could not be loaded".to_string(),
+            .ok_or(
+                ErrorKind::InputError(
+                    "created instance could not be loaded".to_string(),
                 )
-                .into()
-            })
+                .into(),
+            )
     }
     .await;
 
@@ -100,9 +124,7 @@ async fn edit_inner(
         let instance =
             instance_rows::get_instance_by_id(instance_id, &state.pool)
                 .await?
-                .ok_or_else(|| {
-                    crate::state::content_store::input("Unknown instance")
-                })?;
+                .ok_or(ErrorKind::InputError("unknown instance".to_string()))?;
         super::projects::ensure_installation_content_unlocked(
             instance.install_stage,
         )?;
@@ -124,14 +146,11 @@ async fn edit_inner(
         .await?;
     }
 
-    crate::state::edit_instance(instance_id, patch, &state.pool).await?;
+    crate::state::edit_instance(instance_id, patch, &state).await?;
 
     let instance = crate::state::get_instance(instance_id, &state.pool)
         .await?
-        .ok_or_else(|| {
-            crate::ErrorKind::InputError("Unknown instance".to_string())
-                .as_error()
-        })?;
+        .ok_or(ErrorKind::InputError("unknown instance".to_string()))?;
 
     super::reconcile_instance_synced_options(instance_id).await?;
 
@@ -177,6 +196,8 @@ pub async fn remove(instance_id: &str) -> crate::Result<()> {
     {
         crate::state::remove_instance(instance_id, &state).await?;
     }
+    crate::state::hidden_instances::forget_instance(instance_id, &state.pool)
+        .await?;
 
     if let Some(instance) = instance {
         emit_instance(&instance.id, InstancePayloadType::Removed).await?;

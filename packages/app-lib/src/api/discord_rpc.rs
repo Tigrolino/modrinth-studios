@@ -223,7 +223,11 @@ pub async fn set_settings(settings: DiscordRpcSettings) -> Result<()> {
 
     // Best-effort: a failure here shouldn't stop the settings from having
     // saved successfully.
-    let _ = state.discord_rpc.clear_to_default(true).await;
+    let _ = state
+        .presence
+        .discord_rpc
+        .clear_to_default(true, &state.pool, &state.process_manager)
+        .await;
 
     Ok(())
 }

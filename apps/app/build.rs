@@ -90,6 +90,7 @@ fn main() {
                         "logs_get_latest_log_cursor",
                         "logs_get_live_log_buffer",
                         "logs_clear_live_log_buffer",
+                        "logs_log_webview",
                     ])
                     .default_permission(
                         DefaultPermissionRule::AllowAllCommands,
@@ -146,7 +147,10 @@ fn main() {
             .plugin(
                 "onboarding-checklist",
                 InlinedPlugin::new()
-                    .commands(&["get_onboarding_checklist"])
+                    .commands(&[
+                        "get_onboarding_checklist",
+                        "skip_create_instance_onboarding",
+                    ])
                     .default_permission(
                         DefaultPermissionRule::AllowAllCommands,
                     ),
@@ -160,6 +164,8 @@ fn main() {
                         "install_create_modpack_instance",
                         "install_get_shared_instance_preview",
                         "install_accept_shared_instance_invite",
+                        "install_get_shared_instance_invite_preview",
+                        "install_accept_pending_shared_instance_invite",
                         "install_get_shared_instance_update_preview",
                         "install_shared_instance",
                         "install_update_shared_instance",
@@ -287,6 +293,7 @@ fn main() {
                         "instance_kill",
                         "instance_edit",
                         "instance_edit_icon",
+                        "instance_cache_icon",
                         "instance_edit_generated_icon",
                         "instance_cache_generated_icon",
                         "instance_get_recent_icon_configs",
@@ -299,8 +306,16 @@ fn main() {
                         "instance_share_remove_users",
                         "instance_share_get_publish_preview",
                         "instance_share_publish",
+                        "instance_share_publish_support_details",
                         "instance_share_unlink",
                         "instance_share_unpublish",
+                        "instance_share_unpublish_remote",
+                        "instance_share_leave_remote",
+                        "instance_share_get_cached_library",
+                        "instance_share_cache_library",
+                        "instance_get_hidden_ids",
+                        "instance_set_hidden",
+                        "instance_share_dismiss_restored_notice",
                         "instance_export_mrpack",
                         "instance_get_pack_export_candidates",
                     ])
@@ -317,7 +332,6 @@ fn main() {
                         "store_usage",
                         "store_cleanup",
                         "store_set_cache_limit",
-                        "store_verify",
                         "cancel_directory_change",
                     ])
                     .default_permission(
@@ -379,9 +393,12 @@ fn main() {
                         "open_path",
                         "show_launcher_logs_folder",
                         "show_app_db_backups_folder",
+                        "export_debug_info",
+                        "cancel_debug_info_export",
                         "progress_bars_list",
                         "get_opening_command",
                         "get_image_thumbnail",
+                        "cache_remote_icon",
                     ])
                     .default_permission(
                         DefaultPermissionRule::AllowAllCommands,
@@ -403,6 +420,8 @@ fn main() {
                         "record_ads_click",
                         "open_link",
                         "get_ads_personalization",
+                        "get_ads_debug_state",
+                        "report_ads_debug_state",
                     ])
                     .default_permission(
                         DefaultPermissionRule::AllowAllCommands,
@@ -420,7 +439,13 @@ fn main() {
                         "file_rename",
                         "file_delete",
                         "file_save_as",
+                        "files_select_external",
+                        "files_save_external",
+                        "files_release_external",
                         "file_read_dragged_file",
+                        "file_local_info",
+                        "file_upload_local",
+                        "file_cancel_local_upload",
                     ])
                     .default_permission(
                         DefaultPermissionRule::AllowAllCommands,
@@ -455,6 +480,27 @@ fn main() {
                         "studio_instance_storage_usage",
                         "studio_instance_storage_usage_single",
                         "studio_system_storage_overview",
+                    ])
+                    .default_permission(
+                        DefaultPermissionRule::AllowAllCommands,
+                    ),
+            )
+            .plugin(
+                // Modrinth Studios addition
+                "pterodactyl",
+                InlinedPlugin::new()
+                    .commands(&[
+                        "ptero_list_panels",
+                        "ptero_add_panel",
+                        "ptero_remove_panel",
+                        "ptero_request",
+                        "ptero_request_bytes",
+                        "ptero_write_bytes",
+                        "ptero_upload_local",
+                        "ptero_install_mrpack",
+                        "ptero_ws_connect",
+                        "ptero_ws_send",
+                        "ptero_ws_close",
                     ])
                     .default_permission(
                         DefaultPermissionRule::AllowAllCommands,

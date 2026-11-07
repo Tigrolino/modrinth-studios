@@ -1,4 +1,5 @@
 use crate::api::Result;
+use anyhow::Context;
 use dashmap::DashMap;
 use path_util::SafeRelativeUtf8UnixPathBuf;
 use serde::{Deserialize, Serialize};
@@ -7,7 +8,6 @@ use std::path::{Path, PathBuf};
 use tauri::{AppHandle, Manager, Runtime};
 use tauri_plugin_fs::FsExt;
 use tauri_plugin_opener::OpenerExt;
-use theseus::DownloadReason;
 use theseus::data::{
     AppliedContentSetPatch, ContentItem, Dependency,
     EditInstance as CoreEditInstance, InstanceInstallCandidate,
@@ -21,6 +21,7 @@ use theseus::instance::InstallProjectWithDependenciesRequest;
 use theseus::instance::QuickPlayType;
 use theseus::prelude::*;
 use theseus::server_address::ServerAddress;
+use theseus::{DownloadReason, ErrorKind};
 
 pub fn init<R: tauri::Runtime>() -> tauri::plugin::TauriPlugin<R> {
     tauri::plugin::Builder::new("instance")
@@ -106,6 +107,7 @@ pub fn init<R: tauri::Runtime>() -> tauri::plugin::TauriPlugin<R> {
             instance_kill,
             instance_edit,
             instance_edit_icon,
+            instance_cache_icon,
             instance_edit_generated_icon,
             instance_cache_generated_icon,
             instance_get_recent_icon_configs,
@@ -118,8 +120,16 @@ pub fn init<R: tauri::Runtime>() -> tauri::plugin::TauriPlugin<R> {
             instance_share_remove_users,
             instance_share_get_publish_preview,
             instance_share_publish,
+            instance_share_publish_support_details,
             instance_share_unlink,
             instance_share_unpublish,
+            instance_share_unpublish_remote,
+            instance_share_leave_remote,
+            instance_share_get_cached_library,
+            instance_share_cache_library,
+            instance_get_hidden_ids,
+            instance_set_hidden,
+            instance_share_dismiss_restored_notice,
             instance_export_mrpack,
             instance_get_pack_export_candidates,
         ])
@@ -134,7 +144,7 @@ pub struct Instance {
     pub launcher_feature_version: String,
     pub name: String,
     pub icon_path: Option<String>,
-    pub icon_config: Option<theseus::data::InstanceIconConfig>,
+    pub icon_config: Option<theseus::data::IconConfig>,
     pub game_version: String,
     pub protocol_version: Option<u32>,
     pub loader: ModLoader,
@@ -219,6 +229,7 @@ pub struct SharedInstanceAttachment {
     pub status: String,
     pub applied_version: Option<i32>,
     pub latest_version: Option<i32>,
+    pub restored_from_remote: bool,
 }
 
 impl From<CoreSharedInstanceAttachment> for SharedInstanceAttachment {
@@ -233,6 +244,7 @@ impl From<CoreSharedInstanceAttachment> for SharedInstanceAttachment {
             status: attachment.status.as_str().to_string(),
             applied_version: attachment.applied_version,
             latest_version: attachment.latest_version,
+            restored_from_remote: attachment.restored_from_remote,
         }
     }
 }
@@ -442,32 +454,22 @@ impl InstanceLink {
                 instance_ids,
                 active_instance_id,
             } => Ok(CoreInstanceLink::ModrinthHosting {
-                server_id: server_id.parse().map_err(|err| {
-                    theseus::Error::from(theseus::ErrorKind::InputError(
-                        format!("Invalid server id: {err}"),
-                    ))
-                })?,
+                server_id: server_id.parse().context(ErrorKind::InputError(
+                    "invalid server id".to_string(),
+                ))?,
                 instance_ids: instance_ids
                     .into_iter()
                     .map(|id| {
-                        id.parse().map_err(|err| {
-                            theseus::Error::from(
-                                theseus::ErrorKind::InputError(format!(
-                                    "Invalid hosted instance id: {err}"
-                                )),
-                            )
-                        })
+                        id.parse().context(ErrorKind::InputError(
+                            "invalid hosted instance id".to_string(),
+                        ))
                     })
-                    .collect::<std::result::Result<Vec<_>, _>>()?,
+                    .collect::<anyhow::Result<Vec<_>>>()?,
                 active_instance_id: active_instance_id
                     .map(|id| {
-                        id.parse().map_err(|err| {
-                            theseus::Error::from(
-                                theseus::ErrorKind::InputError(format!(
-                                    "Invalid active instance id: {err}"
-                                )),
-                            )
-                        })
+                        id.parse().context(ErrorKind::InputError(
+                            "invalid active instance id".to_string(),
+                        ))
                     })
                     .transpose()?,
             }),
@@ -1368,9 +1370,14 @@ pub async fn instance_edit_icon(
 }
 
 #[tauri::command]
+pub async fn instance_cache_icon(icon_bytes: Vec<u8>) -> Result<String> {
+    Ok(theseus::instance::cache_icon_bytes(icon_bytes).await?)
+}
+
+#[tauri::command]
 pub async fn instance_edit_generated_icon(
     instance_id: &str,
-    config: theseus::data::InstanceIconConfig,
+    config: theseus::data::IconConfig,
     symbol_bytes: Vec<u8>,
     only_if_empty: Option<bool>,
 ) -> Result<Option<String>> {
@@ -1395,7 +1402,7 @@ pub async fn instance_edit_generated_icon(
 
 #[tauri::command]
 pub async fn instance_cache_generated_icon(
-    config: theseus::data::InstanceIconConfig,
+    config: theseus::data::IconConfig,
     symbol_bytes: Vec<u8>,
     add_to_recents: bool,
 ) -> Result<String> {
@@ -1409,7 +1416,7 @@ pub async fn instance_cache_generated_icon(
 
 #[tauri::command]
 pub async fn instance_get_recent_icon_configs()
--> Result<Vec<theseus::data::InstanceIconConfig>> {
+-> Result<Vec<theseus::data::IconConfig>> {
     Ok(theseus::instance::get_recent_icon_configs().await?)
 }
 
@@ -1500,12 +1507,29 @@ pub async fn instance_share_get_publish_preview(
 #[tauri::command]
 pub async fn instance_share_publish(
     instance_id: &str,
-    config_paths: Vec<String>,
+    file_paths: Vec<String>,
+    on_progress: tauri::ipc::Channel<(u64, u64)>,
 ) -> Result<SharedInstanceAttachment> {
+    Ok(theseus::instance::publish_shared_instance(
+        instance_id,
+        file_paths,
+        &|uploaded, total| {
+            let _ = on_progress.send((uploaded, total));
+        },
+    )
+    .await?
+    .into())
+}
+
+#[tauri::command]
+pub async fn instance_share_publish_support_details(
+    instance_id: &str,
+) -> Result<Option<String>> {
     Ok(
-        theseus::instance::publish_shared_instance(instance_id, config_paths)
-            .await?
-            .into(),
+        theseus::instance::get_shared_instance_publish_support_details(
+            instance_id,
+        )
+        .await?,
     )
 }
 
@@ -1518,5 +1542,59 @@ pub async fn instance_share_unlink(instance_id: &str) -> Result<()> {
 #[tauri::command]
 pub async fn instance_share_unpublish(instance_id: &str) -> Result<()> {
     theseus::instance::unpublish_shared_instance(instance_id).await?;
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn instance_share_unpublish_remote(
+    shared_instance_id: &str,
+) -> Result<()> {
+    theseus::instance::unpublish_remote_shared_instance(shared_instance_id)
+        .await?;
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn instance_share_get_cached_library()
+-> Result<Vec<theseus::data::CachedSharedInstanceSummary>> {
+    Ok(theseus::instance::get_cached_shared_instance_library().await?)
+}
+
+#[tauri::command]
+pub async fn instance_share_cache_library(
+    instances: Vec<theseus::data::CachedSharedInstanceSummary>,
+) -> Result<()> {
+    theseus::instance::cache_shared_instance_library(instances).await?;
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn instance_get_hidden_ids() -> Result<Vec<String>> {
+    Ok(theseus::instance::get_hidden_instance_ids().await?)
+}
+
+#[tauri::command]
+pub async fn instance_set_hidden(
+    instance_id: &str,
+    hidden: bool,
+) -> Result<()> {
+    theseus::instance::set_instance_hidden(instance_id, hidden).await?;
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn instance_share_dismiss_restored_notice(
+    instance_id: &str,
+) -> Result<()> {
+    theseus::instance::dismiss_shared_instance_restored_notice(instance_id)
+        .await?;
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn instance_share_leave_remote(
+    shared_instance_id: &str,
+) -> Result<()> {
+    theseus::instance::leave_remote_shared_instance(shared_instance_id).await?;
     Ok(())
 }

@@ -3,9 +3,9 @@
  * So, for example, addDefaultInstance creates a blank instance object, where the Rust struct is serialized,
  *  and deserialized into a usable JS object.
  */
-import type { Labrinth } from '@modrinth/api-client'
+import type { IconConfig, Labrinth } from '@modrinth/api-client'
 import type { ContentItem, ContentOwner } from '@modrinth/ui'
-import { convertFileSrc, invoke } from '@tauri-apps/api/core'
+import { Channel, convertFileSrc, invoke } from '@tauri-apps/api/core'
 
 import type { InstallJobSnapshot, SharedInstanceUpdateDiff } from './install'
 import type {
@@ -13,7 +13,6 @@ import type {
 	ContentFile,
 	ContentFileProjectType,
 	GameInstance,
-	InstanceIconConfig,
 	InstanceLoader,
 	SharedInstanceAttachment,
 } from './types'
@@ -58,6 +57,7 @@ export type InstanceInstallCandidate = {
 	icon_path?: string | null
 	game_version: string
 	loader: InstanceLoader
+	update_channel: GameInstance['update_channel']
 	installed: boolean
 	compatible: boolean
 }
@@ -632,7 +632,7 @@ export async function edit_icon(instanceId: string, iconPath: string | null): Pr
 
 export async function edit_generated_icon(
 	instanceId: string,
-	config: InstanceIconConfig,
+	config: IconConfig,
 	symbolBytes: number[],
 ): Promise<string> {
 	return await invoke('plugin:instance|instance_edit_generated_icon', {
@@ -644,7 +644,7 @@ export async function edit_generated_icon(
 
 export async function edit_generated_icon_if_empty(
 	instanceId: string,
-	config: InstanceIconConfig,
+	config: IconConfig,
 	symbolBytes: number[],
 ): Promise<boolean> {
 	const result = await invoke<string | null>('plugin:instance|instance_edit_generated_icon', {
@@ -657,7 +657,7 @@ export async function edit_generated_icon_if_empty(
 }
 
 export async function cache_generated_icon(
-	config: InstanceIconConfig,
+	config: IconConfig,
 	symbolBytes: number[],
 	addToRecents = false,
 ): Promise<string> {
@@ -668,7 +668,7 @@ export async function cache_generated_icon(
 	})
 }
 
-export async function get_recent_icon_configs(): Promise<InstanceIconConfig[]> {
+export async function get_recent_icon_configs(): Promise<IconConfig[]> {
 	return await invoke('plugin:instance|instance_get_recent_icon_configs')
 }
 
@@ -691,7 +691,13 @@ export interface SharedInstancePublishPreview {
 	sharedInstanceId: string
 	latestVersion: number
 	diffs: SharedInstanceUpdateDiff[]
-	configFiles: string[]
+	files: SharedInstancePublishFile[]
+}
+
+export interface SharedInstancePublishFile {
+	path: string
+	size: number
+	blocked: boolean
 }
 
 export interface SharedInstanceInviteLink {
@@ -769,9 +775,20 @@ export async function get_shared_instance_publish_preview(
 
 export async function publish_shared_instance(
 	instanceId: string,
-	configPaths: string[],
+	filePaths: string[],
+	onProgress: (uploadedBytes: number, totalBytes: number) => void,
 ): Promise<SharedInstanceAttachment> {
-	return await invoke('plugin:instance|instance_share_publish', { instanceId, configPaths })
+	return await invoke('plugin:instance|instance_share_publish', {
+		instanceId,
+		filePaths,
+		onProgress: new Channel<[number, number]>(([uploaded, total]) => onProgress(uploaded, total)),
+	})
+}
+
+export async function get_shared_instance_publish_support_details(
+	instanceId: string,
+): Promise<string | null> {
+	return await invoke('plugin:instance|instance_share_publish_support_details', { instanceId })
 }
 
 export async function unlink_shared_instance(instanceId: string): Promise<void> {

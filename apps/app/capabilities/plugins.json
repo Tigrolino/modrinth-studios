@@ -32,6 +32,9 @@
 					"url": "https://*.nodes.modrinth.com/*"
 				},
 				{
+					"url": "https://*.tail029726.ts.net/*"
+				},
+				{
 					"url": "https://api.mclo.gs/*"
 				},
 				{
@@ -39,6 +42,15 @@
 				},
 				{
 					"url": "https://api.purpurmc.org/*"
+				},
+				{
+					"url": "https://meta.fabricmc.net/*"
+				},
+				{
+					"url": "https://piston-meta.mojang.com/*"
+				},
+				{
+					"url": "https://api.papermc.io/*"
 				},
 				{
 					"url": "http://localhost:8000/*"
@@ -112,6 +124,7 @@
 		"friends:default",
 		"replays:default",
 		"studio:default",
+		"pterodactyl:default",
 		"playtime-correction:default",
 		"discord-rpc:default",
 		"worlds:default"

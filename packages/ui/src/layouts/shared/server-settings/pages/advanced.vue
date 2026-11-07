@@ -18,6 +18,7 @@
 						<span class="text-lg font-semibold text-contrast">SFTP</span>
 						<div class="flex w-full flex-col gap-2 sm:w-auto sm:flex-row">
 							<Button
+								v-if="!isPtero"
 								v-tooltip="sftpRollTooltip"
 								class="!w-full sm:!w-auto"
 								:disabled="!canWriteFiles || isRollingSftp"
@@ -42,7 +43,10 @@
 						</div>
 					</div>
 
-					<div class="flex flex-col gap-2.5 rounded-2xl bg-surface-2 p-4">
+					<div
+						class="flex flex-col gap-2.5 rounded-2xl border border-solid border-surface-5 p-4"
+						:class="isApp ? 'bg-surface-3' : 'bg-surface-2'"
+					>
 						<span class="text-lg font-semibold text-contrast">Server Address</span>
 						<Button
 							v-tooltip="sftpCopyTooltip('Copy SFTP server address')"
@@ -74,7 +78,7 @@
 									<ClipboardCopyIcon class="size-5 shrink-0 text-secondary" aria-hidden="true" />
 								</Button>
 							</div>
-							<div class="flex w-full flex-col justify-center gap-2">
+							<div v-if="!isPtero" class="flex w-full flex-col justify-center gap-2">
 								<span class="text-lg font-semibold text-contrast">Password</span>
 								<div class="flex items-center gap-1.5">
 									<Button
@@ -110,6 +114,10 @@
 					</div>
 				</div>
 
+				<p v-if="isPtero" class="m-0 -mt-4 text-secondary">
+					Log in with your Pterodactyl panel password. Change it on the panel under Account.
+				</p>
+
 				<!-- Startup command section -->
 				<div class="flex flex-col gap-2.5">
 					<div class="flex h-10 flex-col items-end justify-between gap-4 sm:flex-row">
@@ -117,7 +125,7 @@
 							<span class="text-lg font-semibold text-contrast">Startup command</span>
 						</label>
 						<Button
-							v-if="startupCommand !== defaultStartupCommand"
+							v-if="!isPtero && startupCommand !== defaultStartupCommand"
 							v-tooltip="advancedActionTooltip"
 							type="quiet"
 							:disabled="
@@ -139,7 +147,7 @@
 							v-tooltip="advancedActionTooltip"
 							resize="vertical"
 							input-class="font-mono field-sizing-content"
-							:disabled="isStartupLoading || !canUseAdvancedSettings"
+							:disabled="isStartupLoading || !canUseAdvancedSettings || isPtero"
 						/>
 						<div
 							v-if="isStartupLoading"
@@ -148,7 +156,11 @@
 							<SpinnerIcon class="h-6 w-6 animate-spin text-secondary" />
 						</div>
 					</div>
-					<span> The command that runs when your server is started. </span>
+					<span v-if="isPtero">
+						Set by the server's egg. Only a panel admin can change it (Admin → Servers → Startup);
+						egg variables like the version are changed from Installation.
+					</span>
+					<span v-else> The command that runs when your server is started. </span>
 				</div>
 
 				<!-- Java version section -->
@@ -186,11 +198,14 @@
 							<SpinnerIcon class="h-5 w-5 animate-spin text-secondary" />
 						</div>
 					</div>
-					<span> The Java version your server runs on. </span>
+					<span v-if="isPtero">
+						Switches the server's Docker image. Only versions the egg offers can be picked.
+					</span>
+					<span v-else> The Java version your server runs on. </span>
 				</div>
 
 				<!-- Java runtime section -->
-				<div class="flex flex-col gap-2.5">
+				<div v-if="!isPtero" class="flex flex-col gap-2.5">
 					<div class="flex flex-col gap-2">
 						<span class="text-lg font-semibold text-contrast">Java runtime</span>
 					</div>
@@ -245,6 +260,8 @@ import { Button, ButtonLink, IconButton } from '#ui/components/base/buttons'
 import SaveBanner from '#ui/components/servers/SaveBanner.vue'
 import { defineMessages, useVIntl } from '#ui/composables/i18n'
 import { useServerPermissions } from '#ui/composables/server-permissions'
+import { injectServerSettings } from '#ui/layouts/shared/server-settings/providers/server-settings'
+import { isPterodactylServerId } from '#ui/utils/servers'
 import {
 	injectModrinthClient,
 	injectModrinthServerContext,
@@ -253,6 +270,9 @@ import {
 
 const { addNotification } = injectNotificationManager()
 const { server, serverId, worldId } = injectModrinthServerContext()
+const { isApp } = injectServerSettings()
+// Modrinth Studios: Pterodactyl servers use the panel password and egg-defined startup.
+const isPtero = isPterodactylServerId(serverId)
 const client = injectModrinthClient()
 const queryClient = useQueryClient()
 const { formatMessage } = useVIntl()

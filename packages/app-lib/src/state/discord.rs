@@ -5,12 +5,13 @@ use discord_rich_presence::{
     DiscordIpc, DiscordIpcClient,
     activity::{Activity, ActivityType, Assets, Button, Timestamps},
 };
+use sqlx::SqlitePool;
 use tokio::sync::RwLock;
 
-use crate::State;
 use crate::api::discord_rpc::{
     DiscordActivityKind, DiscordActivityMode, DiscordRpcSettings,
 };
+use crate::state::ProcessManager;
 
 pub struct DiscordGuard {
     client: Arc<RwLock<DiscordIpcClient>>,
@@ -77,9 +78,9 @@ impl DiscordGuard {
         ctx: &DiscordActivityContext,
         launched_at: DateTime<Utc>,
         reconnect_if_fail: bool,
+        pool: &SqlitePool,
     ) -> crate::Result<()> {
-        let state = State::get().await?;
-        let settings = crate::state::Settings::get(&state.pool).await?;
+        let settings = crate::state::Settings::get(pool).await?;
         if !settings.discord_rpc {
             return self.clear_activity(true).await;
         }
@@ -144,9 +145,9 @@ impl DiscordGuard {
     pub async fn set_idle(
         &self,
         reconnect_if_fail: bool,
+        pool: &SqlitePool,
     ) -> crate::Result<()> {
-        let state = State::get().await?;
-        let settings = crate::state::Settings::get(&state.pool).await?;
+        let settings = crate::state::Settings::get(pool).await?;
         if !settings.discord_rpc {
             return self.clear_activity(true).await;
         }
@@ -277,16 +278,16 @@ impl DiscordGuard {
     pub async fn clear_to_default(
         &self,
         reconnect_if_fail: bool,
+        pool: &SqlitePool,
+        process_manager: &ProcessManager,
     ) -> crate::Result<()> {
-        let state = State::get().await?;
-
-        let settings = crate::state::Settings::get(&state.pool).await?;
+        let settings = crate::state::Settings::get(pool).await?;
         if !settings.discord_rpc {
             self.clear_activity(true).await?;
             return Ok(());
         }
 
-        let running_instances = state.process_manager.get_all();
+        let running_instances = process_manager.get_all();
         if let Some(existing_child) = running_instances.first() {
             // Modrinth Studios note: loader/version are looked up fresh here
             // rather than threaded through `ProcessMetadata`, since this can
@@ -311,10 +312,11 @@ impl DiscordGuard {
                 },
                 existing_child.start_time,
                 reconnect_if_fail,
+                pool,
             )
             .await?;
         } else {
-            self.set_idle(reconnect_if_fail).await?;
+            self.set_idle(reconnect_if_fail, pool).await?;
         }
         Ok(())
     }

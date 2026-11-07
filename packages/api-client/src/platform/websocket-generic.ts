@@ -10,10 +10,30 @@ type WSEventMap = {
 
 const NORMAL_CLOSURE = 1000
 
+/**
+ * Modrinth Studios addition: lets the app supply its own socket for some
+ * servers (e.g. self-hosted Pterodactyl servers, whose console is proxied
+ * through Rust). Return null to use a normal WebSocket.
+ */
+export type WebSocketFactory = (serverId: string, url: string) => WebSocket | null
+let webSocketFactory: WebSocketFactory | null = null
+export function setWebSocketFactory(factory: WebSocketFactory | null) {
+	webSocketFactory = factory
+}
+
 export class GenericWebSocketClient extends AbstractWebSocketClient {
 	protected emitter = mitt<WSEventMap>()
+	private authRefreshes = new Set<string>()
 
-	async connect(serverId: string, auth: Archon.Websocket.v0.WSAuth): Promise<void> {
+	connect(serverId: string, auth: Archon.Websocket.v0.WSAuth): Promise<void> {
+		return this.openConnection(serverId, auth, 0)
+	}
+
+	private openConnection(
+		serverId: string,
+		auth: Archon.Websocket.v0.WSAuth,
+		reconnectAttempts: number,
+	): Promise<void> {
 		if (this.connections.has(serverId)) {
 			this.closeConnection(serverId)
 		}
@@ -34,15 +54,16 @@ export class GenericWebSocketClient extends AbstractWebSocketClient {
 				reject(error)
 			}
 			try {
-				const ws = new WebSocket(getNodeWebSocketUrl(auth.url))
+				const url = getNodeWebSocketUrl(auth.url)
+				const ws = webSocketFactory?.(serverId, url) ?? new WebSocket(url)
 
 				const connection: WebSocketConnection = {
 					serverId,
 					socket: ws,
 					authenticated: false,
-					reconnectAttempts: 0,
+					reconnectAttempts,
 					reconnectTimer: undefined,
-					isReconnecting: false,
+					isReconnecting: reconnectAttempts > 0,
 				}
 
 				this.connections.set(serverId, connection)
@@ -53,16 +74,17 @@ export class GenericWebSocketClient extends AbstractWebSocketClient {
 
 				ws.onopen = () => {
 					ws.send(JSON.stringify({ event: 'auth', jwt: auth.token }))
-
-					connection.reconnectAttempts = 0
-					connection.isReconnecting = false
 				}
 
 				ws.onmessage = (messageEvent) => {
+					if (this.connections.get(serverId) !== connection) return
 					try {
 						const data = JSON.parse(messageEvent.data) as Archon.Websocket.v0.WSEvent
 						if (data.event === 'auth-ok') {
+							if (connection.authenticated) return
 							connection.authenticated = true
+							connection.reconnectAttempts = 0
+							connection.isReconnecting = false
 						} else if (data.event === 'auth-incorrect') {
 							connection.authenticated = false
 						}
@@ -93,8 +115,8 @@ export class GenericWebSocketClient extends AbstractWebSocketClient {
 							`WebSocket closed before authentication for server ${serverId} (code: ${event.code})`,
 						),
 					)
-					if (event.code !== NORMAL_CLOSURE) {
-						this.scheduleReconnect(serverId, auth)
+					if (event.code !== NORMAL_CLOSURE && this.connections.get(serverId) === connection) {
+						this.scheduleReconnect(connection)
 					}
 				}
 
@@ -148,6 +170,10 @@ export class GenericWebSocketClient extends AbstractWebSocketClient {
 		this.connections.delete(serverId)
 	}
 
+	closeSocket(serverId: string): void {
+		this.closeConnection(serverId)
+	}
+
 	disconnectAll(): void {
 		for (const serverId of this.connections.keys()) {
 			this.disconnect(serverId)
@@ -163,9 +189,8 @@ export class GenericWebSocketClient extends AbstractWebSocketClient {
 		connection.socket.send(JSON.stringify(message))
 	}
 
-	private scheduleReconnect(serverId: string, auth: Archon.Websocket.v0.WSAuth): void {
-		const connection = this.connections.get(serverId)
-		if (!connection) return
+	private scheduleReconnect(connection: WebSocketConnection): void {
+		const { serverId } = connection
 
 		if (connection.reconnectAttempts >= this.MAX_RECONNECT_ATTEMPTS) {
 			this.disconnect(serverId)
@@ -178,13 +203,26 @@ export class GenericWebSocketClient extends AbstractWebSocketClient {
 		const delay = this.getReconnectDelay(connection.reconnectAttempts)
 
 		connection.reconnectTimer = setTimeout(() => {
-			this.connect(serverId, auth).catch((error) => {
-				console.error(`[WebSocket] Reconnection failed for server ${serverId}:`, error)
-			})
+			connection.reconnectTimer = undefined
+			void this.reconnect(connection)
 		}, delay)
 	}
 
+	private async reconnect(connection: WebSocketConnection): Promise<void> {
+		const { serverId } = connection
+		try {
+			const auth = await this.client.archon.servers_v0.getWebSocketAuth(serverId)
+			if (this.connections.get(serverId) !== connection) return
+			await this.openConnection(serverId, auth, connection.reconnectAttempts)
+		} catch (error) {
+			console.error(`[WebSocket] Reconnection failed for server ${serverId}:`, error)
+			if (this.connections.get(serverId) === connection) this.scheduleReconnect(connection)
+		}
+	}
+
 	private async handleAuthExpiring(serverId: string): Promise<void> {
+		if (this.authRefreshes.has(serverId)) return
+		this.authRefreshes.add(serverId)
 		try {
 			const newAuth = await this.client.archon.servers_v0.getWebSocketAuth(serverId)
 
@@ -195,6 +233,8 @@ export class GenericWebSocketClient extends AbstractWebSocketClient {
 		} catch (error) {
 			console.error(`[WebSocket] Failed to refresh auth for server ${serverId}:`, error)
 			this.disconnect(serverId)
+		} finally {
+			this.authRefreshes.delete(serverId)
 		}
 	}
 }

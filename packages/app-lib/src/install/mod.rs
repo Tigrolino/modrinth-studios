@@ -1,5 +1,10 @@
+//! Major install stages box their futures at entry so callers do not embed
+//! the full stage state. Keep large awaited operations behind these boundaries.
+
+#![deny(clippy::large_futures)]
+
 pub(crate) mod control;
-mod diagnostics;
+pub(crate) mod diagnostics;
 pub mod events;
 pub mod model;
 pub mod recovery;
@@ -15,6 +20,7 @@ pub use model::{
     InstallPhaseId, InstallPostInstallEdit, InstallProgress,
     InstallProgressSecondary, InstallRequest, SharedInstanceExternalFileData,
     SharedInstanceInstallData, SharedInstanceInstallModpack,
+    SharedInstanceRemovedFile,
 };
 pub use runner::{
     bulk_update_content, cancel_job, create_instance, create_modpack_instance,
@@ -23,3 +29,4 @@ pub use runner::{
     install_pack_to_existing_instance, job_support_details, list_jobs,
     pause_job, resume_job, retry_job, update_shared_instance,
 };
+pub(crate) use shared_instance::instance_has_shared_file;

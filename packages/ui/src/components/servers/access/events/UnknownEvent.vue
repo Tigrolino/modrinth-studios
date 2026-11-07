@@ -1,7 +1,13 @@
 <template>
 	<BaseEvent>
-		<span class="mr-1 text-secondary">{{ formatMessage(messages.unknownEvent) }}</span>
-		<EventInlineText :text="rawAction" class="font-mono text-secondary" />
+		<template v-if="label">
+			<span class="mr-1 text-primary">{{ label }}</span>
+			<EventInlineText v-if="detail" :text="detail" class="font-mono text-secondary" />
+		</template>
+		<template v-else>
+			<span class="mr-1 text-secondary">{{ formatMessage(messages.unknownEvent) }}</span>
+			<EventInlineText :text="rawAction" class="font-mono text-secondary" />
+		</template>
 	</BaseEvent>
 </template>
 
@@ -12,6 +18,9 @@ import EventInlineText from './EventInlineText.vue'
 
 defineProps<{
 	rawAction: string
+	/** Modrinth Studios: readable name for panel events Archon doesn't know. */
+	label?: string | null
+	detail?: string | null
 }>()
 
 const { formatMessage } = useVIntl()

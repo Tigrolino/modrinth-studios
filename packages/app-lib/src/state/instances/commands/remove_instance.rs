@@ -1,6 +1,8 @@
+use crate::ErrorKind;
 use crate::state::State;
 use crate::state::instances::adapters::sqlite::instance_rows;
 use crate::util::io;
+use anyhow::bail;
 
 pub(crate) async fn remove_instance(
     instance_id: &str,
@@ -8,16 +10,14 @@ pub(crate) async fn remove_instance(
 ) -> crate::Result<()> {
     let instance = instance_rows::get_instance_by_id(instance_id, &state.pool)
         .await?
-        .ok_or_else(|| {
-            crate::ErrorKind::InputError("Unknown instance".to_string())
-        })?;
-    let _synced_options_lock = state.lock_synced_options().await;
-    let _content_lock = state.lock_instance_content(instance_id).await;
+        .ok_or(crate::ErrorKind::InputError("unknown instance".to_string()))?;
+    let _synced_options_lock = state.synced_options.lock().await;
+    let _content_lock = state.instance_locks.lock_content(instance_id).await;
     let _store_lock = state.content_store.files_lock.lock().await;
     let _store_lease = state.content_store.lease().await;
     if crate::state::instance_has_running_process(instance_id, state).await? {
-        return Err(crate::state::content_store::input(
-            "Stop this instance before removing it",
+        bail!(ErrorKind::InputError(
+            "stop this instance before removing it".to_string(),
         ));
     }
     state.content_store.recover(Some(instance_id)).await?;
@@ -25,6 +25,13 @@ pub(crate) async fn remove_instance(
         .await?;
 
     delete_instance_row_and_locks(&instance.id, state).await?;
+    super::super::watcher::unwatch_instance_folder(
+        &instance.id,
+        &instance.path,
+        &state.file_watcher,
+        &state.directories,
+    )
+    .await;
 
     // Modrinth Studios fix: the instance is already gone from the database by
     // this point — as far as the rest of the app (and the caller's
@@ -82,7 +89,7 @@ async fn delete_instance_row_and_locks(
 ) -> crate::Result<()> {
     // Keep these together so deleted instances cannot leave stale entries in the per-instance lock maps.
     instance_rows::delete_instance_by_id(instance_id, &state.pool).await?;
-    state.remove_instance_locks(instance_id);
+    state.instance_locks.remove(instance_id);
 
     Ok(())
 }

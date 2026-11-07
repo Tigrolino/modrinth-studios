@@ -6,7 +6,7 @@
 					<div class="flex max-w-[500px] grow flex-col gap-6">
 						<!-- Server name -->
 						<div class="flex flex-col gap-2.5">
-							<label for="server-name-field" class="flex flex-col gap-2">
+							<label for="server-name-field" class="flex flex-col gap-2 self-start">
 								<span class="text-lg font-semibold text-contrast">Server name</span>
 							</label>
 							<div class="flex flex-col gap-2.5">
@@ -28,40 +28,39 @@
 
 						<!-- Hostname -->
 						<div class="flex flex-col gap-2.5">
-							<label for="server-subdomain" class="flex flex-col gap-2.5">
+							<label for="server-subdomain" class="flex flex-col gap-2 self-start">
 								<span class="text-lg font-semibold text-contrast">Hostname</span>
-								<div
-									class="flex w-full overflow-hidden rounded-xl bg-button-bg px-3 [box-shadow:var(--shadow-inset-sm)] transition-[box-shadow] duration-100 ease-in-out focus-within:[box-shadow:0_0_0_0.25rem_var(--color-brand-shadow)]"
-								>
-									<div class="relative inline-flex min-h-9 items-center">
-										<span
-											class="pointer-events-none invisible whitespace-pre px-px text-base font-medium"
-											aria-hidden="true"
-											>{{ serverSubdomain || 'Enter subdomain...' }}</span
-										>
-										<input
-											id="server-subdomain"
-											v-tooltip="advancedActionTooltip"
-											:value="serverSubdomain"
-											placeholder="Enter subdomain..."
-											:maxlength="32"
-											:disabled="!canUseAdvancedSettings"
-											class="absolute left-px inset-0 bg-transparent !p-0 text-base font-medium text-primary !shadow-none transition-colors placeholder:text-secondary focus:text-contrast"
-											autocomplete="off"
-											@input="serverSubdomain = ($event.target as HTMLInputElement).value"
-											@keyup.enter="saveGeneral"
-										/>
-									</div>
-									<div
-										class="flex min-h-9 shrink-0 select-none items-center py-2 pr-4 font-medium opacity-50 [filter:grayscale(50%)]"
-										:class="!serverSubdomain ? '!ml-auto' : ''"
-									>
-										.modrinth.gg
-									</div>
-								</div>
 							</label>
-							<span>Your friends can connect to your server using this address.</span>
-							<div v-if="!isValidSubdomain" class="text-red font-medium">
+							<Input
+								id="server-subdomain"
+								v-model="serverSubdomain"
+								v-tooltip="advancedActionTooltip"
+								:placeholder="isCustomAddress ? 'play.example.com' : 'my-server'"
+								:maxlength="isCustomAddress ? 253 : 32"
+								:disabled="!canUseAdvancedSettings"
+								:error="showSubdomainErrors || subdomainAvailability === 'taken'"
+								wrapper-class="w-full"
+								autocomplete="off"
+								autocapitalize="none"
+								autocorrect="off"
+								:spellcheck="false"
+								@input="onSubdomainInput"
+								@blur="subdomainTouched = true"
+								@keyup.enter="saveGeneral"
+							>
+								<template v-if="!isCustomAddress" #suffix>.modrinth.gg</template>
+							</Input>
+							<span v-if="isCustomAddress">
+								Your own domain for this server. Point a DNS record at the node (an
+								<code>SRV</code> record <code>_minecraft._tcp.&lt;address&gt;</code> → node IP and
+								port, or an <code>A</code> record if it runs on port 25565). Studio shows and copies
+								this address; leave it empty to use the IP.
+							</span>
+							<span v-else>Your friends can connect to your server using this address.</span>
+							<div v-if="showSubdomainErrors && isCustomAddress" class="text-red font-medium">
+								Enter a hostname like play.example.com (letters, numbers, dots and dashes).
+							</div>
+							<div v-else-if="showSubdomainErrors" class="text-red font-medium">
 								<span v-if="!isValidLengthSubdomain">
 									Subdomain must be at least 5 characters long.
 								</span>
@@ -69,14 +68,42 @@
 									Subdomain can only contain alphanumeric characters and dashes.
 								</span>
 							</div>
+							<span v-else-if="subdomainAvailability === 'checking'" class="text-secondary">
+								Checking availability...
+							</span>
+							<span
+								v-else-if="subdomainAvailability === 'available'"
+								class="text-green font-medium"
+							>
+								This subdomain is available.
+							</span>
+							<span v-else-if="subdomainAvailability === 'taken'" class="text-red font-medium">
+								This subdomain is already in use.
+							</span>
 						</div>
 					</div>
 
 					<EditServerIcon
 						v-if="!data.is_medal"
-						:can-edit="canWriteFiles"
+						:can-edit="canSetup"
 						:permission-denied-message="permissionDeniedMessage"
 					/>
+				</div>
+
+				<div v-if="!isCustomAddress" class="flex flex-col gap-2.5">
+					<span class="text-lg font-semibold text-contrast">
+						{{ formatMessage(messages.updateChannel) }}
+					</span>
+					<Chips
+						v-model="updateChannel"
+						:items="updateChannelOptions"
+						:format-label="formatUpdateChannelLabel"
+						:capitalize="false"
+						:disabled-items="canSetup ? [] : updateChannelOptions"
+						:disabled-tooltip="permissionDeniedMessage"
+						:aria-label="formatMessage(messages.selectUpdateChannelAriaLabel)"
+					/>
+					<span>{{ formatUpdateChannelDescription(updateChannel) }}</span>
 				</div>
 
 				<!-- preferences -->
@@ -111,23 +138,24 @@
 				<!-- Info -->
 				<div class="flex flex-col gap-2.5 pb-10">
 					<div class="text-lg m-0 font-semibold text-contrast">Info</div>
-					<div class="flex flex-col gap-2.5 rounded-xl bg-surface-2 p-4">
+					<div
+						class="flex flex-col gap-2.5 rounded-[20px] border border-solid border-surface-5 p-4"
+						:class="isApp ? 'bg-surface-3' : 'bg-surface-2'"
+					>
 						<div
-							v-for="property in infoProperties"
+							v-for="property in visibleInfoProperties"
 							:key="property.name"
 							class="flex items-start justify-between gap-4"
 						>
-							<template v-if="property.value !== 'Unknown'">
-								<span class="mt-1">{{ property.name }}</span>
-								<CopyCode v-if="property.type === 'copy'" :text="property.value" />
-								<div
-									v-else-if="property.type === 'specs'"
-									class="flex flex-col items-end text-right text-sm leading-5 break-words"
-								>
-									<span v-for="line in property.lines" :key="line">{{ line }}</span>
-								</div>
-								<span v-else class="text-right text-sm break-words">{{ property.value }}</span>
-							</template>
+							<span class="mt-1">{{ property.name }}</span>
+							<CopyCode v-if="property.type === 'copy'" :text="property.value" />
+							<div
+								v-else-if="property.type === 'specs'"
+								class="flex flex-col items-end text-right text-sm leading-5 break-words"
+							>
+								<span v-for="line in property.lines" :key="line">{{ line }}</span>
+							</div>
+							<span v-else class="text-right text-sm break-words">{{ property.value }}</span>
 						</div>
 					</div>
 				</div>
@@ -145,28 +173,34 @@
 </template>
 
 <script setup lang="ts">
-import type { Labrinth } from '@modrinth/api-client'
+import type { Archon, Labrinth } from '@modrinth/api-client'
 import { useQuery, useQueryClient } from '@tanstack/vue-query'
-import { useStorage } from '@vueuse/core'
+import { refDebounced } from '@vueuse/core'
 import { computed, ref, watch } from 'vue'
 
 import { CopyCode, Input, Toggle } from '#ui/components'
+import Chips from '#ui/components/base/Chips.vue'
 import EditServerIcon from '#ui/components/servers/edit-server-icon/EditServerIcon.vue'
 import SaveBanner from '#ui/components/servers/SaveBanner.vue'
+import { defineMessages, useVIntl } from '#ui/composables/i18n'
 import { useServerPermissions } from '#ui/composables/server-permissions'
+import { useServerPreferences } from '#ui/composables/server-preferences'
+import { injectServerSettings } from '#ui/layouts/shared/server-settings/providers/server-settings'
 import {
 	injectModrinthClient,
 	injectModrinthServerContext,
 	injectNotificationManager,
 	injectPageContext,
 } from '#ui/providers'
+import { formatHostingDomain } from '#ui/utils/servers'
 
 const { addNotification } = injectNotificationManager()
 const client = injectModrinthClient()
-const { server: data, serverId, busyReasons } = injectModrinthServerContext()
+const { server: data, serverId, worldId, serverFull, busyReasons } = injectModrinthServerContext()
+const { isApp } = injectServerSettings()
 const { featureFlags } = injectPageContext()
 const queryClient = useQueryClient()
-const { canUseAdvancedSettings, canWriteFiles, permissionDeniedMessage } = useServerPermissions()
+const { canUseAdvancedSettings, canSetup, permissionDeniedMessage } = useServerPermissions()
 const advancedActionTooltip = computed(() =>
 	canUseAdvancedSettings.value ? undefined : permissionDeniedMessage.value,
 )
@@ -180,50 +214,172 @@ watch(data, (newData) => {
 		serverSubdomain.value = newData.net?.domain ?? ''
 	}
 })
-const isValidLengthSubdomain = computed(() => serverSubdomain.value.length >= 5)
-const isValidCharsSubdomain = computed(
-	() => !serverSubdomain.value || /^[a-zA-Z0-9-]+$/.test(serverSubdomain.value),
+// Modrinth Studios: Pterodactyl servers use a free-form custom address instead of a modrinth.gg subdomain.
+const isCustomAddress = computed(() => String(serverId ?? '').startsWith('ptero-'))
+const isValidLengthSubdomain = computed(
+	() => isCustomAddress.value || serverSubdomain.value.length >= 5,
+)
+const isValidCharsSubdomain = computed(() =>
+	!serverSubdomain.value
+		? true
+		: isCustomAddress.value
+			? /^(?=.{1,253}$)([a-z0-9]([a-z0-9-]*[a-z0-9])?)(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$/.test(
+					serverSubdomain.value,
+				)
+			: /^[a-zA-Z0-9-]+$/.test(serverSubdomain.value),
 )
 const isValidSubdomain = computed(() => isValidLengthSubdomain.value && isValidCharsSubdomain.value)
+const subdomainTouched = ref(false)
+const showSubdomainErrors = computed(
+	() => !isValidSubdomain.value && (subdomainTouched.value || !isValidCharsSubdomain.value),
+)
+
+function onSubdomainInput(event: Event) {
+	const target = event.target as HTMLInputElement
+	const sanitized = target.value
+		.toLowerCase()
+		.replace(isCustomAddress.value ? /[^a-z0-9.-]/g : /[^a-z0-9-]/g, '')
+	if (sanitized === target.value) return
+	const caret = Math.max(
+		0,
+		(target.selectionStart ?? target.value.length) - (target.value.length - sanitized.length),
+	)
+	target.value = sanitized
+	target.setSelectionRange(caret, caret)
+	serverSubdomain.value = sanitized
+}
+
+const debouncedSubdomain = refDebounced(serverSubdomain, 400)
+const isSubdomainChanged = computed(() => serverSubdomain.value !== data.value?.net?.domain)
+const subdomainAvailabilityQuery = useQuery({
+	queryKey: computed(() => ['servers', 'subdomain', 'availability', debouncedSubdomain.value]),
+	queryFn: () => client.archon.servers_v0.checkSubdomainAvailability(debouncedSubdomain.value),
+	enabled: computed(
+		() =>
+			!isCustomAddress.value &&
+			isValidSubdomain.value &&
+			isSubdomainChanged.value &&
+			debouncedSubdomain.value === serverSubdomain.value,
+	),
+})
+const subdomainAvailability = computed<'checking' | 'available' | 'taken' | null>(() => {
+	if (isCustomAddress.value || !isValidSubdomain.value || !isSubdomainChanged.value) return null
+	if (debouncedSubdomain.value !== serverSubdomain.value) return 'checking'
+	const result = subdomainAvailabilityQuery.data.value
+	if (result) return result.available ? 'available' : 'taken'
+	return subdomainAvailabilityQuery.isFetching.value ? 'checking' : null
+})
+
+type UpdateChannel = Archon.Servers.v1.ReleaseChannel
+const updateChannelOptions: UpdateChannel[] = ['release', 'beta', 'alpha']
+
+const worldUpdateChannel = computed<UpdateChannel>(
+	() =>
+		serverFull.value?.worlds.find((world) => world.id === worldId.value)?.update_channel ??
+		'release',
+)
+const updateChannel = ref<UpdateChannel>(worldUpdateChannel.value)
+
+watch(worldUpdateChannel, (channel) => {
+	updateChannel.value = channel
+})
+
+function formatUpdateChannelLabel(channel: UpdateChannel) {
+	switch (channel) {
+		case 'release':
+			return formatMessage(messages.updateChannelRelease)
+		case 'beta':
+			return formatMessage(messages.updateChannelBeta)
+		case 'alpha':
+			return formatMessage(messages.updateChannelAlpha)
+	}
+}
+
+function formatUpdateChannelDescription(channel: UpdateChannel) {
+	switch (channel) {
+		case 'release':
+			return formatMessage(messages.updateChannelReleaseDescription)
+		case 'beta':
+			return formatMessage(messages.updateChannelBetaDescription)
+		case 'alpha':
+			return formatMessage(messages.updateChannelAlphaDescription)
+	}
+}
 
 const isUpdating = ref(false)
 const isValidServerName = computed(() => (serverName.value?.length ?? 0) > 0)
 
 // Preferences
-const preferences = {
+const { formatMessage } = useVIntl()
+const messages = defineMessages({
+	updateChannel: {
+		id: 'hosting.settings.update-channel',
+		defaultMessage: 'Update channel',
+	},
+	updateChannelRelease: {
+		id: 'hosting.settings.update-channel.release',
+		defaultMessage: 'Release',
+	},
+	updateChannelBeta: {
+		id: 'hosting.settings.update-channel.beta',
+		defaultMessage: 'Beta',
+	},
+	updateChannelAlpha: {
+		id: 'hosting.settings.update-channel.alpha',
+		defaultMessage: 'Alpha',
+	},
+	updateChannelReleaseDescription: {
+		id: 'hosting.settings.update-channel.release.description',
+		defaultMessage: 'Only release versions will be shown as available updates.',
+	},
+	updateChannelBetaDescription: {
+		id: 'hosting.settings.update-channel.beta.description',
+		defaultMessage: 'Release and beta versions will be shown as available updates.',
+	},
+	updateChannelAlphaDescription: {
+		id: 'hosting.settings.update-channel.alpha.description',
+		defaultMessage: 'Release, beta, and alpha versions will be shown as available updates.',
+	},
+	selectUpdateChannelAriaLabel: {
+		id: 'hosting.settings.update-channel.select',
+		defaultMessage: 'Select update channel',
+	},
+	environmentChangesTitle: {
+		id: 'hosting.settings.warn-environment-changes.title',
+		defaultMessage: 'Warn about incompatible or required content',
+	},
+	environmentChangesDescription: {
+		id: 'hosting.settings.warn-environment-changes.description',
+		defaultMessage:
+			'Ask for confirmation before enabling content on an unsupported side or disabling it on a required side.',
+	},
+})
+const preferences = computed(() => ({
+	warnOnIncompatibleContent: {
+		displayName: formatMessage(messages.environmentChangesTitle),
+		description: formatMessage(messages.environmentChangesDescription),
+		implemented: true,
+	},
 	hideSubdomainLabel: {
 		displayName: 'Hide subdomain label',
 		description: 'When enabled, the subdomain label will be hidden from the server header.',
 		implemented: true,
 	},
-	// autoRestart: {
-	// 	displayName: 'Auto restarts',
-	// 	description: 'Automatically restart the server if it crashes.',
-	// 	implemented: false,
-	// },
 	ramAsNumber: {
 		displayName: 'RAM as bytes',
 		description: 'Show RAM usage in bytes instead of a percentage.',
 		implemented: true,
 	},
-} as const
+}))
 
-type PreferenceKeys = keyof typeof preferences
+type PreferenceKeys = keyof typeof preferences.value
+const preferenceKeys = Object.keys(preferences.value) as PreferenceKeys[]
 
 type UserPreferences = {
 	[K in PreferenceKeys]: boolean
 }
 
-const defaultPreferences: UserPreferences = {
-	hideSubdomainLabel: false,
-	// autoRestart: false,
-	ramAsNumber: false,
-}
-
-const userPreferences = useStorage<UserPreferences>(
-	`pyro-server-${serverId}-preferences`,
-	defaultPreferences,
-)
+const userPreferences = useServerPreferences(serverId)
 
 const newUserPreferences = ref<UserPreferences>(JSON.parse(JSON.stringify(userPreferences.value)))
 
@@ -297,7 +453,7 @@ const getServerSpecs = (product?: Labrinth.Billing.Internal.Product | null) => {
 }
 
 const serverHostname = computed(() =>
-	serverSubdomain.value ? `${serverSubdomain.value}.modrinth.gg` : 'Unknown',
+	serverSubdomain.value ? formatHostingDomain(serverSubdomain.value) : 'Unknown',
 )
 
 const serverSpecs = computed(() => getServerSpecs(serverProduct.value))
@@ -321,7 +477,40 @@ type InfoProperty =
 	  }
 
 // Info properties
-const infoProperties = computed<InfoProperty[]>(() => [
+// Modrinth Studios: Pterodactyl servers show panel details and their panel limits.
+const pteroInfoProperties = computed<InfoProperty[]>(() => {
+	const ptero = (
+		data.value as { studio_ptero?: { panel_url?: string | null; identifier?: string } } | null
+	)?.studio_ptero
+	const specs = serverFull.value?.specs
+	const mb = (value: number) => (value >= 1024 ? `${formatSpecNumber(value / 1024)} GB` : `${value} MB`)
+	return [
+		{ name: 'Server ID', value: ptero?.identifier ?? 'Unknown', type: 'copy' },
+		{ name: 'Panel', value: ptero?.panel_url ?? 'Unknown', type: 'copy' },
+		{
+			name: 'Node',
+			value: serverFull.value?.location?.location_metadata?.hostname ?? 'Unknown',
+			type: 'copy',
+		},
+		{ name: 'Hostname', value: serverHostname.value, type: 'copy' },
+		{
+			name: 'Server limits',
+			value: specs ? 'Available' : 'Unknown',
+			type: 'specs',
+			lines: specs
+				? [
+						specs.cpu ? `${specs.cpu} CPU${specs.cpu > 1 ? 's' : ''}` : 'Unlimited CPU',
+						specs.memory_mb ? `${mb(specs.memory_mb)} RAM` : 'Unlimited RAM',
+						specs.swap_mb ? `${mb(Math.max(0, specs.swap_mb))} Swap` : 'No swap',
+						specs.storage_mb ? `${mb(specs.storage_mb)} disk` : 'Unlimited disk',
+						'Set by a panel admin (Admin → Servers → Build Configuration)',
+					]
+				: [],
+		},
+	]
+})
+
+const infoProperties = computed<InfoProperty[]>(() => isCustomAddress.value ? pteroInfoProperties.value : [
 	{ name: 'Server ID', value: serverId ?? 'Unknown', type: 'copy' },
 	{ name: 'Node', value: data.value?.node?.instance ?? 'Unknown', type: 'copy' },
 	{ name: 'Hostname', value: serverHostname.value, type: 'copy' },
@@ -340,29 +529,39 @@ const infoProperties = computed<InfoProperty[]>(() => [
 	},
 ])
 
+const visibleInfoProperties = computed(() =>
+	infoProperties.value.filter((property) => property.value !== 'Unknown'),
+)
+
 // Unsaved changes tracking (API fields + preferences)
 const hasServerSettingsChanges = computed(
 	() =>
 		(serverName.value && serverName.value !== data.value?.name) ||
 		serverSubdomain.value !== data.value?.net?.domain,
 )
-const hasPreferenceChanges = computed(
-	() => JSON.stringify(newUserPreferences.value) !== JSON.stringify(userPreferences.value),
+const hasPreferenceChanges = computed(() =>
+	preferenceKeys.some((key) => newUserPreferences.value[key] !== userPreferences.value[key]),
 )
+const hasUpdateChannelChanges = computed(() => updateChannel.value !== worldUpdateChannel.value)
 const hasUnsavedChanges = computed(
-	() => hasServerSettingsChanges.value || hasPreferenceChanges.value,
+	() =>
+		hasServerSettingsChanges.value || hasPreferenceChanges.value || hasUpdateChannelChanges.value,
 )
 
 const saveGeneral = async () => {
+	subdomainTouched.value = true
 	if (!isValidServerName.value || !isValidSubdomain.value) return
 	if (hasServerSettingsChanges.value && !canUseAdvancedSettings.value) return
+	if (hasUpdateChannelChanges.value && !canSetup.value) return
 
 	try {
 		isUpdating.value = true
 		if (serverName.value !== data.value?.name) {
 			await client.archon.servers_v0.updateName(serverId, serverName.value ?? '')
 		}
-		if (serverSubdomain.value !== data.value?.net?.domain) {
+		if (isCustomAddress.value && serverSubdomain.value !== (data.value?.net?.domain ?? '')) {
+			await client.archon.servers_v0.changeSubdomain(serverId, serverSubdomain.value)
+		} else if (serverSubdomain.value !== data.value?.net?.domain) {
 			try {
 				const result = await client.archon.servers_v0.checkSubdomainAvailability(
 					serverSubdomain.value,
@@ -390,8 +589,18 @@ const saveGeneral = async () => {
 			}
 		}
 
+		if (hasUpdateChannelChanges.value && worldId.value) {
+			await client.archon.servers_v1.patchWorld(serverId, worldId.value, {
+				update_channel: updateChannel.value,
+			})
+			await Promise.all([
+				queryClient.invalidateQueries({ queryKey: ['servers', 'v1', 'detail', serverId] }),
+				queryClient.invalidateQueries({ queryKey: ['content', 'list', 'v1', serverId] }),
+			])
+		}
+
 		// Save preferences to localStorage
-		userPreferences.value = { ...newUserPreferences.value }
+		for (const key of preferenceKeys) userPreferences.value[key] = newUserPreferences.value[key]
 
 		await queryClient.invalidateQueries({
 			queryKey: ['servers', 'detail', serverId],
@@ -416,6 +625,8 @@ const saveGeneral = async () => {
 const resetGeneral = () => {
 	serverName.value = data.value?.name || ''
 	serverSubdomain.value = data.value?.net?.domain ?? ''
+	subdomainTouched.value = false
 	newUserPreferences.value = { ...userPreferences.value }
+	updateChannel.value = worldUpdateChannel.value
 }
 </script>

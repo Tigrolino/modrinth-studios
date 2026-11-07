@@ -5,11 +5,17 @@ import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 
 import ReadyTransition from '#ui/components/base/ReadyTransition.vue'
+import ConfigPushPromptModal from '#ui/components/servers/ConfigPushPromptModal.vue'
 import { useReadyState } from '#ui/composables'
 import { useUploadSessionUpload } from '#ui/composables/hosting/kyros-session-upload'
 import { defineMessages, useVIntl } from '#ui/composables/i18n'
 import { useServerPermissions } from '#ui/composables/server-permissions'
+import { toShareableConfigPath } from '#ui/composables/server-sharing/config-files'
+import { useSharedInstanceInstalledOnce } from '#ui/composables/server-sharing/shared-instance'
+import { useServerShareReview } from '#ui/composables/server-sharing/use-server-share-review'
 import {
+	injectAuth,
+	injectFileDownload,
 	injectModrinthClient,
 	injectModrinthServerContext,
 	injectNotificationManager,
@@ -26,6 +32,8 @@ const props = defineProps<{
 }>()
 
 const client = injectModrinthClient()
+const auth = injectAuth()
+const fileDownload = injectFileDownload(null)
 const serverContext = injectModrinthServerContext()
 const {
 	serverId,
@@ -44,7 +52,9 @@ const fileUploadSession = useUploadSessionUpload({
 })
 const { addNotification } = injectNotificationManager()
 const { formatMessage } = useVIntl()
-const { canWriteFiles, canUsePowerActions, permissionDeniedMessage } = useServerPermissions()
+const { canWriteFiles, canUsePowerActions, canSetup, permissionDeniedMessage } =
+	useServerPermissions()
+const { pending: sharePending, runAction: runShareAction } = useServerShareReview()
 
 const route = useRoute()
 const router = useRouter()
@@ -59,20 +69,29 @@ const messages = defineMessages({
 		id: 'servers.files.zip-created-description',
 		defaultMessage: 'Created {destination}',
 	},
+	serverLocked: {
+		id: 'servers.files.server-locked',
+		defaultMessage: 'This server is locked and its files are read-only.',
+	},
 })
 
 const zippingFolder = ref(false)
 
+const serverLockedForViewer = computed(
+	() => !!serverContext.server.value?.locked_since && auth.user.value?.role !== 'admin',
+)
 const serverBusy = computed(() => busyReasons.value.length > 0)
 const busyTooltip = computed(() =>
 	busyReasons.value.length > 0 ? formatMessage(busyReasons.value[0].reason) : undefined,
 )
 const fileWriteDisabled = computed(
-	() => !canWriteFiles.value || serverBusy.value || zippingFolder.value,
+	() =>
+		serverLockedForViewer.value || !canWriteFiles.value || serverBusy.value || zippingFolder.value,
 )
-const fileWriteDisabledTooltip = computed(() =>
-	canWriteFiles.value ? busyTooltip.value : permissionDeniedMessage.value,
-)
+const fileWriteDisabledTooltip = computed(() => {
+	if (serverLockedForViewer.value) return formatMessage(messages.serverLocked)
+	return canWriteFiles.value ? busyTooltip.value : permissionDeniedMessage.value
+})
 const nonBackupBusyReasons = computed(() =>
 	busyReasons.value.filter(
 		(r) =>
@@ -86,6 +105,30 @@ const busyWarning = computed(() =>
 		? formatMessage(nonBackupBusyReasons.value[0].reason)
 		: null,
 )
+
+const shareWorld = computed(() =>
+	serverContext.serverFull.value?.worlds.find((world) => world.id === worldId.value),
+)
+const sharedInstanceId = computed(() => shareWorld.value?.content?.shared_instance_id ?? null)
+const sharedInstanceInstalledOnce = useSharedInstanceInstalledOnce(sharedInstanceId)
+const configPushModal = ref<InstanceType<typeof ConfigPushPromptModal>>()
+const configPushDeferredPaths = new Set<string>()
+
+async function promptConfigPush(path: string) {
+	const configPath = toShareableConfigPath(path)
+	if (
+		!configPath ||
+		configPushDeferredPaths.has(configPath) ||
+		!canSetup.value ||
+		sharePending.value ||
+		!sharedInstanceId.value ||
+		!sharedInstanceInstalledOnce.value
+	)
+		return
+	const choice = await configPushModal.value?.show(configPath)
+	if (choice === 'push') await runShareAction('push', false, [configPath])
+	else if (choice === 'later') configPushDeferredPaths.add(configPath)
+}
 
 // Path & navigation
 const currentPath = computed(() => (typeof route.query.path === 'string' ? route.query.path : '/'))
@@ -150,7 +193,10 @@ const {
 })
 
 function isVisibleFileItem(item: Kyros.Files.v0.DirectoryItem) {
-	return !item.path.split('/').includes('.modrinth-staged')
+	return (
+		!item.path.split('/').includes('.modrinth-staged') &&
+		item.path.replace(/^\/+/, '') !== 'server-icon-config.json'
+	)
 }
 
 const items = computed<FileItem[]>(() =>
@@ -372,29 +418,44 @@ async function writeFile(path: string, content: string): Promise<void> {
 	if (fileWriteDisabled.value) return
 	await client.kyros.files_v0.updateFile(path, content)
 	queryClient.invalidateQueries({ queryKey: ['servers', 'detail', serverId] })
+	void promptConfigPush(path)
 }
 
 async function downloadFile(path: string, fileName: string): Promise<void> {
 	try {
-		const fileData = await client.kyros.files_v0.downloadFile(path)
-		if (fileData) {
-			saveBlob(fileData, fileName)
+		const activeWorldId = worldId.value
+		const location = serverContext.serverFull.value?.location
+		if (!activeWorldId || location?.status !== 'assigned')
+			throw new Error('No active world or assigned node')
+
+		const nodeUrlHost = location.location_metadata.url_host
+		if (fileDownload) {
+			await fileDownload.download({
+				type: 'server-file',
+				filename: fileName,
+				serverId,
+				serverName: serverContext.server.value.name,
+				nodeUrlHost,
+				worldId: activeWorldId,
+				path,
+			})
+			return
 		}
-	} catch {
+
+		const { token } = await client.kyros.files_v1.authorizeFileDownload(
+			nodeUrlHost,
+			activeWorldId,
+			path,
+		)
+		const downloadUrl = client.kyros.files_v1.getFileDownloadUrl(nodeUrlHost, activeWorldId, token)
+		window.location.assign(downloadUrl)
+	} catch (error) {
 		addNotification({
 			title: formatMessage(commonMessages.downloadFailedLabel),
-			text: 'Could not download the file.',
+			text: error instanceof Error ? error.message : 'Could not download the file.',
 			type: 'error',
 		})
 	}
-}
-
-function saveBlob(blob: Blob, fileName: string) {
-	const link = document.createElement('a')
-	link.href = window.URL.createObjectURL(blob)
-	link.download = fileName
-	link.click()
-	window.URL.revokeObjectURL(link.href)
 }
 
 async function statFile(path: string): Promise<Kyros.Files.v1.FileStatResponse> {
@@ -455,6 +516,13 @@ async function zipPaths(parent: string, include: string[], target: string): Prom
 		`${parent}/${target}`.replace('//', '/'),
 	)
 }
+
+watch(
+	() => editingFile.value?.path,
+	() => configPushDeferredPaths.clear(),
+)
+
+watch(worldId, () => configPushModal.value?.hide())
 
 watch(
 	() => fsOps.value,
@@ -560,4 +628,10 @@ provideFileManager({
 			:show-refresh-button="props.showRefreshButton"
 		/>
 	</ReadyTransition>
+	<ConfigPushPromptModal
+		ref="configPushModal"
+		:action-disabled="!canSetup || sharePending"
+		:includes-other-changes="shareWorld?.content?.shared_instance_needs_update ?? false"
+		:server-running="serverContext.isServerRunning.value"
+	/>
 </template>

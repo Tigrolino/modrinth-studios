@@ -36,6 +36,7 @@
 				:loading-server-ping="loadingServerPing"
 				:players-online="playersOnline"
 				:status-online="statusOnline"
+				:hosting-status="hostingStatus"
 				:ping="ping"
 				:minecraft-server="minecraftServer"
 				:show-instance-play-time="showInstancePlayTime"
@@ -190,12 +191,14 @@
 </template>
 
 <script setup lang="ts">
-import type { Labrinth } from '@modrinth/api-client'
+import type { Labrinth, SharedInstances } from '@modrinth/api-client'
 import {
 	ClockIcon,
 	DatabaseIcon,
 	DownloadIcon,
 	ExternalIcon,
+	EyeIcon,
+	EyeOffIcon,
 	FolderOpenIcon,
 	LayersIcon,
 	LockIcon,
@@ -228,6 +231,7 @@ import {
 } from '@modrinth/ui'
 import { computed } from 'vue'
 
+import { libraryInstanceMessages } from '@/features/library/messages'
 import type { GameInstance } from '@/helpers/types'
 
 import InstanceHeaderServerMetadata from './instance-page-header-server-metadata.vue'
@@ -328,9 +332,12 @@ const props = withDefaults(
 		processes?: { uuid: string; start_time: string }[]
 		loadingServerPing?: boolean
 		playersOnline?: number
+		hostingStatus?: SharedInstances.Instances.v1.OnlineStatus
 		statusOnline?: boolean
 		ping?: number
 		minecraftServer?: Labrinth.Projects.v3.Project['minecraft_server']
+		canHideFromLibrary?: boolean
+		hiddenFromLibrary?: boolean
 	}>(),
 	{
 		iconSrc: null,
@@ -346,8 +353,11 @@ const props = withDefaults(
 		loadingServerPing: false,
 		playersOnline: undefined,
 		statusOnline: false,
+		hostingStatus: undefined,
 		ping: undefined,
 		minecraftServer: undefined,
+		canHideFromLibrary: false,
+		hiddenFromLibrary: false,
 	},
 )
 
@@ -362,21 +372,17 @@ const emit = defineEmits<{
 	openFolder: []
 	export: []
 	createShortcut: []
+	toggleHidden: []
 	report: [event?: MouseEvent]
 }>()
 
-const installingStages = [
-	'installing',
-	'pack_installing',
-	'pack_installed',
-	'not_installed',
-	'minecraft_installing',
-]
+const installingStages = ['installing', 'pack_installing', 'minecraft_installing']
 
 const { formatMessage } = useVIntl()
 const formatRelativeTime = useRelativeTime()
 
 const isInstalling = computed(() => installingStages.includes(props.instance.install_stage))
+
 const loaderDisplayName = computed(() => formatLoaderLabel(props.instance.loader) as ServerLoader)
 const loaderLabel = computed(() =>
 	[loaderDisplayName.value, props.instance.game_version].filter(Boolean).join(' '),
@@ -463,6 +469,24 @@ const moreActions = computed<ButtonMenuOption[]>(() => {
 				icon: ExternalIcon,
 				action: () => emit('createShortcut'),
 			},
+		)
+	}
+
+	if (props.canHideFromLibrary) {
+		actions.push(
+			props.hiddenFromLibrary
+				? {
+						id: 'show-in-library',
+						label: formatMessage(libraryInstanceMessages.showInLibrary),
+						icon: EyeIcon,
+						action: () => emit('toggleHidden'),
+					}
+				: {
+						id: 'hide-from-library',
+						label: formatMessage(libraryInstanceMessages.hideFromLibrary),
+						icon: EyeOffIcon,
+						action: () => emit('toggleHidden'),
+					},
 		)
 	}
 

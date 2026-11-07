@@ -90,7 +90,12 @@
 								v-tooltip="createAllocationTooltip"
 								type="colored"
 								color="brand"
-								:disabled="!createAllocationName || creatingAllocation || !canUseAdvancedSettings"
+								:disabled="
+									!createAllocationName ||
+									creatingAllocation ||
+									!canUseAdvancedSettings ||
+									pteroAllocationLimitReached
+								"
 								@click="addNewAllocation"
 							>
 								<PlusIcon />
@@ -139,7 +144,13 @@
 								</div>
 							</template>
 						</Table>
-						<span>
+						<span v-if="isPtero">
+							Extra ports come from the node's free allocations. This server may use
+							{{ pteroAllocationLimit }} {{ pteroAllocationLimit === 1 ? 'port' : 'ports' }} in
+							total; a panel admin sets this under Admin → Servers → Build Configuration, and
+							automatic allocation creation must be on (Admin → Settings → Advanced).
+						</span>
+						<span v-else>
 							Create additional ports for internet-facing features like map viewers or voice chat
 							mods.
 						</span>
@@ -231,6 +242,7 @@ import { ConfirmModal, Input, NewModal, Table, TagItem } from '#ui/components'
 import type { TableColumn } from '#ui/components/base'
 import { Button, IconButton } from '#ui/components/base/buttons'
 import { useServerPermissions } from '#ui/composables/server-permissions'
+import { isPterodactylServerId } from '#ui/utils/servers'
 import {
 	injectModrinthClient,
 	injectModrinthServerContext,
@@ -297,8 +309,20 @@ const creatingAllocation = ref(false)
 const advancedActionTooltip = computed(() =>
 	canUseAdvancedSettings.value ? undefined : permissionDeniedMessage.value,
 )
+// Modrinth Studios: Pterodactyl port limit is set by the panel admin.
+const isPtero = isPterodactylServerId(serverId)
+const pteroAllocationLimit = computed(
+	() =>
+		(data.value as { studio_ptero?: { allocation_limit?: number } } | null)?.studio_ptero
+			?.allocation_limit ?? 0,
+)
+const pteroAllocationLimitReached = computed(
+	() => isPtero && allocationRows.value.length >= pteroAllocationLimit.value,
+)
 const createAllocationTooltip = computed(() => {
 	if (!canUseAdvancedSettings.value) return permissionDeniedMessage.value
+	if (pteroAllocationLimitReached.value)
+		return `This server is at its port limit (${pteroAllocationLimit.value}). A panel admin can raise it.`
 	if (!createAllocationName.value) return 'Enter a name to create an allocation'
 	return undefined
 })
@@ -321,6 +345,11 @@ const addNewAllocation = async () => {
 		})
 	} catch (error) {
 		console.error('Failed to reserve new allocation:', error)
+		addNotification({
+			type: 'error',
+			title: 'Could not create allocation',
+			text: error instanceof Error ? error.message : String(error),
+		})
 	} finally {
 		creatingAllocation.value = false
 	}

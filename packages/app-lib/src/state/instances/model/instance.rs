@@ -1,27 +1,11 @@
 use crate::state::{
     InstanceInstallStage, LauncherFeatureVersion, ReleaseChannel,
 };
+use anyhow::Context;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 
-#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
-#[serde(tag = "type", rename_all = "snake_case")]
-pub enum InstanceIconBackground {
-    Color {
-        value: String,
-    },
-    #[serde(rename = "linear-top-down-gradient")]
-    LinearTopDownGradient {
-        top_color: String,
-        bottom_color: String,
-    },
-}
-
-#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
-pub struct InstanceIconConfig {
-    pub background: InstanceIconBackground,
-    pub symbol: String,
-}
+pub use modrinth_content_management::icons::{IconBackground, IconConfig};
 
 #[derive(
     Clone, Copy, Debug, Default, Eq, PartialEq, Serialize, Deserialize,
@@ -102,10 +86,7 @@ pub(crate) fn playtime_to_storage(
     value: u64,
     column: &str,
 ) -> crate::Result<i64> {
-    i64::try_from(value).map_err(|_| {
-        crate::ErrorKind::InputError(format!(
-            "Expected {column} to fit in SQLite INTEGER"
-        ))
-        .into()
-    })
+    i64::try_from(value).context(crate::ErrorKind::InputError(format!(
+        "expected {column} to fit in SQLite INTEGER"
+    )))
 }

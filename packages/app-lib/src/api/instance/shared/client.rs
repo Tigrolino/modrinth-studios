@@ -1,5 +1,10 @@
 use super::install::*;
 use super::*;
+use crate::ErrorKind;
+use anyhow::{Context, anyhow, bail};
+
+/// Returned by the shared instances backend when the user already owns the maximum number of instances.
+const INSTANCE_LIMIT_REACHED_MESSAGE: &str = "Cannot own more than";
 
 #[derive(Clone, Copy, Debug)]
 pub(super) enum SharedInstancesRequestAuth {
@@ -34,6 +39,11 @@ pub(super) enum SharedInstanceRemoteResponse<T> {
 
 #[derive(Clone, Debug, Deserialize)]
 pub(super) struct RemoteInstanceResponse {
+    pub(super) name: String,
+    pub(super) icon: Option<String>,
+    #[serde(default)]
+    pub(super) linked_server:
+        Option<crate::install::model::SharedInstanceLinkedServer>,
     #[serde(default)]
     pub(super) quarantine: bool,
 }
@@ -48,12 +58,7 @@ pub(super) struct ExternalFileCandidate {
 #[derive(Clone, Debug)]
 pub(super) enum ExternalFileSource {
     InstanceFile(String),
-    ConfigBundle(std::sync::Arc<tempfile::TempPath>),
-}
-
-#[derive(Clone, Debug, Serialize, Deserialize)]
-pub(super) struct ConfigFile {
-    pub(super) path: String,
+    SharedFile(std::path::PathBuf),
 }
 
 #[derive(Clone, Debug, Serialize)]
@@ -93,7 +98,13 @@ pub(super) struct InstanceInviteInfoResponse {
     #[serde(default)]
     pub(super) instance_icon: Option<String>,
     #[serde(default)]
+    pub(super) inviter: Option<SharedInstanceInviteCreator>,
+    #[serde(default)]
+    pub(super) instance_icon_config: Option<IconConfig>,
+    #[serde(default)]
     pub(super) managers: Vec<InstanceInviteManagerResponse>,
+    #[serde(default)]
+    pub(super) version: Option<InstanceVersionResponse>,
 }
 
 #[derive(Clone, Debug, Deserialize)]
@@ -104,27 +115,88 @@ pub(super) enum InstanceInviteManagerResponse {
 }
 
 #[derive(Clone, Debug, Deserialize)]
+#[serde(from = "RawInstanceVersionResponse")]
 pub(super) struct InstanceVersionResponse {
     pub(super) version: i32,
-    #[serde(default)]
     pub(super) modrinth_ids: Vec<String>,
     pub(super) ready: bool,
-    #[serde(default)]
     pub(super) external_files: Vec<ExternalFileResponse>,
-    #[serde(default)]
     pub(super) modpack_id: Option<String>,
+    pub(super) backtrack_version: Option<String>,
+    pub(super) removed_files: Vec<SharedInstanceRemovedFile>,
     pub(super) game_version: String,
     pub(super) loader: ModLoader,
     pub(super) loader_version: String,
+}
+
+#[derive(Deserialize)]
+struct RawInstanceVersionResponse {
+    version: i32,
+    #[serde(default)]
+    modrinth_ids: Vec<String>,
+    ready: bool,
+    #[serde(default)]
+    external_files: Vec<ExternalFileResponse>,
+    #[serde(default)]
+    modpack_id: Option<String>,
+    #[serde(default)]
+    backtrack_version: Option<String>,
+    #[serde(default)]
+    removed_files: Vec<SharedInstanceRemovedFile>,
+    game_version: String,
+    loader: String,
+    loader_version: String,
+}
+
+impl From<RawInstanceVersionResponse> for InstanceVersionResponse {
+    /// Servers without a client loader (vanilla, Paper, Purpur) are installed
+    /// as Fabric so players can add client-side mods on top.
+    fn from(raw: RawInstanceVersionResponse) -> Self {
+        let (loader, loader_version) = match ModLoader::from_string(&raw.loader)
+        {
+            ModLoader::Vanilla => (ModLoader::Fabric, String::new()),
+            loader => (loader, raw.loader_version),
+        };
+        Self {
+            version: raw.version,
+            modrinth_ids: raw.modrinth_ids,
+            ready: raw.ready,
+            external_files: raw.external_files,
+            modpack_id: raw.modpack_id,
+            backtrack_version: raw.backtrack_version,
+            removed_files: raw.removed_files,
+            game_version: raw.game_version,
+            loader,
+            loader_version,
+        }
+    }
+}
+
+impl InstanceVersionResponse {
+    pub(super) fn validate_removed_files(&self) -> crate::Result<()> {
+        if self.modpack_id.as_deref().is_none_or(str::is_empty)
+            && !self.removed_files.is_empty()
+        {
+            bail!(ErrorKind::InputError(
+                "removed modpack files require a modpack id".to_string(),
+            ));
+        }
+        for removed in &self.removed_files {
+            removed.validate()?;
+        }
+        Ok(())
+    }
 }
 
 #[derive(Clone, Debug, Deserialize)]
 pub(super) struct ExternalFileResponse {
     pub(super) file_name: String,
     pub(super) file_type: String,
-    pub(super) url: String,
+    pub(super) url: Option<String>,
     #[serde(default)]
     pub(super) file_size: Option<i64>,
+    #[serde(default)]
+    pub(super) sha1: Option<String>,
 }
 
 #[derive(Clone, Debug, Deserialize)]
@@ -159,14 +231,41 @@ pub(super) async fn create_remote_instance(
     name: String,
     state: &State,
 ) -> crate::Result<CreateInstanceResponse> {
-    request_json(
-        "create_instance",
-        Method::POST,
-        "/instances",
+    let operation = "create_instance";
+    let method = Method::POST;
+    let path = "/instances";
+    let response = send_request(
+        operation,
+        method.clone(),
+        path,
         Some(json!({ "name": name })),
         state,
     )
-    .await
+    .await?;
+
+    if response.status() == StatusCode::BAD_REQUEST {
+        let status = response.status();
+        let request_id = response_request_id(&response);
+        let body = response.text().await.unwrap_or_default();
+        if body.contains(INSTANCE_LIMIT_REACHED_MESSAGE) {
+            bail!(ErrorKind::SharedInstanceLimitReached);
+        }
+        return Err(shared_instances_status_error(
+            operation,
+            &method,
+            path,
+            status,
+            request_id.as_deref(),
+        ));
+    }
+    if !response.status().is_success() {
+        return shared_instances_request_error(
+            operation, method, path, response,
+        )
+        .await;
+    }
+
+    decode_json_response(operation, method, path, response).await
 }
 
 pub(super) async fn get_user_blacklist_status(
@@ -242,7 +341,7 @@ pub(super) async fn update_remote_instance(
 pub(super) async fn get_remote_instance_access(
     shared_instance_id: &str,
     state: &State,
-) -> crate::Result<SharedInstanceRemoteResponse<()>> {
+) -> crate::Result<SharedInstanceRemoteResponse<RemoteInstanceResponse>> {
     let operation = "get_instance";
     let method = Method::GET;
     let path = format!("/instances/{shared_instance_id}");
@@ -255,7 +354,7 @@ pub(super) async fn get_remote_instance_access(
         if reason == SharedInstanceUnavailableReason::AccessRevoked
             && !active_modrinth_session_is_valid(state).await?
         {
-            return Err(crate::ErrorKind::NoCredentialsError.into());
+            bail!(crate::ErrorKind::NotLoggedIn);
         }
 
         return Ok(SharedInstanceRemoteResponse::Unavailable(reason));
@@ -278,12 +377,13 @@ pub(super) async fn get_remote_instance_access(
         ));
     }
 
-    Ok(SharedInstanceRemoteResponse::Available(()))
+    Ok(SharedInstanceRemoteResponse::Available(instance))
 }
 
 pub(super) async fn update_remote_instance_icon(
     shared_instance_id: &str,
     icon_path: Option<&str>,
+    icon_config: Option<&IconConfig>,
     state: &State,
 ) -> crate::Result<()> {
     let path = format!("/instances/{shared_instance_id}/icon");
@@ -299,11 +399,40 @@ pub(super) async fn update_remote_instance_icon(
     };
 
     let bytes = crate::util::io::read(icon_path).await?;
-    let operation = "upload_instance_icon";
     let method = Method::PUT;
-    let response =
-        send_bytes_request(operation, method.clone(), &path, bytes, state)
-            .await?;
+    let (operation, path, response) = if let Some(icon_config) = icon_config {
+        let operation = "upload_generated_instance_icon";
+        let path = format!("{path}/generated");
+        let form = reqwest::multipart::Form::new()
+            .part(
+                "image",
+                reqwest::multipart::Part::bytes(bytes)
+                    .file_name("icon.png")
+                    .mime_str("image/png")?,
+            )
+            .part(
+                "config",
+                reqwest::multipart::Part::text(serde_json::to_string(
+                    icon_config,
+                )?)
+                .mime_str("application/json")?,
+            );
+        let response = send_multipart_request(
+            operation,
+            method.clone(),
+            &path,
+            form,
+            state,
+        )
+        .await?;
+        (operation, path, response)
+    } else {
+        let operation = "upload_instance_icon";
+        let response =
+            send_bytes_request(operation, method.clone(), &path, bytes, state)
+                .await?;
+        (operation, path, response)
+    };
 
     if response.status().is_success() {
         return Ok(());
@@ -328,6 +457,32 @@ pub(super) async fn get_remote_users(
     Ok(users.into_shared_users())
 }
 
+pub(super) async fn get_remote_server_icon(
+    instance_id: &str,
+    etag: Option<&str>,
+    state: &State,
+) -> crate::Result<reqwest::Response> {
+    let credentials =
+        ModrinthCredentials::get_and_refresh(&state.pool, &state.api_semaphore)
+            .await?
+            .ok_or(crate::ErrorKind::NotLoggedIn)?;
+    let _permit = state.api_semaphore.0.acquire().await?;
+    let base_url = service_base_url();
+    let path = format!("/instances/{instance_id}/server-icon");
+    let mut request = shared_instances_client(base_url)
+        .get(service_url(base_url, &path))
+        .bearer_auth(credentials.session)
+        .timeout(std::time::Duration::from_secs(15));
+    if let Some(etag) = etag {
+        request = request.header(reqwest::header::IF_NONE_MATCH, etag);
+    }
+    request
+        .send()
+        .await
+        .map_err(|error| error.without_url())
+        .context(ErrorKind::SharedInstancesApiError)
+}
+
 pub(super) async fn get_latest_remote_version(
     shared_instance_id: &str,
     state: &State,
@@ -339,25 +494,6 @@ pub(super) async fn get_latest_remote_version(
     .await?
     {
         SharedInstanceRemoteResponse::Available(version) => Ok(version),
-        SharedInstanceRemoteResponse::Unavailable(
-            reason @ SharedInstanceUnavailableReason::AccessRevoked,
-        ) => {
-            if !accept_pending_remote_invite(shared_instance_id, state).await? {
-                return Err(shared_instance_unavailable_error(reason));
-            }
-
-            match get_latest_remote_version_optional_unavailable(
-                shared_instance_id,
-                state,
-            )
-            .await?
-            {
-                SharedInstanceRemoteResponse::Available(version) => Ok(version),
-                SharedInstanceRemoteResponse::Unavailable(reason) => {
-                    Err(shared_instance_unavailable_error(reason))
-                }
-            }
-        }
         SharedInstanceRemoteResponse::Unavailable(reason) => {
             Err(shared_instance_unavailable_error(reason))
         }
@@ -390,6 +526,32 @@ pub(super) async fn get_latest_remote_version_optional_unavailable_with_auth(
         auth,
     )
     .await
+}
+
+/// Returns `None` for versions that never became ready.
+pub(super) async fn get_remote_version(
+    shared_instance_id: &str,
+    version: i32,
+    state: &State,
+) -> crate::Result<Option<InstanceVersionResponse>> {
+    match request_json_optional_unavailable(
+        "get_instance_version",
+        Method::GET,
+        &format!("/instances/{shared_instance_id}/versions/{version}"),
+        None,
+        state,
+        SharedInstancesRequestAuth::ModrinthSession,
+    )
+    .await?
+    {
+        SharedInstanceRemoteResponse::Available(version) => Ok(Some(version)),
+        SharedInstanceRemoteResponse::Unavailable(
+            SharedInstanceUnavailableReason::Deleted,
+        ) => Ok(None),
+        SharedInstanceRemoteResponse::Unavailable(reason) => {
+            Err(shared_instance_unavailable_error(reason))
+        }
+    }
 }
 
 pub(super) async fn add_remote_users(
@@ -487,10 +649,9 @@ pub(super) async fn accept_shared_instance_invite(
         request_id = request_id.as_deref().unwrap_or("none"),
         "Shared instances API request failed"
     );
-    Err(crate::ErrorKind::OtherError(format!(
-		"Shared instances API request {operation} {method} {log_path} failed with status {status}"
-	))
-	.into())
+    bail!(
+        "shared instances API request {operation} {method} {log_path} failed with status {status}"
+    )
 }
 
 pub(super) async fn delete_remote_invite(
@@ -530,7 +691,7 @@ pub(super) async fn get_shared_instance_invite_info(
 ) -> crate::Result<InstanceInviteInfoResponse> {
     let operation = "get_instance_invite";
     let method = Method::GET;
-    let path = format!("/invites/{invite_id}");
+    let path = format!("/invites/{invite_id}?version=true");
     let log_path = "/invites/:invite_id";
     let response = send_request_with_auth_and_log_path(
         operation,
@@ -618,7 +779,7 @@ where
                 status = response.status().as_u16(),
                 "Shared instances API returned unauthorized while Modrinth auth is unavailable"
             );
-            return Err(crate::ErrorKind::NoCredentialsError.into());
+            bail!(crate::ErrorKind::NotLoggedIn);
         }
 
         tracing::warn!(
@@ -679,10 +840,7 @@ pub(super) async fn active_modrinth_session_is_valid(
         request_id = request_id.as_deref().unwrap_or("none"),
         "Modrinth auth validation request failed"
     );
-    Err(crate::ErrorKind::OtherError(format!(
-        "Modrinth auth validation failed with status {status}"
-    ))
-    .into())
+    bail!("Modrinth auth validation failed with status {status}")
 }
 
 pub(super) async fn decode_json_response<T>(
@@ -710,38 +868,32 @@ where
 {
     let status = response.status();
     let request_id = response_request_id(&response);
-    let body = match response.text().await {
-        Ok(body) => body,
-        Err(error) if strip_response_url => {
-            return Err(crate::ErrorKind::SharedInstancesApiError(
-                error.without_url().to_string(),
-            )
-            .into());
-        }
-        Err(error) => {
-            return Err(crate::ErrorKind::SharedInstancesApiError(
-                error.to_string(),
-            )
-            .into());
-        }
-    };
-    serde_json::from_str::<T>(&body).map_err(|error| {
-		tracing::warn!(
-			operation,
-			method = method.as_str(),
-			path = log_path,
-			status = status.as_u16(),
-			request_id = request_id.as_deref().unwrap_or("none"),
-			error_category = ?error.classify(),
-            error_line = error.line(),
-            error_column = error.column(),
-            "Shared instances API returned an invalid JSON response"
-		);
-		crate::ErrorKind::SharedInstancesApiError(format!(
-			"Shared instances API request {operation} {method} {log_path} returned invalid JSON with status {status}"
-		))
-		.into()
-	})
+    let body = response
+        .text()
+        .await
+        .map_err(|error| {
+            if strip_response_url {
+                error.without_url()
+            } else {
+                error
+            }
+        })
+        .context(ErrorKind::SharedInstancesApiError)?;
+    serde_json::from_str::<T>(&body)
+        .inspect_err(|error| {
+            tracing::warn!(
+                operation,
+                method = method.as_str(),
+                path = log_path,
+                status = status.as_u16(),
+                request_id = request_id.as_deref().unwrap_or("none"),
+                error_category = ?error.classify(),
+                error_line = error.line(),
+                error_column = error.column(),
+                "Shared instances API returned an invalid JSON response"
+            );
+        })
+        .context(ErrorKind::SharedInstancesApiError)
 }
 
 pub(super) async fn request_empty(
@@ -827,6 +979,41 @@ pub(super) async fn send_bytes_request(
         .await
 }
 
+pub(super) async fn send_multipart_request(
+    operation: &'static str,
+    method: Method,
+    path: &str,
+    form: reqwest::multipart::Form,
+    state: &State,
+) -> crate::Result<reqwest::Response> {
+    let base_url = service_base_url();
+    let url = service_url(base_url, path);
+    let credentials =
+        ModrinthCredentials::get_and_refresh(&state.pool, &state.api_semaphore)
+            .await?
+            .ok_or(crate::ErrorKind::NotLoggedIn)?;
+    let _permit = state.api_semaphore.0.acquire().await?;
+
+    tracing::debug!(
+        operation,
+        method = method.as_str(),
+        path,
+        user_id = credentials.user_id.as_str(),
+        auth = SharedInstancesRequestAuth::ModrinthSession.label(),
+        has_body = true,
+        "Sending shared instances API request"
+    );
+
+    shared_instances_upload_client(base_url)
+        .request(method, &url)
+        .bearer_auth(credentials.session)
+        .multipart(form)
+        .send()
+        .await
+        .map_err(|error| error.without_url())
+        .context(ErrorKind::SharedInstancesApiError)
+}
+
 pub(super) async fn send_bytes_request_to_url(
     operation: &'static str,
     method: Method,
@@ -844,10 +1031,24 @@ pub(super) async fn send_bytes_request_to_url(
         url,
         body.into(),
         Some(size),
-        file_sha512,
+        file_sha512_headers(file_sha512)?,
         state,
     )
     .await
+}
+
+pub(super) fn file_sha512_headers(
+    file_sha512: Option<&str>,
+) -> crate::Result<reqwest::header::HeaderMap> {
+    let mut headers = reqwest::header::HeaderMap::new();
+    if let Some(file_sha512) = file_sha512 {
+        headers.insert(
+            "x-file-sha512",
+            reqwest::header::HeaderValue::from_str(file_sha512)
+                .context("invalid file SHA-512")?,
+        );
+    }
+    Ok(headers)
 }
 
 pub(super) async fn send_body_request_to_url(
@@ -857,34 +1058,23 @@ pub(super) async fn send_body_request_to_url(
     url: &str,
     body: reqwest::Body,
     content_length: Option<u64>,
-    file_sha512: Option<&str>,
+    headers: reqwest::header::HeaderMap,
     state: &State,
 ) -> crate::Result<reqwest::Response> {
     let service_origin = url::Url::parse(service_base_url())
-        .map_err(|error| {
-            crate::ErrorKind::OtherError(format!(
-                "Invalid shared instances API base URL: {error}"
-            ))
-        })?
+        .context("invalid shared instances API base URL")?
         .origin();
     let upload_origin = url::Url::parse(url)
-        .map_err(|error| {
-            crate::ErrorKind::OtherError(format!(
-                "Invalid shared instances upload URL: {error}"
-            ))
-        })?
+        .context("invalid shared instances upload URL")?
         .origin();
     if service_origin != upload_origin {
-        return Err(crate::ErrorKind::OtherError(
-            "Shared instances upload URL has an unexpected origin".to_string(),
-        )
-        .into());
+        bail!("shared instances upload URL has an unexpected origin");
     }
 
     let credentials =
         ModrinthCredentials::get_and_refresh(&state.pool, &state.api_semaphore)
             .await?
-            .ok_or(crate::ErrorKind::NoCredentialsError)?;
+            .ok_or(crate::ErrorKind::NotLoggedIn)?;
     let _permit = state.api_semaphore.0.acquire().await?;
 
     tracing::debug!(
@@ -902,20 +1092,18 @@ pub(super) async fn send_body_request_to_url(
         .request(method.clone(), url)
         .bearer_auth(credentials.session)
         .header(reqwest::header::CONTENT_TYPE, "application/octet-stream")
+        .headers(headers)
         .body(body);
     if let Some(content_length) = content_length {
         request =
             request.header(reqwest::header::CONTENT_LENGTH, content_length);
     }
-    if let Some(file_sha512) = file_sha512 {
-        request = request.header("x-file-sha512", file_sha512);
-    }
 
-    let response = request.send().await.map_err(|error| {
-        crate::ErrorKind::SharedInstancesApiError(
-            error.without_url().to_string(),
-        )
-    })?;
+    let response = request
+        .send()
+        .await
+        .map_err(|error| error.without_url())
+        .context(ErrorKind::SharedInstancesApiError)?;
 
     if response.status().is_success() {
         let request_id = response_request_id(&response);
@@ -964,7 +1152,7 @@ async fn send_request_with_auth_and_log_path(
                     &state.api_semaphore,
                 )
                 .await?
-                .ok_or(crate::ErrorKind::NoCredentialsError)?,
+                .ok_or(crate::ErrorKind::NotLoggedIn)?,
             )
         } else {
             None
@@ -1002,21 +1190,18 @@ async fn send_request_with_auth_and_log_path(
         request = request.json(&body);
     }
 
-    let response = match request.send().await {
-        Ok(response) => response,
-        Err(error) if path != log_path => {
-            return Err(crate::ErrorKind::SharedInstancesApiError(
-                error.without_url().to_string(),
-            )
-            .into());
-        }
-        Err(error) => {
-            return Err(crate::ErrorKind::SharedInstancesApiError(
-                error.to_string(),
-            )
-            .into());
-        }
-    };
+    let response = request
+        .send()
+        .await
+        .map_err(|error| {
+            if path != log_path {
+                error.without_url()
+            } else {
+                error
+            }
+        })
+        .context(format!("sending {operation} request"))
+        .context(ErrorKind::SharedInstancesApiError)?;
     if response.status().is_success() {
         let request_id = response_request_id(&response);
         tracing::debug!(
@@ -1040,22 +1225,38 @@ pub(super) async fn shared_instances_request_error<T>(
 ) -> crate::Result<T> {
     let status = response.status();
     let request_id = response_request_id(&response);
+    Err(shared_instances_status_error(
+        operation,
+        &method,
+        path,
+        status,
+        request_id.as_deref(),
+    ))
+}
+
+fn shared_instances_status_error(
+    operation: &'static str,
+    method: &Method,
+    path: &str,
+    status: StatusCode,
+    request_id: Option<&str>,
+) -> crate::Error {
     tracing::warn!(
         operation,
         method = method.as_str(),
         path,
         status = status.as_u16(),
-        request_id = request_id.as_deref().unwrap_or("none"),
+        request_id = request_id.unwrap_or("none"),
         "Shared instances API request failed"
     );
     let message = format!(
-        "Shared instances API request {operation} {method} {path} failed with status {status}"
+        "shared instances API request {operation} {method} {path} failed with status {status}"
     );
     if status.is_server_error() {
-        return Err(crate::ErrorKind::SharedInstancesApiError(message).into());
+        return anyhow!(message).context(ErrorKind::SharedInstancesApiError);
     }
 
-    Err(crate::ErrorKind::OtherError(message).into())
+    anyhow!(message)
 }
 
 pub(super) fn response_request_id(

@@ -13,7 +13,7 @@ export interface VirtualScrollOptions<T = unknown> {
 	// every item being forced into the same fixed slot. The numeric form is
 	// unchanged and stays the fast path for every existing (uniform-height)
 	// caller.
-	itemHeight: number | ((item: T, index: number) => number)
+	itemHeight: number | Ref<number> | ((item: T, index: number) => number)
 	bufferSize?: number
 	initialItemCount?: number
 	enabled?: Ref<boolean>
@@ -194,6 +194,12 @@ export function useVirtualScroll<T>(items: Ref<T[]>, options: VirtualScrollOptio
 		onNearEnd,
 		nearEndThreshold = 0.2,
 	} = options
+	// Fixed-height value (0 when `itemHeight` is a per-item function, in which
+	// case the `offsets` path below is used instead).
+	const resolvedItemHeight = computed(() => {
+		if (typeof itemHeight === 'function') return 0
+		return typeof itemHeight === 'number' ? itemHeight : itemHeight.value
+	})
 
 	const {
 		containerOffset,
@@ -227,7 +233,7 @@ export function useVirtualScroll<T>(items: Ref<T[]>, options: VirtualScrollOptio
 
 	function heightOf(index: number): number {
 		if (typeof itemHeight === 'function') return itemHeight(items.value[index], index)
-		return itemHeight
+		return resolvedItemHeight.value
 	}
 
 	// Largest index `i` such that `offsets[i] <= target` (offsets is
@@ -246,7 +252,7 @@ export function useVirtualScroll<T>(items: Ref<T[]>, options: VirtualScrollOptio
 
 	const totalHeight = computed(() => {
 		if (offsets.value) return offsets.value[offsets.value.length - 1]
-		return items.value.length * (itemHeight as number)
+		return items.value.length * resolvedItemHeight.value
 	})
 
 	const visibleRange = computed(() => {
@@ -271,8 +277,8 @@ export function useVirtualScroll<T>(items: Ref<T[]>, options: VirtualScrollOptio
 			return { start: rangeStart, end: rangeEnd }
 		}
 
-		const start = Math.floor(relativeScrollTop.value / itemHeight)
-		const visibleCount = Math.ceil(viewportHeight.value / itemHeight)
+		const start = Math.floor(relativeScrollTop.value / resolvedItemHeight.value)
+		const visibleCount = Math.ceil(viewportHeight.value / resolvedItemHeight.value)
 		const rangeSize = visibleCount + bufferSize * 2
 
 		const rangeStart = Math.min(
@@ -290,7 +296,7 @@ export function useVirtualScroll<T>(items: Ref<T[]>, options: VirtualScrollOptio
 	const visibleTop = computed(() => {
 		if (enabled && !enabled.value) return 0
 		if (offsets.value) return offsets.value[visibleRange.value.start]
-		return visibleRange.value.start * (itemHeight as number)
+		return visibleRange.value.start * resolvedItemHeight.value
 	})
 
 	const visibleItems = computed(() =>
@@ -307,7 +313,7 @@ export function useVirtualScroll<T>(items: Ref<T[]>, options: VirtualScrollOptio
 		const top = visibleTop.value
 		const result: { offset: number; height: number }[] = []
 		for (let i = start; i < end; i++) {
-			const itemTop = offsets.value ? offsets.value[i] - top : (i - start) * (itemHeight as number)
+			const itemTop = offsets.value ? offsets.value[i] - top : (i - start) * resolvedItemHeight.value
 			result.push({ offset: itemTop, height: heightOf(i) })
 		}
 		return result
@@ -317,7 +323,8 @@ export function useVirtualScroll<T>(items: Ref<T[]>, options: VirtualScrollOptio
 		if (index < 0 || index >= items.value.length) return
 		syncScrollState()
 		if (!listContainer.value || !scrollContainer.value) return
-		const top = containerOffset.value + index * itemHeight - (viewportHeight.value - itemHeight) / 2
+		const height = resolvedItemHeight.value
+		const top = containerOffset.value + index * height - (viewportHeight.value - height) / 2
 		scrollContainer.value.scrollTo({ top: Math.max(0, top), behavior: 'instant' })
 		syncScrollState()
 	}

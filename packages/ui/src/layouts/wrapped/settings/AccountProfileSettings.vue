@@ -10,7 +10,7 @@
 			<div class="relative mb-4 h-[200px]">
 				<img :src="ThinkingRinthbot" alt="" class="h-full w-auto object-contain" />
 				<div
-					class="pointer-events-none absolute inset-x-0 bottom-0 h-14 bg-gradient-to-t from-bg-raised to-transparent"
+					class="pointer-events-none absolute inset-x-0 bottom-0 h-14 bg-gradient-to-t from-surface-2 to-transparent"
 				/>
 			</div>
 		</template>
@@ -55,7 +55,8 @@
 					<Avatar :src="displayedAvatarUrl" size="md" circle :alt="auth.user.value.username" />
 					<div class="flex flex-col gap-2">
 						<FileButton
-							:max-size="524288"
+							:disabled="!globals?.max_user_icon_size"
+							:max-size="globals?.max_user_icon_size"
 							:prompt="formatMessage(commonMessages.uploadImageButton)"
 							accept="image/png,image/jpeg,image/gif,image/webp"
 							size="md"
@@ -136,7 +137,7 @@ import EmptyState from '#ui/components/base/EmptyState.vue'
 import Input from '#ui/components/base/inputs/Input.vue'
 import Textarea from '#ui/components/base/inputs/Textarea.vue'
 import IntlFormatted from '#ui/components/base/IntlFormatted.vue'
-import { defineMessages, useVIntl } from '#ui/composables'
+import { defineMessages, useGlobals, useVIntl } from '#ui/composables'
 import { type AuthUser, injectAuth, injectNotificationManager } from '#ui/providers'
 import { commonMessages } from '#ui/utils'
 
@@ -144,6 +145,8 @@ type ProfileFields = {
 	username: string
 	bio: string
 }
+
+const { data: globals } = useGlobals()
 
 const props = withDefaults(
 	defineProps<{

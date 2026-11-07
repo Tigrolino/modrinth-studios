@@ -139,18 +139,16 @@ async fn revert_item(
             }
             if let Ok(bytes) = tokio::fs::read(&local_path).await {
                 tokio::fs::remove_file(&local_path).await.map_err(|e| {
-                    crate::ErrorKind::FSError(format!(
+                    anyhow::Error::new(crate::ErrorKind::FSError(format!(
                         "Failed to unlink {}: {e}",
                         local_path.display()
-                    ))
-                    .as_error()
+                    )))
                 })?;
                 tokio::fs::write(&local_path, bytes).await.map_err(|e| {
-                    crate::ErrorKind::FSError(format!(
+                    anyhow::Error::new(crate::ErrorKind::FSError(format!(
                         "Failed to restore a private copy of {}: {e}",
                         local_path.display()
-                    ))
-                    .as_error()
+                    )))
                 })?;
             }
             Ok(true)
@@ -173,9 +171,9 @@ async fn copy_dir_recursive(
     let mut walker = WalkDir::new(source);
     while let Some(entry) = walker.next().await {
         let entry = entry.map_err(|error| {
-            crate::ErrorKind::FSError(format!(
+            anyhow::Error::new(crate::ErrorKind::FSError(format!(
                 "Failed to read shared folder path: {error}"
-            ))
+            )))
         })?;
         let entry_path = entry.path();
         let relative_path = entry_path.strip_prefix(source)?;

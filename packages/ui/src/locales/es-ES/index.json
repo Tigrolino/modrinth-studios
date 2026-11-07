@@ -2,39 +2,6 @@
   "action.no-permission": {
     "defaultMessage": "No tienes permiso."
   },
-  "affiliate.create.button": {
-    "defaultMessage": "Crear enlace de afiliado"
-  },
-  "affiliate.create.header": {
-    "defaultMessage": "Creando nuevo código de afiliado"
-  },
-  "affiliate.create.title.description": {
-    "defaultMessage": "¡Ponle un nombre a tu enlace de afiliado para saber de dónde provienen los usuarios!"
-  },
-  "affiliate.create.title.label": {
-    "defaultMessage": "Título del enlace de afiliado"
-  },
-  "affiliate.create.title.placeholder": {
-    "defaultMessage": "p. ej. YouTube"
-  },
-  "affiliate.create.user.description": {
-    "defaultMessage": "El nombre de usuario del usuario para crear el código de afiliado"
-  },
-  "affiliate.create.user.placeholder": {
-    "defaultMessage": "Introduce un nombre de usuario..."
-  },
-  "affiliate.createdBy": {
-    "defaultMessage": "Creado por {user}"
-  },
-  "affiliate.creating.button": {
-    "defaultMessage": "Creando enlace de afiliado..."
-  },
-  "affiliate.revoke": {
-    "defaultMessage": "Revocar enlace de afiliado"
-  },
-  "affiliate.viewAnalytics": {
-    "defaultMessage": "Ver análisis"
-  },
   "app.appearance-settings.native-decorations.description": {
     "defaultMessage": "Usa la barra de título y los controles del sistema operativo. Requiere un reinicio de la aplicación."
   },
@@ -62,9 +29,6 @@
   "billing.resubscribe-modal.cancel": {
     "defaultMessage": "Cancelar"
   },
-  "billing.resubscribe-modal.cpus": {
-    "defaultMessage": "{sharedCpus} CPUs compartidas"
-  },
   "billing.resubscribe-modal.description": {
     "defaultMessage": "Estas a punto de renovar tu suscripción a <server-name>{serverName}</server-name>. Tu suscripción será reactivada y tu servidor seguirá funcionando ininterrumpidamente."
   },
@@ -77,26 +41,8 @@
   "billing.resubscribe-modal.failed-load": {
     "defaultMessage": "No se ha podido cargar los detalles de la suscripción."
   },
-  "billing.resubscribe-modal.interval": {
-    "defaultMessage": "{intervalOption, select, fiveDays {/cada 5 días} monthly {/mensuales} quarterly {/trimestrales} yearly {/anuales} other {{interval}}}"
-  },
-  "billing.resubscribe-modal.next-charge": {
-    "defaultMessage": "Tu próximo pago se cobrará el <charge-date>{date}</charge-date>."
-  },
-  "billing.resubscribe-modal.plan-label": {
-    "defaultMessage": "Plan"
-  },
-  "billing.resubscribe-modal.ram": {
-    "defaultMessage": "{ramGb} GB de RAM"
-  },
   "billing.resubscribe-modal.resubscribe": {
     "defaultMessage": "Volver a suscribirse"
-  },
-  "billing.resubscribe-modal.storage": {
-    "defaultMessage": "{storageGb} GB de almacenamiento"
-  },
-  "billing.resubscribe-modal.title": {
-    "defaultMessage": "Resuscribirse al servidor"
   },
   "browse.advanced-filters.apply-saved-preferences": {
     "defaultMessage": "Aplicar preferencias guardadas"
@@ -151,9 +97,6 @@
   },
   "button.add-server-to-instance": {
     "defaultMessage": "Añadir servidor a la instancia"
-  },
-  "button.affiliate-links": {
-    "defaultMessage": "Enlaces de afiliado"
   },
   "button.analytics": {
     "defaultMessage": "Analíticas"
@@ -395,9 +338,6 @@
   "content.card.synced": {
     "defaultMessage": "Sincronizado entre instancias"
   },
-  "content.card.uploaded": {
-    "defaultMessage": "Subido"
-  },
   "content.confirm-bulk-update.admonition-body": {
     "defaultMessage": "¿Estás seguro de que quieres actualizar {count, plural, one {# proyecto} other {# proyectos}} a su última versión compatible? Se recomienda actualizar el contenido uno por uno."
   },
@@ -496,9 +436,6 @@
   },
   "content.diff-modal.added-count": {
     "defaultMessage": "{count} añadido/s"
-  },
-  "content.diff-modal.config-files-updated": {
-    "defaultMessage": "Archivos de configuración modificados"
   },
   "content.diff-modal.diff-type.added": {
     "defaultMessage": "Añadido (dependencia)"
@@ -656,9 +593,6 @@
   "content.managed-card.view-content": {
     "defaultMessage": "Ver contenido"
   },
-  "content.metadata-filter.author": {
-    "defaultMessage": "Autor"
-  },
   "content.metadata-filter.environment": {
     "defaultMessage": "Entorno"
   },
@@ -683,17 +617,8 @@
   "content.metadata-filter.update.available": {
     "defaultMessage": "Actualización disponible"
   },
-  "content.metadata-filter.warning.client-depends": {
-    "defaultMessage": "El cliente depende del archivo"
-  },
   "content.metadata-filter.warning.client-only": {
     "defaultMessage": "Contenido exclusivo del cliente"
-  },
-  "content.metadata-filter.warning.client-retained": {
-    "defaultMessage": "Archivo cliente retenido"
-  },
-  "content.metadata-filter.warning.none": {
-    "defaultMessage": "No hay advertencias"
   },
   "content.metadata-filter.warnings": {
     "defaultMessage": "Advertencias"
@@ -722,11 +647,14 @@
   "content.page-layout.failed-to-load": {
     "defaultMessage": "No se ha podido cargar el contenido"
   },
+  "content.page-layout.failed-to-load-changelog": {
+    "defaultMessage": "No se ha podido cargar el contenido"
+  },
+  "content.page-layout.failed-to-load-updates": {
+    "defaultMessage": "Error al cargar las actualizaciones disponibles"
+  },
   "content.page-layout.filter.add": {
     "defaultMessage": "Filtro"
-  },
-  "content.page-layout.filter.author-count": {
-    "defaultMessage": "{count, plural, one {# autor} other {# autores}}"
   },
   "content.page-layout.loading": {
     "defaultMessage": "Cargando contenido..."
@@ -1238,9 +1166,6 @@
   "external-files.permissions-card.editor.save": {
     "defaultMessage": "Guardar atribución"
   },
-  "external-files.permissions-card.editor.select-license-label": {
-    "defaultMessage": "Selecciona una licencia..."
-  },
   "external-files.permissions-card.editor.type-label": {
     "defaultMessage": "Motivo del permiso"
   },
@@ -1631,9 +1556,6 @@
   "files.navbar.home": {
     "defaultMessage": "Inicio"
   },
-  "files.navbar.install-curseforge-pack": {
-    "defaultMessage": "Instalar el paquete de CurseForge"
-  },
   "files.navbar.new-file": {
     "defaultMessage": "Nuevo archivo"
   },
@@ -1769,21 +1691,6 @@
   "files.zip-url-modal.backup-name": {
     "defaultMessage": "Modpack instalado de CurseForge"
   },
-  "files.zip-url-modal.cf-header": {
-    "defaultMessage": "Instala un modpack de CurseForge"
-  },
-  "files.zip-url-modal.cf-not-found-text": {
-    "defaultMessage": "No se pudo encontrar un modpack de CurseForge en esa URL."
-  },
-  "files.zip-url-modal.cf-not-found-title": {
-    "defaultMessage": "Modpack de CurseForge no encontrado"
-  },
-  "files.zip-url-modal.enter-link": {
-    "defaultMessage": "Introduce el link"
-  },
-  "files.zip-url-modal.error-cf-url": {
-    "defaultMessage": "La URL debe ser una URL de una versión de un modpack de CurseForge."
-  },
   "files.zip-url-modal.error-url-invalid": {
     "defaultMessage": "La URL debe ser válida."
   },
@@ -1795,24 +1702,6 @@
   },
   "files.zip-url-modal.install-failed-title": {
     "defaultMessage": "Instalación fallida"
-  },
-  "files.zip-url-modal.step-copy-description": {
-    "defaultMessage": "Copia la URL de la página de la versión y pégala debajo."
-  },
-  "files.zip-url-modal.step-copy-title": {
-    "defaultMessage": "Copia la URL"
-  },
-  "files.zip-url-modal.step-find-description": {
-    "defaultMessage": "Explora CurseForge y busca el modpack que desees."
-  },
-  "files.zip-url-modal.step-find-title": {
-    "defaultMessage": "Encuentra el modpack"
-  },
-  "files.zip-url-modal.step-select-description": {
-    "defaultMessage": "Ve a la pestaña «Archivos» y elige la versión que deseas instalar."
-  },
-  "files.zip-url-modal.step-select-title": {
-    "defaultMessage": "Selecciona una versión"
   },
   "files.zip-url-modal.unknown-error": {
     "defaultMessage": "Se ha producido un error desconocido"
@@ -1967,12 +1856,6 @@
   "hosting.content.failed-to-bulk-delete": {
     "defaultMessage": "No se ha podido eliminar el contenido"
   },
-  "hosting.content.failed-to-bulk-disable": {
-    "defaultMessage": "No se ha podido desactivar el contenido"
-  },
-  "hosting.content.failed-to-bulk-enable": {
-    "defaultMessage": "No se ha podido habilitar el contenido"
-  },
   "hosting.content.failed-to-bulk-update": {
     "defaultMessage": "No se ha podido actualizar el contenido"
   },
@@ -1987,9 +1870,6 @@
   },
   "hosting.content.failed-to-remove": {
     "defaultMessage": "No se ha podido eliminar el contenido"
-  },
-  "hosting.content.failed-to-toggle": {
-    "defaultMessage": "No se ha podido alternar {name}"
   },
   "hosting.content.failed-to-unlink": {
     "defaultMessage": "No se ha podido desvincular el modpack"
@@ -2053,9 +1933,6 @@
   },
   "hosting.loader.reset-to-onboarding-success-title": {
     "defaultMessage": "Servidor restablecido a la configuración inicial"
-  },
-  "hosting.loader.support-options-title": {
-    "defaultMessage": "Opciones de asistencia"
   },
   "hosting.specs.burst": {
     "defaultMessage": "Aumenta hasta {cpus} CPUs"
@@ -2429,12 +2306,6 @@
   "instances.managed-content-modal.enabled": {
     "defaultMessage": "Habilitado"
   },
-  "instances.managed-content-modal.external-content": {
-    "defaultMessage": "Externo"
-  },
-  "instances.managed-content-modal.external-content-description": {
-    "defaultMessage": "Este archivo no está publicado en Modrinth."
-  },
   "instances.managed-content-modal.header": {
     "defaultMessage": "Administrar contenido"
   },
@@ -2449,9 +2320,6 @@
   },
   "instances.managed-content-modal.search-placeholder": {
     "defaultMessage": "Buscar {count, number} {count, plural, one {proyecto} other {proyectos}}"
-  },
-  "instances.managed-content-modal.warnings": {
-    "defaultMessage": "Advertencias"
   },
   "instances.updater-modal.badge.current": {
     "defaultMessage": "Actual"
@@ -2533,15 +2401,6 @@
   },
   "label.changes-saved": {
     "defaultMessage": "Cambios guardados"
-  },
-  "label.client-depends-warning": {
-    "defaultMessage": "Este mod depende de un mod del lado del cliente y puede provocar problemas al iniciar el servidor"
-  },
-  "label.client-only-warning": {
-    "defaultMessage": "Este mod es diseñado para jugadores, no para el servidor, y podría causar problemas al iniciar tu servidor"
-  },
-  "label.client-retained-warning": {
-    "defaultMessage": "Este es un mod del lado del cliente que se instaló como dependencia y puede causar problemas al iniciar el servidor"
   },
   "label.collections": {
     "defaultMessage": "Colecciones"
@@ -3284,17 +3143,14 @@
   "profile.button.manage-projects": {
     "defaultMessage": "Gestionar proyectos"
   },
-  "profile.button.remove-affiliate": {
-    "defaultMessage": "Borrar como afiliado"
-  },
-  "profile.button.set-affiliate": {
-    "defaultMessage": "Poner como afiliado"
-  },
   "profile.button.shared-instances": {
     "defaultMessage": "Ver instancias compartidas"
   },
   "profile.button.unblock": {
     "defaultMessage": "Desbloquear"
+  },
+  "profile.button.unlock": {
+    "defaultMessage": "Desbloquear cuenta"
   },
   "profile.collection.projects-count": {
     "defaultMessage": "{count, plural, one {# proyecto} other {# proyectos}}"
@@ -3344,9 +3200,6 @@
   "profile.error.not-found": {
     "defaultMessage": "Usuario no encontrado"
   },
-  "profile.label.affiliate": {
-    "defaultMessage": "Afiliado"
-  },
   "profile.label.badges": {
     "defaultMessage": "Medallas"
   },
@@ -3382,6 +3235,12 @@
   },
   "profile.official-account.bio": {
     "defaultMessage": "Cuenta oficial de Modrinth. Obtén soporte en <support-link></support-link> o vía correo a <email></email>"
+  },
+  "profile.revoke-sessions.admonition-body": {
+    "defaultMessage": "{username} será cerrado sesión en todos los dispositivos y tendrá que iniciar sesión de nuevo. Los tokens de acceso personal no están afectados."
+  },
+  "profile.revoke-sessions.error-title": {
+    "defaultMessage": "Error al cerrar las sesiones"
   },
   "profile.unblock-user.error-description": {
     "defaultMessage": "Ocurrió un error al desbloquear este usuario. Por favor intenta de nuevo."
@@ -5108,12 +4967,6 @@
   "servers.backups.admonition.restoring-backup.title": {
     "defaultMessage": "Restaurando desde una copia de seguridad"
   },
-  "servers.backups.bulk-bar.aria-label": {
-    "defaultMessage": "{count, plural,one {Acciones masivas seleccionado para un respaldo} other {Acciones masivas seleccionados para # respaldos}}"
-  },
-  "servers.backups.bulk-bar.deleting": {
-    "defaultMessage": "Borrando {total, plural, one {# respaldo} other {# respaldos}}..."
-  },
   "servers.backups.bulk-bar.selected-count": {
     "defaultMessage": "{count, plural, one {# respaldo seleccionado} other {# respaldos seleccionados}}"
   },
@@ -5138,50 +4991,11 @@
   "servers.backups.empty.heading": {
     "defaultMessage": "Ningún respaldo todavía"
   },
-  "servers.backups.filtered-empty.clear-filters": {
-    "defaultMessage": "Limpiar filtros"
-  },
-  "servers.backups.filtered-empty.description": {
-    "defaultMessage": "Intenta un filtro diferente o borre los filtros para ver todos los respaldos."
-  },
-  "servers.backups.filtered-empty.heading": {
-    "defaultMessage": "Ningún respaldo coincide"
-  },
   "servers.backups.item.auto": {
     "defaultMessage": "Auto"
   },
-  "servers.backups.item.backup-schedule": {
-    "defaultMessage": "Programa de respaldo"
-  },
-  "servers.backups.item.creator-avatar-alt": {
-    "defaultMessage": "Avatar de {username}"
-  },
-  "servers.backups.item.creator.support": {
-    "defaultMessage": "Soporte"
-  },
-  "servers.backups.item.manual-backup": {
-    "defaultMessage": "Copia de seguridad manual"
-  },
-  "servers.backups.item.rename": {
-    "defaultMessage": "Renombrar"
-  },
-  "servers.backups.item.restore": {
-    "defaultMessage": "Restaurar"
-  },
-  "servers.backups.select-backup-aria": {
-    "defaultMessage": "Selecciona respaldo {name}"
-  },
   "servers.backups.toolbar.create-backup": {
     "defaultMessage": "Crear respaldo"
-  },
-  "servers.backups.toolbar.filter-auto": {
-    "defaultMessage": "Auto"
-  },
-  "servers.backups.toolbar.filter-manual": {
-    "defaultMessage": "Manual"
-  },
-  "servers.backups.toolbar.select-all": {
-    "defaultMessage": "Seleccionar todo"
   },
   "servers.busy.backup-creating": {
     "defaultMessage": "Creación de copia de seguridad en curso"
@@ -5501,15 +5315,6 @@
   "servers.manage.servers-title": {
     "defaultMessage": "Servidores de Modrinth"
   },
-  "servers.manage.settings-hint.description": {
-    "defaultMessage": "¡Ahora pueden encontrarse aquí!"
-  },
-  "servers.manage.settings-hint.dismiss": {
-    "defaultMessage": "No volver a mostrar"
-  },
-  "servers.manage.settings-hint.title": {
-    "defaultMessage": "La configuración de tu servidor se ha movido"
-  },
   "servers.manage.shared-servers-title": {
     "defaultMessage": "Servidores compartidos"
   },
@@ -5744,18 +5549,6 @@
   "servers.settings.advanced.sftp.roll-credentials-success-title": {
     "defaultMessage": "Credenciales SFTP rotadas"
   },
-  "servers.setup.onboarding.installation-failed.text": {
-    "defaultMessage": "Se ha producido un error inesperado durante la instalación. Inténtalo de nuevo más tarde."
-  },
-  "servers.setup.onboarding.installation-failed.title": {
-    "defaultMessage": "Instalación fallida"
-  },
-  "servers.setup.onboarding.modpack-upload-failed.text": {
-    "defaultMessage": "Se ha producido un error inesperado durante la carga. Inténtalo de nuevo más tarde."
-  },
-  "servers.setup.onboarding.modpack-upload-failed.title": {
-    "defaultMessage": "Carga de modpack fallada"
-  },
   "servers.setup.onboarding.setup-server.button": {
     "defaultMessage": "Configurar servidor"
   },
@@ -5779,9 +5572,6 @@
   },
   "servers.setup.onboarding.steps.heading": {
     "defaultMessage": "Configura tu servidor (~2mins)"
-  },
-  "servers.setup.onboarding.uploading.progress": {
-    "defaultMessage": "Cargando ({percent, number}%)"
   },
   "servers.setup.onboarding.welcome.description": {
     "defaultMessage": "Tu servidor está listo. ¡Esto es lo que necesitas hacer para empezar a jugar!"
@@ -6793,6 +6583,78 @@
   },
   "unknown-file-warning-modal.unrecognized-files": {
     "defaultMessage": "Archivos sin reconocer"
+  },
+  "update-all-modal.changelog-for": {
+    "defaultMessage": "Cambios para {project}"
+  },
+  "update-all-modal.changelog-loaded": {
+    "defaultMessage": "Registro de cambios cargado."
+  },
+  "update-all-modal.close-changelog": {
+    "defaultMessage": "Cerrar registro de cambios"
+  },
+  "update-all-modal.current-version": {
+    "defaultMessage": "Versión actual"
+  },
+  "update-all-modal.empty": {
+    "defaultMessage": "No hay actualizaciones disponibles."
+  },
+  "update-all-modal.header": {
+    "defaultMessage": "Actualizar proyectos"
+  },
+  "update-all-modal.loading": {
+    "defaultMessage": "Loading updates…"
+  },
+  "update-all-modal.loading-changelog": {
+    "defaultMessage": "Cargando registro de cambios…"
+  },
+  "update-all-modal.new-version": {
+    "defaultMessage": "Nueva versión"
+  },
+  "update-all-modal.no-changelog": {
+    "defaultMessage": "Ningún registro de cambios proporcionado para esta versión."
+  },
+  "update-all-modal.no-compatible-updates": {
+    "defaultMessage": "No hay actualizaciones compatibles disponibles."
+  },
+  "update-all-modal.no-version": {
+    "defaultMessage": "No hay actualizaciones compatibles"
+  },
+  "update-all-modal.project": {
+    "defaultMessage": "Proyecto"
+  },
+  "update-all-modal.project-list": {
+    "defaultMessage": "Actualizaciones del proyecto"
+  },
+  "update-all-modal.results": {
+    "defaultMessage": "{count, plural,one {# proyecto seleccionado} other {# proyectos seleccionados}}"
+  },
+  "update-all-modal.select-all": {
+    "defaultMessage": "Select all projects"
+  },
+  "update-all-modal.select-project": {
+    "defaultMessage": "Seleccionar {project} para actualizar"
+  },
+  "update-all-modal.select-version": {
+    "defaultMessage": "Nueva versión para {project}"
+  },
+  "update-all-modal.update": {
+    "defaultMessage": "Actualizar {count, plural, one {# proyecto} other {# proyectos}}"
+  },
+  "update-all-modal.versions": {
+    "defaultMessage": "Versión actual / Nueva versión"
+  },
+  "update-all-modal.view": {
+    "defaultMessage": "Ver"
+  },
+  "update-all-modal.view-changelog": {
+    "defaultMessage": "Cambios para {project}"
+  },
+  "update-all-modal.warning": {
+    "defaultMessage": "No podemos garantizar que las actualizaciones sean seguras para tus mundos. Revisa el registro de cambios de todas las versiones intermedias y considera crear una copia de seguridad."
+  },
+  "update-all-modal.warning-server": {
+    "defaultMessage": "No podemos garantizar que las actualizaciones sean seguras para tus mundos. Revisa el registro de cambios de todas las versiones intermedias y considera crear una copia de seguridad."
   },
   "user.profile.badge.alpha.about.1": {
     "defaultMessage": "Este usuario ha estado presente desde la Alpha de Modrinth, la cuál terminó en noviembre de 2020."

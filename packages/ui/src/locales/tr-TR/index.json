@@ -2,39 +2,6 @@
   "action.no-permission": {
     "defaultMessage": "Bu işlemi yapma izniniz yok."
   },
-  "affiliate.create.button": {
-    "defaultMessage": "Ortaklık bağlantısı oluştur"
-  },
-  "affiliate.create.header": {
-    "defaultMessage": "Yeni ortaklık kodu oluşturuluyor"
-  },
-  "affiliate.create.title.description": {
-    "defaultMessage": "Ortaklık bağlantına bir isim ver, böylece insanların nereden geldiğini bilirsin!"
-  },
-  "affiliate.create.title.label": {
-    "defaultMessage": "Ortaklık bağlantısının başlığı"
-  },
-  "affiliate.create.title.placeholder": {
-    "defaultMessage": "ör. Youtube"
-  },
-  "affiliate.create.user.description": {
-    "defaultMessage": "Ortaklık kodunu oluşturacak kullanıcının kullanıcı adı"
-  },
-  "affiliate.create.user.placeholder": {
-    "defaultMessage": "Kullanıcı adı giriniz..."
-  },
-  "affiliate.createdBy": {
-    "defaultMessage": "{user} tarafından oluşturuldu"
-  },
-  "affiliate.creating.button": {
-    "defaultMessage": "Ortaklık bağlantısı oluşturuluyor..."
-  },
-  "affiliate.revoke": {
-    "defaultMessage": "Ortaklık bağlantısını iptal et"
-  },
-  "affiliate.viewAnalytics": {
-    "defaultMessage": "Verileri görüntüle"
-  },
   "app.appearance-settings.native-decorations.description": {
     "defaultMessage": "İşletim sisteminizin başlık çubuğunu ve pencere kontrollerini kullanın. Uygulamanın yeniden başlatılmasını gerektirir."
   },
@@ -59,14 +26,26 @@
   "badge.release": {
     "defaultMessage": "Sürüm"
   },
+  "billing.resubscribe-modal.add-payment-method": {
+    "defaultMessage": "Ödeme yöntemi ekle"
+  },
   "billing.resubscribe-modal.cancel": {
     "defaultMessage": "İptal"
   },
-  "billing.resubscribe-modal.cpus": {
-    "defaultMessage": "{sharedCpus} Paylaşılan işlemciler"
+  "billing.resubscribe-modal.change-payment-method": {
+    "defaultMessage": "Değiştir"
+  },
+  "billing.resubscribe-modal.charged-now": {
+    "defaultMessage": "Sizden bugün {total}, ardından iptal edene kadar {period} ödeme alınacaktır. İstediğiniz zaman ayarlar sayfasından iptal edebilirsiniz."
+  },
+  "billing.resubscribe-modal.charged-on-date": {
+    "defaultMessage": "Sizden  <charge-date>{date}</charge-date> tarihinde {total},  ardından iptal edene kadar {period} ödeme alınacaktır. İstediğiniz zaman ayarlar sayfasından iptal edebilirsiniz."
   },
   "billing.resubscribe-modal.description": {
     "defaultMessage": "Şu anda <server-name>{serverName}</server-name> için yeniden abonelik işlemini başlatmak üzeresiniz. Aboneliğiniz tekrar etkinleştirilecek ve sunucunuz kesintisiz olarak çalışmaya devam edecektir."
+  },
+  "billing.resubscribe-modal.error.payment-method": {
+    "defaultMessage": "Ödeme yönteminiz değiştirilemedi."
   },
   "billing.resubscribe-modal.error.text": {
     "defaultMessage": "Yeniden abone olunamıyor, abonelik ayrıntıları yüklenemedi."
@@ -77,26 +56,26 @@
   "billing.resubscribe-modal.failed-load": {
     "defaultMessage": "Abonelik detayları yüklenemedi."
   },
-  "billing.resubscribe-modal.interval": {
-    "defaultMessage": "{intervalOption, select, fiveDays {/5 days} monthly {/month} quarterly {/quarter} yearly {/year} other {{interval}}}"
+  "billing.resubscribe-modal.no-payment-method": {
+    "defaultMessage": "Ödeme yöntemi seçilmedi"
   },
-  "billing.resubscribe-modal.next-charge": {
-    "defaultMessage": "Bir sonraki ücretlendirmeniz <charge-date>{date}</charge-date> tarihinde yapılacaktır."
+  "billing.resubscribe-modal.plan.custom": {
+    "defaultMessage": "Özel Seçim"
   },
-  "billing.resubscribe-modal.plan-label": {
-    "defaultMessage": "Plan"
+  "billing.resubscribe-modal.plan.large": {
+    "defaultMessage": "Büyük"
   },
-  "billing.resubscribe-modal.ram": {
-    "defaultMessage": "{ramGb} GB RAM"
+  "billing.resubscribe-modal.plan.medium": {
+    "defaultMessage": "Orta"
+  },
+  "billing.resubscribe-modal.plan.small": {
+    "defaultMessage": "Küçük"
+  },
+  "billing.resubscribe-modal.preview-error": {
+    "defaultMessage": "Yeniden abonelik ücreti hesaplanamadı. Ödeme yönteminizde tanımlı bir fatura adresi olduğundan emin olun ve tekrar deneyin."
   },
   "billing.resubscribe-modal.resubscribe": {
     "defaultMessage": "Yeniden abone ol"
-  },
-  "billing.resubscribe-modal.storage": {
-    "defaultMessage": "{storageGb} GB Depolama"
-  },
-  "billing.resubscribe-modal.title": {
-    "defaultMessage": "Sunucuya Yeniden Abone Ol"
   },
   "browse.advanced-filters.apply-saved-preferences": {
     "defaultMessage": "Keydedilen tercihleri uygula"
@@ -151,9 +130,6 @@
   },
   "button.add-server-to-instance": {
     "defaultMessage": "Sunucuyu kuruluma ekle"
-  },
-  "button.affiliate-links": {
-    "defaultMessage": "Ortaklık bağlantıları"
   },
   "button.analytics": {
     "defaultMessage": "Veriler"
@@ -395,9 +371,6 @@
   "content.card.synced": {
     "defaultMessage": "Süreçler arası senkronize edildi"
   },
-  "content.card.uploaded": {
-    "defaultMessage": "Yüklendi"
-  },
   "content.confirm-bulk-update.admonition-body": {
     "defaultMessage": "{count, plural, one {# projeyi} other {# projeyi}} en yeni uyumlu sürümüne güncellemek istediğinden emin misin? İçeriklerin tek tek güncellenmesi önerilir."
   },
@@ -493,9 +466,6 @@
   },
   "content.diff-modal.added-count": {
     "defaultMessage": "{count} eklendi"
-  },
-  "content.diff-modal.config-files-updated": {
-    "defaultMessage": "Yapılandırma dosyası değiştirildi"
   },
   "content.diff-modal.diff-type.added": {
     "defaultMessage": "Eklendi (bağımlılık)"
@@ -653,9 +623,6 @@
   "content.managed-card.view-content": {
     "defaultMessage": "İçeriği görüntüle"
   },
-  "content.metadata-filter.author": {
-    "defaultMessage": "Yaratıcı"
-  },
   "content.metadata-filter.environment": {
     "defaultMessage": "Ortam"
   },
@@ -680,17 +647,8 @@
   "content.metadata-filter.update.available": {
     "defaultMessage": "Güncelleme mevcut"
   },
-  "content.metadata-filter.warning.client-depends": {
-    "defaultMessage": "İstemci dosyaya bağımlı"
-  },
   "content.metadata-filter.warning.client-only": {
     "defaultMessage": "Sadece istemciye özel içerik"
-  },
-  "content.metadata-filter.warning.client-retained": {
-    "defaultMessage": "İstemci dosyası korundu"
-  },
-  "content.metadata-filter.warning.none": {
-    "defaultMessage": "Uyarı yok"
   },
   "content.metadata-filter.warnings": {
     "defaultMessage": "Uyarılar"
@@ -719,11 +677,14 @@
   "content.page-layout.failed-to-load": {
     "defaultMessage": "İçerik yüklemesi başarısız oldu"
   },
+  "content.page-layout.failed-to-load-changelog": {
+    "defaultMessage": "Yenilik günlüğü yüklenemedi"
+  },
+  "content.page-layout.failed-to-load-updates": {
+    "defaultMessage": "Kullanılabilir güncellemeler kontrol edilemedi"
+  },
   "content.page-layout.filter.add": {
     "defaultMessage": "Filtre"
-  },
-  "content.page-layout.filter.author-count": {
-    "defaultMessage": "{count, plural, one {# yapımcı} other {# yapımcı}}"
   },
   "content.page-layout.loading": {
     "defaultMessage": "İçerik yükleniyor..."
@@ -1236,7 +1197,7 @@
     "defaultMessage": "Kaynak gösterme bilgisini sakla"
   },
   "external-files.permissions-card.editor.select-license-label": {
-    "defaultMessage": "Lisans Seçiniz..."
+    "defaultMessage": "Lisans ara..."
   },
   "external-files.permissions-card.editor.type-label": {
     "defaultMessage": "İzin sebebi"
@@ -1279,6 +1240,9 @@
   },
   "external-files.permissions-card.last-updated": {
     "defaultMessage": "En son {date} {user} tarafından güncellendi"
+  },
+  "external-files.permissions-card.license.all-rights": {
+    "defaultMessage": "Tüm hakları saklıdır / Lisans yoktur"
   },
   "external-files.permissions-card.license.unknown": {
     "defaultMessage": "Bilinmeyen"
@@ -1628,9 +1592,6 @@
   "files.navbar.home": {
     "defaultMessage": "Ana sayfa"
   },
-  "files.navbar.install-curseforge-pack": {
-    "defaultMessage": "CurseForge paketini kur"
-  },
   "files.navbar.new-file": {
     "defaultMessage": "Yeni dosya"
   },
@@ -1766,21 +1727,6 @@
   "files.zip-url-modal.backup-name": {
     "defaultMessage": "CurseForge mod paketi kurulumu"
   },
-  "files.zip-url-modal.cf-header": {
-    "defaultMessage": "Install a CurseForge modpack"
-  },
-  "files.zip-url-modal.cf-not-found-text": {
-    "defaultMessage": "Belirtilen URL'de CurseForge mod paketi bulunamadı."
-  },
-  "files.zip-url-modal.cf-not-found-title": {
-    "defaultMessage": "CurseForge mod paketi bulunamadı"
-  },
-  "files.zip-url-modal.enter-link": {
-    "defaultMessage": "Bağlantıyı girin"
-  },
-  "files.zip-url-modal.error-cf-url": {
-    "defaultMessage": "URL, bir CurseForge mod paketi sürüm URL'si olmalıdır."
-  },
   "files.zip-url-modal.error-url-invalid": {
     "defaultMessage": "URL geçerli olmalıdır."
   },
@@ -1792,24 +1738,6 @@
   },
   "files.zip-url-modal.install-failed-title": {
     "defaultMessage": "Kurulum başarısız oldu"
-  },
-  "files.zip-url-modal.step-copy-description": {
-    "defaultMessage": "Sürüm sayfası URL'sini kopyalayın ve aşağıya yapıştırın."
-  },
-  "files.zip-url-modal.step-copy-title": {
-    "defaultMessage": "URL'yi kopyala"
-  },
-  "files.zip-url-modal.step-find-description": {
-    "defaultMessage": "CurseForge'a göz atın ve istediğiniz mod paketini bulun."
-  },
-  "files.zip-url-modal.step-find-title": {
-    "defaultMessage": "Mod paketini bulun"
-  },
-  "files.zip-url-modal.step-select-description": {
-    "defaultMessage": "\"Dosyalar\" sekmesine gidin ve yüklemek istediğiniz sürümü seçin."
-  },
-  "files.zip-url-modal.step-select-title": {
-    "defaultMessage": "Bir sürüm seçin"
   },
   "files.zip-url-modal.unknown-error": {
     "defaultMessage": "Bilinmeyen bir hata oluştu"
@@ -1964,12 +1892,6 @@
   "hosting.content.failed-to-bulk-delete": {
     "defaultMessage": "İçeriği silmek başarısız"
   },
-  "hosting.content.failed-to-bulk-disable": {
-    "defaultMessage": "İçeriği kapatmak başarısız"
-  },
-  "hosting.content.failed-to-bulk-enable": {
-    "defaultMessage": "İçeriği açmak başarısız"
-  },
   "hosting.content.failed-to-bulk-update": {
     "defaultMessage": "İçeriği güncelleme başarısız"
   },
@@ -1984,9 +1906,6 @@
   },
   "hosting.content.failed-to-remove": {
     "defaultMessage": "İçerik çıkarılamadı"
-  },
-  "hosting.content.failed-to-toggle": {
-    "defaultMessage": "{name} durumu değiştirilemedi"
   },
   "hosting.content.failed-to-unlink": {
     "defaultMessage": "Mod paketinin bağlantısı koparılamadı"
@@ -2050,9 +1969,6 @@
   },
   "hosting.loader.reset-to-onboarding-success-title": {
     "defaultMessage": "Sunucu, yeni başlayanlar için ayarlanmıştır."
-  },
-  "hosting.loader.support-options-title": {
-    "defaultMessage": "Destek seçenekleri"
   },
   "hosting.specs.burst": {
     "defaultMessage": "{cpus} CPUya kadar çıkar"
@@ -2426,12 +2342,6 @@
   "instances.managed-content-modal.enabled": {
     "defaultMessage": "Etkin"
   },
-  "instances.managed-content-modal.external-content": {
-    "defaultMessage": "Harici"
-  },
-  "instances.managed-content-modal.external-content-description": {
-    "defaultMessage": "Bu dosya Modrinth üzerinde yayınlanmamıştır."
-  },
   "instances.managed-content-modal.header": {
     "defaultMessage": "Yönetilen içerik"
   },
@@ -2446,9 +2356,6 @@
   },
   "instances.managed-content-modal.search-placeholder": {
     "defaultMessage": "{count, number} {count, plural, one {projede} other {projede}} ara"
-  },
-  "instances.managed-content-modal.warnings": {
-    "defaultMessage": "Uyarılar"
   },
   "instances.updater-modal.badge.current": {
     "defaultMessage": "Şu anki"
@@ -2533,15 +2440,6 @@
   },
   "label.changes-saved": {
     "defaultMessage": "Değişiklikler kaydedildi"
-  },
-  "label.client-depends-warning": {
-    "defaultMessage": "Bu mod, istemci tarafı (client-side) bir moda bağımlıdır ve sunucunuzu başlatırken sorunlara neden olabilir"
-  },
-  "label.client-only-warning": {
-    "defaultMessage": "Bu işlemci-tarafı bir mod ve sunucunuzu başlatırken sorunlara yol açabilir"
-  },
-  "label.client-retained-warning": {
-    "defaultMessage": "Bu, bağımlılık olarak yüklenmiş bir istemci tarafı (client-side) modudur ve sunucunuzu başlatırken sorunlara neden olabilir"
   },
   "label.collections": {
     "defaultMessage": "Koleksiyonlar"
@@ -3278,23 +3176,32 @@
   "profile.button.create-project": {
     "defaultMessage": "Bir proje oluştur"
   },
+  "profile.button.force-password-reset": {
+    "defaultMessage": "Parola sıfırlamayı zorla"
+  },
   "profile.button.info": {
     "defaultMessage": "Kullanıcı detaylarını göster"
+  },
+  "profile.button.lock": {
+    "defaultMessage": "Hesabı kilitle"
   },
   "profile.button.manage-projects": {
     "defaultMessage": "Projeleri yönet"
   },
-  "profile.button.remove-affiliate": {
-    "defaultMessage": "Ortaklıktan çıkar"
+  "profile.button.reset-2fa": {
+    "defaultMessage": "İki Aşamalı Doğrulamayı Sıfırla"
   },
-  "profile.button.set-affiliate": {
-    "defaultMessage": "Ortak olarak ayarla"
+  "profile.button.revoke-sessions": {
+    "defaultMessage": "Tüm oturumlardan çık"
   },
   "profile.button.shared-instances": {
     "defaultMessage": "Paylaşılan örnekleri görüntüle"
   },
   "profile.button.unblock": {
     "defaultMessage": "Engellemeyi kaldır"
+  },
+  "profile.button.unlock": {
+    "defaultMessage": "Hesabın kilidini aç"
   },
   "profile.collection.projects-count": {
     "defaultMessage": "{count, plural,one{# proje} other{# proje}}"
@@ -3344,8 +3251,35 @@
   "profile.error.not-found": {
     "defaultMessage": "Kullanıcı bulunamadı"
   },
-  "profile.label.affiliate": {
-    "defaultMessage": "Ortaklar"
+  "profile.force-password-reset.admonition-body": {
+    "defaultMessage": "{username} kullanıcısının şifresi silinecek tüm cihazlardaki oturumlardan çıkış yapılacak ve yeni şifre belirleme linki aşağıdaki linke gönderilecek. E-Postanı değiştirirsen hesaptaki de değişecek. Link 24 saat boyunca geçerlidir ve hesap kilitliyken dahi kullanılabilir."
+  },
+  "profile.force-password-reset.admonition-title": {
+    "defaultMessage": "Geçerli Şifre çalışmayacak"
+  },
+  "profile.force-password-reset.button": {
+    "defaultMessage": "Şifreyi sıfırla"
+  },
+  "profile.force-password-reset.email-label": {
+    "defaultMessage": "Hesap Maili"
+  },
+  "profile.force-password-reset.email-placeholder": {
+    "defaultMessage": "Hesabın kayıtlı postasını kullanmak için boş bırakın"
+  },
+  "profile.force-password-reset.error-description": {
+    "defaultMessage": "Şifre sıfırlanırken bir hata oluştu. Lütfen tekrar dene."
+  },
+  "profile.force-password-reset.error-title": {
+    "defaultMessage": "Şifre sıfırlanamadı"
+  },
+  "profile.force-password-reset.success-description": {
+    "defaultMessage": "{username} kullanıcısına bir şifre sıfırlama linki gönderildi."
+  },
+  "profile.force-password-reset.success-title": {
+    "defaultMessage": "Şifre sıfırlama"
+  },
+  "profile.force-password-reset.title": {
+    "defaultMessage": "{username} için zorla şifre sıfırlama"
   },
   "profile.label.badges": {
     "defaultMessage": "Rozetler"
@@ -3358,6 +3292,9 @@
   },
   "profile.label.joined": {
     "defaultMessage": "Katıldı"
+  },
+  "profile.label.locked": {
+    "defaultMessage": "Kilitli"
   },
   "profile.label.no-collections": {
     "defaultMessage": "Bu kullanıcı koleksiyona sahip değil!"
@@ -5105,9 +5042,6 @@
   "servers.backups.admonition.restoring-backup.title": {
     "defaultMessage": "Yedekten geri yükleniyor"
   },
-  "servers.backups.bulk-bar.deleting": {
-    "defaultMessage": "{total, plural, one {# yedek} other {# yedek}} siliniyor..."
-  },
   "servers.backups.bulk-bar.selected-count": {
     "defaultMessage": "{count, plural, one {# yedek seçildi} other {# yedek seçildi}}"
   },
@@ -5129,50 +5063,11 @@
   "servers.backups.empty.heading": {
     "defaultMessage": "Henüz yedekleme yok"
   },
-  "servers.backups.filtered-empty.clear-filters": {
-    "defaultMessage": "Filtreleri temizle"
-  },
-  "servers.backups.filtered-empty.description": {
-    "defaultMessage": "Tüm yedekleri görmek için farklı bir filtre deneyin veya filtreleri temizleyin."
-  },
-  "servers.backups.filtered-empty.heading": {
-    "defaultMessage": "Yedekler eşleşmiyor"
-  },
   "servers.backups.item.auto": {
     "defaultMessage": "Otomatik"
   },
-  "servers.backups.item.backup-schedule": {
-    "defaultMessage": "Yedekleme zamanları"
-  },
-  "servers.backups.item.creator-avatar-alt": {
-    "defaultMessage": "{username} nın avatarı"
-  },
-  "servers.backups.item.creator.support": {
-    "defaultMessage": "Destek"
-  },
-  "servers.backups.item.manual-backup": {
-    "defaultMessage": "Manuel yedekleme"
-  },
-  "servers.backups.item.rename": {
-    "defaultMessage": "Yeniden adlandır"
-  },
-  "servers.backups.item.restore": {
-    "defaultMessage": "Geri yükle"
-  },
-  "servers.backups.select-backup-aria": {
-    "defaultMessage": "{name} yedek dosyasını seçin"
-  },
   "servers.backups.toolbar.create-backup": {
     "defaultMessage": "Yedek oluştur"
-  },
-  "servers.backups.toolbar.filter-auto": {
-    "defaultMessage": "Otomatik"
-  },
-  "servers.backups.toolbar.filter-manual": {
-    "defaultMessage": "Manüel"
-  },
-  "servers.backups.toolbar.select-all": {
-    "defaultMessage": "Hepsini seç"
   },
   "servers.busy.backup-creating": {
     "defaultMessage": "Yedek oluşturma sürüyor"
@@ -5486,15 +5381,6 @@
   "servers.manage.servers-title": {
     "defaultMessage": "Modrinth Hosting"
   },
-  "servers.manage.settings-hint.description": {
-    "defaultMessage": "Artık burada bulunabilirler!"
-  },
-  "servers.manage.settings-hint.dismiss": {
-    "defaultMessage": "Bir daha gösterme"
-  },
-  "servers.manage.settings-hint.title": {
-    "defaultMessage": "Sunucu ayarlarınız taşındı"
-  },
   "servers.manage.shared-servers-title": {
     "defaultMessage": "Paylaşımlı sunucular"
   },
@@ -5729,18 +5615,6 @@
   "servers.settings.advanced.sftp.roll-credentials-success-title": {
     "defaultMessage": "SFTP kimlik bilgileri döndürüldü"
   },
-  "servers.setup.onboarding.installation-failed.text": {
-    "defaultMessage": "Kurulum sırasında beklenmeyen bir hata oluştu. Lütfen daha sonra tekrar deneyin."
-  },
-  "servers.setup.onboarding.installation-failed.title": {
-    "defaultMessage": "Kurulum başarısız oldu"
-  },
-  "servers.setup.onboarding.modpack-upload-failed.text": {
-    "defaultMessage": "Yükleme sırasında beklenmeyen bir hata oluştu. Lütfen daha sonra tekrar deneyin."
-  },
-  "servers.setup.onboarding.modpack-upload-failed.title": {
-    "defaultMessage": "Mod paketi yüklemesi başarısız oldu"
-  },
   "servers.setup.onboarding.setup-server.button": {
     "defaultMessage": "Sunucu kur"
   },
@@ -5764,9 +5638,6 @@
   },
   "servers.setup.onboarding.steps.heading": {
     "defaultMessage": "Sunucunuzu kurun (~2 dakika)"
-  },
-  "servers.setup.onboarding.uploading.progress": {
-    "defaultMessage": "Yükleniyor ({percent, number}%)"
   },
   "servers.setup.onboarding.welcome.description": {
     "defaultMessage": "Sunucunuz hazır. İşte oynamaya başlamak için yapmanız gerekenler!"

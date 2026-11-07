@@ -1,37 +1,4 @@
 {
-  "affiliate.create.button": {
-    "defaultMessage": "Lumikha ng affiliate link"
-  },
-  "affiliate.create.header": {
-    "defaultMessage": "Naglilikha ng affiliate code"
-  },
-  "affiliate.create.title.description": {
-    "defaultMessage": "Bigyan mo ng pangalan ang iyong affiliate link upang malaman mo lung saan nanggagaling ang mga tao!"
-  },
-  "affiliate.create.title.label": {
-    "defaultMessage": "Pamagat ng affilite link"
-  },
-  "affiliate.create.title.placeholder": {
-    "defaultMessage": "hal. YouTube"
-  },
-  "affiliate.create.user.description": {
-    "defaultMessage": "Ang username ng tagagamit na lilikhaan ng affiliate code"
-  },
-  "affiliate.create.user.placeholder": {
-    "defaultMessage": "Ilagay ang username..."
-  },
-  "affiliate.createdBy": {
-    "defaultMessage": "Linikha ni/ng {user}"
-  },
-  "affiliate.creating.button": {
-    "defaultMessage": "Lumilikha ng affiliate link..."
-  },
-  "affiliate.revoke": {
-    "defaultMessage": "Bawiin ang affiliate link"
-  },
-  "affiliate.viewAnalytics": {
-    "defaultMessage": "Tingnan ang analitika"
-  },
   "badge.alpha": {
     "defaultMessage": "Alpha"
   },
@@ -50,17 +17,11 @@
   "billing.resubscribe-modal.error.title": {
     "defaultMessage": "Error"
   },
-  "billing.resubscribe-modal.plan-label": {
-    "defaultMessage": "Plan"
-  },
   "browse.view-prefix": {
     "defaultMessage": "Tingnan:"
   },
   "button.accept": {
     "defaultMessage": "Tanggapin"
-  },
-  "button.affiliate-links": {
-    "defaultMessage": "Mga affiliate link"
   },
   "button.analytics": {
     "defaultMessage": "Analitika"
@@ -541,12 +502,6 @@
   },
   "header.category.resolutions": {
     "defaultMessage": "Resolusyon"
-  },
-  "hosting.content.failed-to-bulk-disable": {
-    "defaultMessage": "Bigong mapatay ang tumutunggaling kontento"
-  },
-  "hosting.content.failed-to-bulk-enable": {
-    "defaultMessage": "Bigong mabukas ang kontento"
   },
   "hosting.content.failed-to-unlink": {
     "defaultMessage": "Bigong ma-unlink ang modpack"
@@ -2030,21 +1985,6 @@
   "servers.backups.item.auto": {
     "defaultMessage": "Auto"
   },
-  "servers.backups.item.backup-schedule": {
-    "defaultMessage": "Backup schedule"
-  },
-  "servers.backups.item.manual-backup": {
-    "defaultMessage": "Manual backup"
-  },
-  "servers.backups.item.rename": {
-    "defaultMessage": "I-rename"
-  },
-  "servers.backups.item.restore": {
-    "defaultMessage": "I-restore"
-  },
-  "servers.backups.toolbar.filter-auto": {
-    "defaultMessage": "Kusa"
-  },
   "servers.list-empty.already-have-server-label": {
     "defaultMessage": "Mayroon ka nang server?"
   },
@@ -2182,12 +2122,6 @@
   },
   "servers.region.western-europe": {
     "defaultMessage": "Kanlurang Yuropa"
-  },
-  "servers.setup.onboarding.installation-failed.text": {
-    "defaultMessage": "Isang di-inaasahang error ang naganap habang nag-install. Mangyaring subukan muli mamaya."
-  },
-  "servers.setup.onboarding.modpack-upload-failed.text": {
-    "defaultMessage": "Isang di-inaasahang error ang naganap habang nag-upload. Mangyaring subukan muli mamaya."
   },
   "servers.setup.reinstall-failed.text": {
     "defaultMessage": "Isang di-inaasahang error ang naganap habang nag-reinstall. Mangyaring subukan muli mamaya."

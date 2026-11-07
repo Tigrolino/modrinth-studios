@@ -3,17 +3,23 @@ import type { App, Directive } from 'vue'
 import { ref } from 'vue'
 
 export type TooltipPlacement = Placement
-export type TooltipProps = string | { text: string } | null | undefined
+export type TooltipProps =
+	| string
+	| { text: string; delay?: number; class?: string }
+	| null
+	| undefined
 export type TooltipDirective = Directive<HTMLElement, TooltipProps>
 export type TooltipContent = () => unknown
 
 interface TooltipSource {
 	placement: TooltipPlacement
 	getText: () => string | null
+	delay?: number
 	render?: TooltipContent
 	theme?: string
 	pinned?: boolean
 	panelClass?: string
+	interactive?: boolean
 }
 
 interface TooltipState {
@@ -23,6 +29,7 @@ interface TooltipState {
 	theme: string
 	content: TooltipContent | null
 	panelClass?: string
+	interactive?: boolean
 }
 
 declare module 'vue' {
@@ -41,6 +48,7 @@ export const activeTooltip = ref<TooltipState>({
 	theme: 'tooltip',
 	content: null,
 	panelClass: undefined,
+	interactive: false,
 })
 
 const sources = new WeakMap<HTMLElement, TooltipSource>()
@@ -49,6 +57,7 @@ let hideTimer: ReturnType<typeof setTimeout> | undefined
 let pending: HTMLElement | undefined
 let hovered: HTMLElement | undefined
 let focused: HTMLElement | undefined
+let panelHovered = false
 let lastOpen = 0
 
 function stopShow() {
@@ -70,7 +79,9 @@ function clear() {
 		theme: 'tooltip',
 		content: null,
 		panelClass: undefined,
+		interactive: false,
 	}
+	panelHovered = false
 }
 
 function hasTooltipContent(el: HTMLElement) {
@@ -89,6 +100,9 @@ function open(el: HTMLElement) {
 		}
 		return
 	}
+	if (activeTooltip.value.reference !== el) {
+		panelHovered = false
+	}
 	activeTooltip.value = {
 		reference: el,
 		text,
@@ -96,6 +110,7 @@ function open(el: HTMLElement) {
 		theme: source?.theme ?? 'tooltip',
 		content,
 		panelClass: source?.panelClass,
+		interactive: !!source?.interactive,
 	}
 	lastOpen = Date.now()
 }
@@ -107,12 +122,13 @@ function show(immediate: boolean) {
 	}
 	stopShow()
 	stopHide()
-	if (immediate || activeTooltip.value.reference || Date.now() - lastOpen <= SHOW_DELAY) {
+	const delay = sources.get(el)?.delay ?? SHOW_DELAY
+	if (immediate || activeTooltip.value.reference || Date.now() - lastOpen <= delay) {
 		open(el)
 		return
 	}
 	pending = el
-	showTimer = setTimeout(() => open(el), SHOW_DELAY)
+	showTimer = setTimeout(() => open(el), delay)
 }
 
 function hide(el: HTMLElement, immediate: boolean) {
@@ -121,6 +137,9 @@ function hide(el: HTMLElement, immediate: boolean) {
 	}
 	if (focused ?? hovered) {
 		show(true)
+		return
+	}
+	if (panelHovered && activeTooltip.value.reference === el) {
 		return
 	}
 	if (pending === el) {
@@ -136,7 +155,7 @@ function hide(el: HTMLElement, immediate: boolean) {
 	}
 	stopHide()
 	hideTimer = setTimeout(() => {
-		if ((focused ?? hovered) || sources.get(el)?.pinned) {
+		if ((focused ?? hovered) || panelHovered || sources.get(el)?.pinned) {
 			return
 		}
 		if (activeTooltip.value.reference !== el) {
@@ -176,7 +195,7 @@ export function unbindTooltipSource(el: HTMLElement) {
 }
 
 function isFocusVisible(el: HTMLElement) {
-	const active = document.activeElement
+	const active = el.ownerDocument.activeElement
 	if (!(active instanceof Element) || !el.contains(active)) {
 		return false
 	}
@@ -214,6 +233,25 @@ export function tooltipFocusOut(el: HTMLElement) {
 		focused = undefined
 	}
 	hide(el, true)
+}
+
+export function tooltipPanelEnter() {
+	if (!activeTooltip.value.interactive) {
+		return
+	}
+	panelHovered = true
+	stopHide()
+}
+
+export function tooltipPanelLeave() {
+	if (!panelHovered) {
+		return
+	}
+	panelHovered = false
+	const el = activeTooltip.value.reference
+	if (el) {
+		hide(el, false)
+	}
 }
 
 export function dismissTooltip() {
@@ -273,6 +311,8 @@ export function installTooltipDirective(app: App) {
 		bindTooltipSource(el, {
 			placement: tooltipPlacement(modifiers),
 			getText: () => tooltipText(value),
+			delay: tooltipDelay(value),
+			panelClass: typeof value === 'string' ? undefined : value?.class,
 		})
 	}
 }
@@ -282,6 +322,18 @@ function tooltipText(value: TooltipProps): string | null {
 		return null
 	}
 	return typeof value === 'string' ? value : (value.text ?? null)
+}
+
+function tooltipDelay(value: TooltipProps): number | undefined {
+	if (
+		value == null ||
+		typeof value === 'string' ||
+		typeof value.delay !== 'number' ||
+		!Number.isFinite(value.delay)
+	) {
+		return
+	}
+	return Math.max(0, value.delay)
 }
 
 function ensureAriaLabel(el: HTMLElement, text: string, added: WeakSet<HTMLElement>) {
