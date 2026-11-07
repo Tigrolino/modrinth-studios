@@ -14,15 +14,25 @@ const props = withDefaults(
 		availableProducts: Labrinth.Billing.Internal.Product[]
 		currency: string
 		loggedIn?: boolean
+		/** Modrinth Studios: offer connecting a self-hosted Pterodactyl panel instead. */
+		selfHosted?: boolean
 	}>(),
 	{
 		loggedIn: false,
+		selfHosted: false,
 	},
 )
 
 const emit = defineEmits<{
 	(e: 'continue', payload: { interval: ServerBillingInterval; planId: string | null }): void
+	(e: 'connect-self-hosted'): void
 }>()
+
+function connectSelfHosted() {
+	closeSignInPrompt()
+	modal.value?.hide()
+	emit('connect-self-hosted')
+}
 
 const modal = useTemplateRef<InstanceType<typeof NewModal>>('modal')
 
@@ -114,6 +124,18 @@ defineExpose({
 					@choose-custom="chooseCustom"
 					@proceed="continueWithSelection"
 				/>
+				<div
+					v-if="selfHosted"
+					class="mt-4 flex flex-wrap items-center justify-center gap-x-2 gap-y-1 border-0 border-t border-solid border-surface-5 pt-4 text-sm text-secondary"
+				>
+					<span>Have your own server on a Pterodactyl panel?</span>
+					<button
+						class="cursor-pointer border-0 bg-transparent p-0 font-semibold text-brand hover:underline"
+						@click="connectSelfHosted"
+					>
+						Connect it instead, no Modrinth account needed
+					</button>
+				</div>
 			</div>
 
 			<Transition
@@ -158,6 +180,13 @@ defineExpose({
 							Sign in or create an account
 							<ExternalIcon class="size-4" />
 						</Button>
+						<button
+							v-if="selfHosted"
+							class="cursor-pointer border-0 bg-transparent p-0 text-sm font-semibold text-secondary hover:text-contrast hover:underline"
+							@click="connectSelfHosted"
+						>
+							Or connect your own Pterodactyl server instead
+						</button>
 					</div>
 				</div>
 			</Transition>

@@ -9,7 +9,9 @@
 			:available-products="pyroProducts"
 			:currency="selectedCurrency"
 			:logged-in="loggedIn"
+			:self-hosted="!!$slots['header-actions']"
 			@continue="handleGuestPlanContinue"
+			@connect-self-hosted="requestSelfHostedConnect"
 		/>
 		<ModrinthServersPurchaseModal
 			v-if="customer && paymentMethods && regions"
@@ -146,8 +148,11 @@
 						:logged-in="loggedIn"
 						@click-new-server="openPurchaseModal"
 						@click-sign-in="handleSignIn"
-					/>
-					<slot name="header-actions" />
+					>
+						<template v-if="$slots['header-actions']" #self-hosted>
+							<slot name="header-actions" />
+						</template>
+					</ServerListEmpty>
 				</div>
 
 				<div v-else key="list" class="flex flex-col gap-6">
@@ -686,6 +691,11 @@ function formatFetchError(error: unknown) {
 	return error instanceof Error && error.message
 		? error.message
 		: formatMessage(messages.unknownError)
+}
+
+// Modrinth Studios: ask the Pterodactyl section (in the header-actions slot) to open its dialog.
+function requestSelfHostedConnect() {
+	window.dispatchEvent(new CustomEvent('studio:connect-pterodactyl'))
 }
 
 function handleSignIn() {

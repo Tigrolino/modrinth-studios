@@ -61,14 +61,24 @@
 			<ServerListEmptyPreview />
 		</div>
 
-		<div v-if="!loggedIn" class="flex flex-col items-center gap-4 text-center">
-			<p class="m-0 text-sm text-secondary">
-				{{ formatMessage(messages.alreadyHaveServerLabel) }}
-			</p>
-			<Button @click="onClickSignIn?.()">
-				<LogInIcon aria-hidden="true" />
-				{{ formatMessage(messages.signInButton) }}
-			</Button>
+		<div
+			v-if="!loggedIn || $slots['self-hosted']"
+			class="flex flex-wrap items-start justify-center gap-x-16 gap-y-6 text-center"
+		>
+			<div v-if="!loggedIn" class="flex flex-col items-center gap-4">
+				<p class="m-0 text-sm text-secondary">
+					{{ formatMessage(messages.alreadyHaveServerLabel) }}
+				</p>
+				<Button @click="onClickSignIn?.()">
+					<LogInIcon aria-hidden="true" />
+					{{ formatMessage(messages.signInButton) }}
+				</Button>
+			</div>
+			<!-- Modrinth Studios: self-hosted panels, no Modrinth account needed -->
+			<div v-if="$slots['self-hosted']" class="flex flex-col items-center gap-4">
+				<p class="m-0 text-sm text-secondary">Running your own Pterodactyl server?</p>
+				<slot name="self-hosted" />
+			</div>
 		</div>
 	</div>
 </template>

@@ -17,7 +17,7 @@ import {
 	ServerListing,
 } from '@modrinth/ui'
 import { useQuery, useQueryClient } from '@tanstack/vue-query'
-import { computed, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 
 import { addPanel, removePanel } from './bridge'
 import { listAllPteroServers } from './server'
@@ -60,6 +60,13 @@ function openAddModal() {
 	connectError.value = null
 	addModal.value?.show()
 }
+
+// Opened from Modrinth's "new server" dialog for people without a Modrinth account.
+function onConnectRequest() {
+	if (props.part === 'actions') openAddModal()
+}
+onMounted(() => window.addEventListener('studio:connect-pterodactyl', onConnectRequest))
+onBeforeUnmount(() => window.removeEventListener('studio:connect-pterodactyl', onConnectRequest))
 
 async function connect() {
 	if (!panelUrl.value.trim() || !apiKey.value.trim()) {
