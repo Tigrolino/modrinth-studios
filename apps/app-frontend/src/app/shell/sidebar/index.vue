@@ -6,8 +6,7 @@ import { computed, onBeforeUnmount, onMounted, onScopeDispose, ref } from 'vue'
 import { useTheme } from '@/composables/use-theme'
 import PrideFundraiserBanner from '@/features/campaigns/pride-fundraiser-banner.vue'
 import FriendsList from '@/features/friends/friends-list/index.vue'
-import AccountsCard from '@/features/minecraft-accounts/accounts-card.vue'
-import type { MinecraftAccountsActions } from '@/features/minecraft-accounts/context'
+import { injectMinecraftAccounts } from '@/features/minecraft-accounts/context'
 import NewsSidebar from '@/features/news/news-sidebar.vue'
 import OnboardingChecklist from '@/features/onboarding/checklist.vue'
 import type { ModrinthCredentials } from '@/helpers/mr_auth'
@@ -31,9 +30,8 @@ const emit = defineEmits<{
 
 const { formatMessage } = useVIntl()
 const appTheme = useTheme()
-const { hasLoggedIntoMinecraft, hasLoggedIntoModrinth, showChecklist } = injectOnboardingChecklist()
+const { hasLoggedIntoModrinth, showChecklist } = injectOnboardingChecklist()
 const showFriendsList = computed(() => !showChecklist.value || hasLoggedIntoModrinth.value)
-const accounts = ref<InstanceType<typeof AccountsCard> | null>(null)
 const friends = ref<InstanceType<typeof FriendsList> | null>(null)
 const scrollContainer = ref<HTMLElement | null>(null)
 const scrollViewport = ref<HTMLElement | null>(null)
@@ -106,17 +104,9 @@ onMounted(() => {
 
 onScopeDispose(() => removeScrollbarListener?.())
 
-const minecraftAccounts = computed<MinecraftAccountsActions | null>(() => {
-	const card = accounts.value
-	if (!card) return null
-	return {
-		loginDisabled: card.loginDisabled,
-		refreshValues: card.refreshValues,
-		setEquippedSkin: card.setEquippedSkin,
-		setLoginDisabled: card.setLoginDisabled,
-		login: card.login,
-	}
-})
+// Modrinth Studios: provided by the title bar's account pill (App.vue).
+const minecraftAccountsRef = injectMinecraftAccounts()
+const minecraftAccounts = computed(() => minecraftAccountsRef.value)
 
 function showAddFriendModal() {
 	friends.value?.showAddFriendModal()
@@ -160,7 +150,7 @@ const messages = defineMessages({
 			>
 				<OnboardingChecklist
 					@create-instance="emit('create-instance')"
-					@login-minecraft="accounts?.login()"
+					@login-minecraft="minecraftAccounts?.login()"
 					@login-modrinth="emit('login-modrinth')"
 				/>
 				<div
@@ -176,17 +166,7 @@ const messages = defineMessages({
 						'sidebar-default-content--shown': showDefaultContent,
 					}"
 				>
-					<div
-						v-show="hasLoggedIntoMinecraft"
-						class="p-4 border-0 border-b-[1px] border-[--brand-gradient-border] border-solid"
-					>
-						<h3 class="text-base text-primary font-medium m-0">
-							{{ formatMessage(messages.playingAs) }}
-						</h3>
-						<Suspense>
-							<AccountsCard ref="accounts" />
-						</Suspense>
-					</div>
+					<!-- Modrinth Studios: the Minecraft account lives in the title bar now -->
 					<div
 						v-show="showFriendsList"
 						class="p-4 border-0 border-b-[1px] border-[--brand-gradient-border] border-solid"

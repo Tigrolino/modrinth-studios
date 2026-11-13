@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { PlayIcon, PlusIcon } from '@modrinth/assets'
+import { LibraryIcon, PlayIcon, PlusIcon } from '@modrinth/assets'
 import {
 	ContextMenu,
 	defineMessages,
@@ -11,7 +11,7 @@ import {
 import { useQuery, useQueryClient } from '@tanstack/vue-query'
 import dayjs from 'dayjs'
 import { computed, inject, ref, watch } from 'vue'
-import { onBeforeRouteLeave } from 'vue-router'
+import { onBeforeRouteLeave, useRouter } from 'vue-router'
 
 import LibrarySection from '@/components/ui/library/index.vue'
 import { libraryScrollTop } from '@/components/ui/library/view-state'
@@ -19,6 +19,7 @@ import WelcomeScreen from '@/components/ui/WelcomeScreen.vue'
 import RecentWorldsList from '@/components/ui/world/RecentWorldsList.vue'
 import { useAppSettings } from '@/composables/use-app-settings.ts'
 import { useHiddenInstances } from '@/features/library/hidden-instances/use-hidden-instances'
+import { usePlayMode } from '@/features/play-mode/state'
 import { prefetchSharedInstanceLibrary } from '@/features/library/shared-instances/queries'
 import { traceStartupStep } from '@/helpers/startup-debug'
 import { instanceListQueryOptions } from '@/pages/instance/query-options'
@@ -29,6 +30,11 @@ import { useRootBreadcrumb } from '@/shared/breadcrumbs'
 defineOptions({
 	name: 'LibraryPage',
 })
+
+// Modrinth Studios: `/library` shows only the library (Play mode moves it here).
+const props = withDefaults(defineProps<{ libraryOnly?: boolean }>(), { libraryOnly: false })
+const router = useRouter()
+const playMode = usePlayMode()
 
 const { formatMessage } = useVIntl()
 const { handleError } = injectNotificationManager()
@@ -61,10 +67,10 @@ const messages = defineMessages({
 
 useRootBreadcrumb({
 	slot: 'root',
-	id: 'home',
-	label: formatMessage(messages.home),
-	to: '/',
-	visual: { type: 'icon', component: PlayIcon },
+	id: () => (props.libraryOnly ? 'library' : 'home'),
+	label: () => (props.libraryOnly ? 'Library' : formatMessage(messages.home)),
+	to: () => (props.libraryOnly ? '/library' : '/'),
+	visual: () => ({ type: 'icon', component: props.libraryOnly ? LibraryIcon : PlayIcon }),
 })
 
 watch(
@@ -89,6 +95,21 @@ if (hasCreatedInstance.value) {
 		handleError,
 	)
 }
+
+// Play mode: the home screen *is* the chosen instance.
+const redirectingToPlayMode = computed(
+	() =>
+		!props.libraryOnly &&
+		!!playMode.playPath.value &&
+		instances.value.some((i) => i.id === playMode.state.instanceId),
+)
+watch(
+	redirectingToPlayMode,
+	(redirect) => {
+		if (redirect && playMode.playPath.value) void router.replace(playMode.playPath.value)
+	},
+	{ immediate: true },
+)
 
 const recentInstances = computed(() =>
 	instances.value
@@ -118,7 +139,8 @@ function openPageContextMenu(event: MouseEvent) {
 </script>
 
 <template>
-	<WelcomeScreen v-if="isReady && !hasCreatedInstance" @skip="skipWelcomeScreen" />
+	<div v-if="redirectingToPlayMode" />
+	<WelcomeScreen v-else-if="isReady && !hasCreatedInstance" @skip="skipWelcomeScreen" />
 	<div
 		v-else-if="isReady"
 		data-library-page-background
@@ -126,7 +148,7 @@ function openPageContextMenu(event: MouseEvent) {
 		@contextmenu="openPageContextMenu"
 	>
 		<RecentWorldsList
-			v-if="recentInstances?.length > 0 && appSettings.showJumpIn"
+			v-if="!libraryOnly && recentInstances?.length > 0 && appSettings.showJumpIn"
 			:recent-instances="recentInstances"
 		/>
 		<LibrarySection :instances="instances" />

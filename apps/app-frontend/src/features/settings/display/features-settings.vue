@@ -18,6 +18,7 @@ import {
 	useQuickInstanceLimit,
 } from '@/composables/use-quick-instance-limit.ts'
 import { injectAppSettingsModal } from '@/features/settings/app-settings-modal/context'
+import PlayModeSettings from '@/features/settings/display/play-mode-settings.vue'
 import { type GlobalSyncedOptions, set_global_synced_option } from '@/helpers/instance.ts'
 import {
 	type AppSettings,
@@ -249,7 +250,10 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-	<section class="border-0 border-b border-solid border-surface-4 pb-6">
+	<!-- Modrinth Studios: Play mode lives at the top of Features -->
+	<PlayModeSettings />
+
+	<section class="mt-6 border-0 border-b border-solid border-surface-4 pb-6">
 		<div class="flex items-center justify-between gap-4">
 			<div>
 				<h2 id="sync-features-across-devices-label" class="m-0 text-lg font-semibold text-contrast">

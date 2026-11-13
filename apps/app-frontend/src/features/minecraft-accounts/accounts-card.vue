@@ -1,6 +1,82 @@
 <template>
+	<!-- Modrinth Studios: compact title-bar variant (shown while the sidebar is closed) -->
+	<div v-if="compact" ref="compactRoot" class="relative">
+		<button
+			type="button"
+			v-tooltip="selectedAccount ? selectedAccount.profile.name : undefined"
+			class="flex h-8 cursor-pointer items-center gap-2 rounded-full border border-solid border-surface-4 bg-button-bg py-0 pl-1 pr-2.5 text-contrast hover:brightness-110 max-lg:gap-1 max-lg:pr-1.5"
+			:aria-expanded="compactOpen"
+			@click="accounts.length === 0 ? login() : (compactOpen = !compactOpen)"
+		>
+			<Avatar
+				size="24px"
+				:src="
+					selectedAccount ? avatarUrl : 'https://launcher-files.modrinth.com/assets/steve_head.png'
+				"
+			/>
+			<!-- Name only on wider windows; narrow ones show just the head (+ chevron). -->
+			<span class="max-w-[9rem] truncate text-sm font-semibold max-lg:hidden">
+				{{
+					accounts.length === 0
+						? formatMessage(messages.signInToMinecraft)
+						: selectedAccount
+							? selectedAccount.profile.name
+							: formatMessage(messages.selectAccount)
+				}}
+			</span>
+			<ChevronDownIcon
+				v-if="accounts.length > 0"
+				class="size-4 text-secondary transition-transform"
+				:class="{ 'rotate-180': compactOpen }"
+			/>
+		</button>
+		<div
+			v-if="compactOpen"
+			class="absolute right-0 top-[calc(100%+0.5rem)] z-[60] w-72 overflow-hidden rounded-xl border border-solid border-surface-5 bg-bg-raised py-1 shadow-xl"
+		>
+			<div v-for="account in accounts" :key="account.profile.id" class="flex items-center gap-1">
+				<button
+					class="button-base flex min-w-0 flex-grow cursor-pointer items-center gap-2 border-0 bg-transparent p-2"
+					@click="setAccount(account).then(() => (compactOpen = false))"
+				>
+					<RadioButtonCheckedIcon
+						v-if="selectedAccount && selectedAccount.profile.id === account.profile.id"
+						class="h-5 w-5 shrink-0 text-brand"
+					/>
+					<RadioButtonIcon v-else class="h-5 w-5 shrink-0 text-secondary" />
+					<Avatar :src="getAccountAvatarUrl(account)" size="24px" />
+					<span
+						class="truncate"
+						:class="
+							selectedAccount && selectedAccount.profile.id === account.profile.id
+								? 'font-semibold text-contrast'
+								: 'text-primary'
+						"
+					>
+						{{ account.profile.name }}
+					</span>
+				</button>
+				<IconButton
+					v-tooltip="formatMessage(messages.removeAccount)"
+					type="quiet"
+					color="red"
+					:label="formatMessage(messages.removeAccount)"
+					class="mr-2"
+					@click="logout(account.profile.id)"
+				>
+					<TrashIcon />
+				</IconButton>
+			</div>
+			<div class="px-2 pb-1 pt-2">
+				<Button class="w-full" :disabled="loginDisabled" @click="login()">
+					<PlusIcon />
+					{{ formatMessage(messages.addAccount) }}
+				</Button>
+			</div>
+		</div>
+	</div>
 	<div
-		v-if="accounts.length === 0"
+		v-else-if="accounts.length === 0"
 		class="flex flex-col gap-3 bg-button-bg border border-solid border-surface-5 rounded-xl p-3 mt-2"
 	>
 		<span>{{ formatMessage(messages.notSignedIn) }}</span>
@@ -87,6 +163,7 @@
 
 <script setup lang="ts">
 import {
+	ChevronDownIcon,
 	LogInIcon,
 	PlusIcon,
 	RadioButtonCheckedIcon,
@@ -104,7 +181,8 @@ import {
 	useVIntl,
 } from '@modrinth/ui'
 import type { Ref } from 'vue'
-import { computed, onUnmounted, ref } from 'vue'
+import { onClickOutside } from '@vueuse/core'
+import { computed, onMounted, onUnmounted, ref } from 'vue'
 
 import { useAppEvent } from '@/composables/use-app-event'
 import { handleSevereError } from '@/composables/use-error.js'
@@ -126,6 +204,23 @@ const { handleError } = injectNotificationManager()
 const emit = defineEmits<{
 	change: []
 }>()
+
+/** Modrinth Studios: compact pill + dropdown for the title bar. */
+const props = withDefaults(defineProps<{ compact?: boolean }>(), { compact: false })
+const compactOpen = ref(false)
+const compactRoot = ref<HTMLElement | null>(null)
+onClickOutside(compactRoot, () => (compactOpen.value = false))
+
+// Keep the sidebar card and the title-bar pill in sync when either changes accounts.
+const ACCOUNT_CHANGED_EVENT = 'studio:minecraft-account-changed'
+function announceChange() {
+	window.dispatchEvent(new CustomEvent(ACCOUNT_CHANGED_EVENT, { detail: props.compact }))
+}
+function onAccountChanged(event: Event) {
+	if ((event as CustomEvent).detail !== props.compact) void refreshValues()
+}
+onMounted(() => window.addEventListener(ACCOUNT_CHANGED_EVENT, onAccountChanged))
+onUnmounted(() => window.removeEventListener(ACCOUNT_CHANGED_EVENT, onAccountChanged))
 
 type MinecraftCredential = {
 	profile: {
@@ -232,6 +327,7 @@ async function setAccount(account: MinecraftCredential) {
 	defaultUser.value = account.profile.id
 	await set_default_user(account.profile.id).catch(handleError)
 	await refreshValues()
+	announceChange()
 	emit('change')
 }
 
@@ -253,6 +349,7 @@ async function logout(id: string) {
 	if (!selectedAccount.value && accounts.value.length > 0) {
 		await setAccount(accounts.value[0])
 	} else {
+		announceChange()
 		emit('change')
 	}
 	trackEvent('AccountLogOut')

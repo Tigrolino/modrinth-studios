@@ -6,6 +6,11 @@ import { useRouter } from 'vue-router'
 
 import { useStudioAppearance } from '@/composables/use-studio-appearance.ts'
 
+import { computed, ref } from 'vue'
+
+import AccountsCard from '@/features/minecraft-accounts/accounts-card.vue'
+import type { MinecraftAccountsActions } from '@/features/minecraft-accounts/context'
+
 import AppActionBar from './action-bar.vue'
 import Breadcrumbs from './breadcrumbs.vue'
 import WindowControls from './window-controls.vue'
@@ -16,6 +21,21 @@ defineProps<{
 	showSidebarToggle: boolean
 	sidebarToggled: boolean
 }>()
+
+// Modrinth Studios: the Minecraft account switcher lives here (not in the sidebar).
+const accounts = ref<InstanceType<typeof AccountsCard> | null>(null)
+const minecraftAccounts = computed<MinecraftAccountsActions | null>(() => {
+	const card = accounts.value
+	if (!card) return null
+	return {
+		loginDisabled: card.loginDisabled,
+		refreshValues: card.refreshValues,
+		setEquippedSkin: card.setEquippedSkin,
+		setLoginDisabled: card.setLoginDisabled,
+		login: card.login,
+	}
+})
+defineExpose({ minecraftAccounts })
 
 const emit = defineEmits<{
 	'toggle-sidebar': []
@@ -86,6 +106,11 @@ const messages = defineMessages({
 			<div class="flex mr-3">
 				<Suspense>
 					<AppActionBar />
+				</Suspense>
+			</div>
+			<div class="mr-3 flex items-center">
+				<Suspense>
+					<AccountsCard ref="accounts" compact />
 				</Suspense>
 			</div>
 			<WindowControls />

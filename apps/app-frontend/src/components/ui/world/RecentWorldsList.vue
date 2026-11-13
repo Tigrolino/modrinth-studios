@@ -53,6 +53,10 @@ const messages = defineMessages({
 
 const props = defineProps<{
 	recentInstances: GameInstance[]
+	/** Modrinth Studios: hide the "Jump in" heading (Play mode shows its own). */
+	hideTitle?: boolean
+	/** Modrinth Studios: only worlds/servers, no "launch the instance" entries. */
+	worldsOnly?: boolean
 }>()
 
 const appSettings = useAppSettings()
@@ -219,6 +223,9 @@ const worldItems = computed<WorldJumpBackInItem[]>(() => {
 
 const jumpBackInItems = computed<JumpBackInItem[]>(() => {
 	const worlds = [...worldItems.value]
+	if (props.worldsOnly) {
+		return worlds.sort((a, b) => b.sort_time.diff(a.sort_time)).slice(0, MAX_JUMP_BACK_IN)
+	}
 	const instanceItems: InstanceJumpBackInItem[] = []
 	for (const instance of props.recentInstances) {
 		const worldItem = worlds.find((item) => item.instance.id === instance.id)
@@ -458,7 +465,11 @@ onUnmounted(() => {
 	<Accordion
 		v-if="loading || jumpBackInItems.length > 0"
 		open-by-default
-		button-class="group mt-1 mb-3 flex w-fit cursor-pointer items-center border-0 bg-transparent p-0 text-left"
+		:button-class="
+			hideTitle
+				? 'hidden'
+				: 'group mt-1 mb-3 flex w-fit cursor-pointer items-center border-0 bg-transparent p-0 text-left'
+		"
 	>
 		<template #title>
 			<span class="flex items-center gap-1 text-2xl font-semibold leading-none text-contrast mr-1">

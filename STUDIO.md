@@ -1,85 +1,88 @@
-# Studio
+# What's in Modrinth Studios
 
-This is a personal fork of the [Modrinth App](https://modrinth.com/app) with a handful of extra features bolted on. It's not affiliated with Modrinth or Rinth, Inc.
+Everything here is on top of the normal Modrinth App. If something isn't listed, it works the same as in the official app.
 
-This file covers what's actually different from stock Modrinth App and how the repo is put together. It's meant to stay short. For the blow by blow of every bug fixed and dead end tried along the way, that history is kept locally and isn't part of this repo.
+## Hosting your own servers
 
-## How this repo is organized
+The Servers tab is called Hosting here, and besides Modrinth Hosting it can show servers from any [Pterodactyl](https://pterodactyl.io) panel. Each server in the list is labeled so you can tell which is which.
 
-There are two branches that matter:
+To add a panel, press "Connect panel" on the Hosting page and enter the panel's address and a client API key. You can create the key on your panel under Account → API Credentials, and it starts with `ptlc_`. You don't need a Modrinth account for any of this. If you aren't logged in, the Hosting page just shows your Pterodactyl servers.
 
-- `main` tracks upstream Modrinth exactly, no changes.
-- `studio` has everything custom on it. This is the branch that gets built and released.
+Pterodactyl servers open in the same pages Modrinth Hosting uses, so you get:
 
-To pull in upstream changes:
+- the live console, with start, stop and restart
+- the file manager, including uploading, editing and zipping or unzipping files
+- backups, and schedules for automatic ones
+- the content browser, to install, update and remove mods, plugins and datapacks from Modrinth
+- installing Modrinth modpacks, and switching the loader or Minecraft version
+- startup settings, ports, and a custom address to show instead of the IP
+- inviting other users by email and choosing what they're allowed to do
+- the panel's activity log, in plain language
 
-```sh
-git checkout main
-git pull origin main
-git checkout studio
-git merge main
-```
+Pumpkin servers work too, including plugins.
 
-Conflicts happen most often in the sidebar, settings pages, and instance/pack logic, since those are the areas Studio touches the most. Resolve them file by file and rebuild before pushing.
+Studio saves a few things Pterodactyl has no place for, like the list of installed mods, in a hidden `.modrinth-studio` folder on the server. Don't delete it unless you want the app to forget that info.
 
-**One gotcha worth knowing up front:** Tauri commands need to be registered in three separate places, the Rust `#[tauri::command]` function, the `generate_handler!` macro list, and the frontend's TypeScript bindings. Missing one of the three usually shows up as a silent "command not found" at runtime rather than a build error, so if a new command isn't working, check all three spots before assuming the logic itself is wrong.
+Some things need an admin key on the panel, like changing a server's egg or its RAM and CPU limits, so the app can't do them. Those options are hidden or show a short note instead.
 
-## What's different from stock Modrinth App
+## Server analytics
 
-### Replays tab
+Every server, Modrinth Hosting or Pterodactyl, has an Analytics page. It shows:
 
-A new sidebar tab for browsing ReplayMod and Flashback recordings across all instances. It scans instance folders for replay files, shows metadata (map, date, players, duration), and supports sorting, grouping, and bulk delete. Metadata is cached so the tab loads fast on repeat visits instead of rescanning the filesystem every time.
+- CPU, RAM, network and players online, live, plus whether the server responds to pings and how fast
+- who joined and when, how long they played, and when the server is busiest, read from the server's logs and shown in your own time zone
+- stats from the world itself, like deaths, distance travelled, blocks mined and mobs killed, with records for each player and some fun facts
 
-### Storage page
+Live graphs only fill in while the app is open, but the player history and world stats go back as far as the server's files do.
 
-Rebuilt from the ground up. Shows real disk usage per instance (worlds, mods, resource packs, etc.) instead of just a folder size, and instance renames no longer break anything downstream that was keyed off the old folder name.
+## Play mode
 
-### Multiple instances at once
+Made for when you mostly play one instance. Turn it on in Settings → Features and pick the instance.
 
-Stock Modrinth App expects one instance running at a time. Studio allows launching several instances simultaneously without them stepping on each other's state.
+After that, the Play button in the sidebar opens a full-screen page for that instance: a big Play button, your screenshots slowly cycling in the background, your playtime and mod count, and your recent worlds and servers so you can jump right back in. The instance's other tabs are still at the top. Your library moves to its own button under Play.
 
-### Playtime correction
+## Minecraft account in the title bar
 
-Fixes cases where playtime tracking could overcount or undercount, mostly around instances that crash or get force closed mid session.
+Your Minecraft account sits in the top bar instead of the sidebar, so you can switch accounts even when the sidebar is collapsed.
 
-### Appearance
+## Replays
 
-A full theming layer on top of the stock light/dark toggle:
+A Replays tab lists your ReplayMod and Flashback recordings from every instance in one place. You can see the map, date, players and length of each one, sort and group them, and delete several at once.
 
-- Custom accent colors
-- Custom background images
-- Adjustable transparency and blur on UI surfaces
-- Custom window/taskbar icons
-- Splash screen customization
-- A theme lock option, so a chosen look doesn't get reset by app updates
+## Storage
 
-### Discord Rich Presence
+The Storage page shows how much space each instance actually uses, split into worlds, mods, resource packs and so on.
 
-Customizable presence text and images instead of the fixed upstream format, so what shows up on Discord while playing can actually reflect what you're doing.
+## Running several instances
 
-### Upstream version shown in Settings
+You can have more than one instance running at the same time.
 
-Settings shows which upstream Modrinth App version this build is based on, so it's easy to tell how far behind (or caught up) Studio is at a glance.
+## Playtime correction
 
-### Smaller fixes
+If an instance crashed or was force closed, its playtime could end up wrong. You can correct it, and the fixed number is used everywhere in the app.
 
-A number of quality of life fixes have gone in over time too: dismissible in app banners, resilience around instance renames so nothing silently breaks, a fix for a database migration conflict that could occur if both Studio and the official Modrinth app were installed on the same machine, and a fix for a misleading error dialog that showed up in situations that weren't actually errors.
+## Appearance
 
-Not everything tried made the cut. A shared Minecraft folders feature (letting instances share one set of mod/resource files instead of duplicating them) was built and then removed after turning out to be too easy to misuse in ways that could corrupt a world or save file. A few UI experiments (drag to reorder instances, a window restore animation) were also reverted after they caused more problems than they solved. None of that is currently in the app.
+There are a lot more options for how the app looks:
 
-## Releasing an update
+- your own accent color
+- a background image
+- how see-through and blurred panels are
+- a custom window and taskbar icon
+- a custom splash screen
+- a theme lock, so updates don't reset your look
 
-1. Bump the version in the relevant `Cargo.toml` / `package.json` files.
-2. Commit and tag the release (`vX.Y.Z`).
-3. Push the tag, which kicks off the GitHub Actions build for Windows, macOS, and Linux.
-4. Once the build finishes, publish the draft release it creates.
+## Discord status
 
-Windows installs use NSIS in passive mode (a visible but non interactive progress bar) rather than fully silent, after silent installs turned out to cause confusing "is this frozen?" moments for people who couldn't tell an update was happening at all.
+You can choose the text and images shown on Discord while you play.
 
-**Important:** if this repository ever goes private, both the in app auto updater and manual downloads for anyone without a GitHub login will stop working until it's public again.
+## Smaller things
 
-Releases are signed. That needs two secrets set in the repo: `TAURI_SIGNING_PRIVATE_KEY` and `TAURI_SIGNING_PRIVATE_KEY_PASSWORD`.
+- Settings shows which Modrinth App version this build is based on.
+- Banners in the app can be dismissed.
+- Renaming an instance doesn't break anything.
+- It can be installed alongside the official Modrinth App.
 
-## Licensing note
+## License
 
-Everything inherited from Modrinth keeps its original license (see the README for the breakdown by package). Anything added or changed in this fork is licensed the same way as the code it touches. Modrinth's branding and assets aren't covered by any of that and aren't reused here.
+Code from Modrinth keeps its original license, and changes made here use the same license as the code they're in. See the README for details. Modrinth's branding isn't used.

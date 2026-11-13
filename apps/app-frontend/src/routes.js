@@ -13,6 +13,16 @@ export default new createRouter({
 				manualScroll: true,
 			},
 		},
+		// Modrinth Studios: library on its own (used by Play mode)
+		{
+			path: '/library',
+			name: 'Library',
+			component: () => import('@/pages/Index.vue'),
+			props: { libraryOnly: true },
+			meta: {
+				manualScroll: true,
+			},
+		},
 		{
 			path: '/hosting/manage/',
 			name: 'Servers',
@@ -117,6 +127,64 @@ export default new createRouter({
 					path: 'gallery',
 					name: 'Gallery',
 					component: () => import('@/pages/project/Gallery.vue'),
+				},
+			],
+		},
+		// Modrinth Studios: Play mode. Same instance pages as below, but under their
+		// own route tree so the play screen and the normal instance page stay separate.
+		{
+			path: '/play/:id',
+			name: 'PlayInstance',
+			component: () => import('@/pages/instance/layout.vue'),
+			children: [
+				{
+					path: '',
+					name: 'InstancePlay',
+					component: () => import('@/pages/instance/play/index.vue'),
+					meta: { renderMode: 'fixed' },
+				},
+				{
+					path: 'content',
+					name: 'PlayContent',
+					component: () => import('@/pages/instance/content/index.vue'),
+					meta: { saveScroll: true },
+				},
+				{
+					path: 'projects/:type',
+					name: 'PlayContentFilter',
+					component: () => import('@/pages/instance/content/index.vue'),
+					meta: { saveScroll: true },
+				},
+				{
+					path: 'worlds',
+					name: 'PlayWorlds',
+					component: () => import('@/pages/instance/worlds/index.vue'),
+				},
+				{
+					path: 'replays',
+					name: 'PlayReplays',
+					component: () => import('@/pages/instance/replays/index.vue'),
+				},
+				{
+					path: 'share',
+					name: 'PlayShare',
+					component: () => import('@/pages/instance/share/index.vue'),
+				},
+				{
+					path: 'files',
+					name: 'PlayFiles',
+					component: () => import('@/pages/instance/files/index.vue'),
+				},
+				{
+					path: 'screenshots',
+					name: 'PlayScreenshots',
+					component: () => import('@/pages/instance/screenshots/index.vue'),
+				},
+				{
+					path: 'logs',
+					name: 'PlayLogs',
+					component: () => import('@/pages/instance/logs/index.vue'),
+					meta: { renderMode: 'fixed' },
 				},
 			],
 		},

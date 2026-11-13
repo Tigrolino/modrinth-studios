@@ -5,6 +5,7 @@ import {
 	ArrowLeftRightIcon,
 	CompassIcon,
 	ImageIcon,
+	LibraryIcon,
 	LogInIcon,
 	LogOutIcon,
 	PlayIcon,
@@ -94,6 +95,7 @@ import SurveyPopup from '@/components/ui/SurveyPopup.vue'
 import { useCheckDisableMouseover } from '@/composables/macCssFix.js'
 import { useAppEvent } from '@/composables/use-app-event'
 import { useAppSettings } from '@/composables/use-app-settings.ts'
+import { usePlayMode } from '@/features/play-mode/state'
 import { useError } from '@/composables/use-error.js'
 import { useInstanceMetadataRefresh } from '@/composables/use-instance-metadata-refresh'
 import { useQuickInstanceLimit } from '@/composables/use-quick-instance-limit.ts'
@@ -212,6 +214,7 @@ import { AppPopupNotificationManager } from './providers/app-popup-notifications
 
 debugStartup('App setup entered')
 const appSettings = useAppSettings()
+const playMode = usePlayMode()
 const appTheme = useTheme()
 const quickInstances = useQuickInstanceLimit()
 // Modrinth Studios: when a custom app icon is set, reflect it in the app's
@@ -1514,7 +1517,9 @@ onMounted(() => {
 })
 
 const sidebar = ref(null)
-provideMinecraftAccounts(computed(() => sidebar.value?.minecraftAccounts ?? null))
+// Modrinth Studios: the account switcher is in the title bar now.
+const titleBar = ref(null)
+provideMinecraftAccounts(computed(() => titleBar.value?.minecraftAccounts ?? null))
 
 useAppEvent('command', handleCommand, appEvents)
 useAppEvent('notification', handleLiveNotification, appEvents)
@@ -2135,15 +2140,19 @@ provideAppUpdateDownloadProgress(appUpdateDownload)
 			class="app-grid-navbar bg-bg-raised flex flex-col p-[0.5rem] pt-0 gap-[0.25rem] w-[--left-bar-width]"
 		>
 			<NavButton
-				v-tooltip.right="formatMessage(messages.home)"
-				to="/"
-				:is-primary="(route) => route.path === '/'"
+				v-tooltip.right="playMode.active.value ? 'Play' : formatMessage(messages.home)"
+				:to="playMode.playPath.value ?? '/'"
+				:is-primary="(route) => route.path === '/' || route.path.startsWith('/play/')"
 				:is-subpage="
 					() =>
 						(route.path.startsWith('/browse') || route.path.startsWith('/project')) && route.query.i
 				"
 			>
 				<PlayIcon class="ml-0.5" />
+			</NavButton>
+			<!-- Modrinth Studios: Play mode moves the library to its own button -->
+			<NavButton v-if="playMode.active.value" v-tooltip.right="'Library'" to="/library">
+				<LibraryIcon />
 			</NavButton>
 			<NavButton
 				v-tooltip.right="formatMessage(commonMessages.discoverContentLabel)"
@@ -2264,6 +2273,7 @@ provideAppUpdateDownloadProgress(appUpdateDownload)
 			</NavButton>
 		</div>
 		<AppTitleBar
+			ref="titleBar"
 			:can-navigate-back="canNavigateBack"
 			:can-navigate-forward="canNavigateForward"
 			:show-sidebar-toggle="false"
@@ -2303,7 +2313,12 @@ provideAppUpdateDownloadProgress(appUpdateDownload)
 				<RightArrowIcon :class="{ 'rotate-180': !sidebarToggled }" />
 			</button>
 		</div>
-		<div class="app-viewport flex-grow router-view">
+		<!-- Modrinth Studios: the Play mode screen doesn't scroll, so drop the reserved
+		     scrollbar gutter there (it showed as a grey strip over the artwork). -->
+		<div
+			class="app-viewport flex-grow router-view"
+			:class="{ 'app-viewport--no-gutter': route.name === 'InstancePlay' }"
+		>
 			<SurveyPopup />
 			<div
 				class="loading-indicator-container h-8 fixed z-50 pointer-events-none"
@@ -2357,7 +2372,11 @@ provideAppUpdateDownloadProgress(appUpdateDownload)
 			<RouterView v-else v-slot="{ Component }">
 				<template v-if="Component">
 					<Suspense @pending="onSuspensePending" @resolve="onSuspenseResolve">
-						<component :is="Component"></component>
+						<!-- Modrinth Studios: separate key so /play and /instance never share a layout -->
+						<component
+							:is="Component"
+							:key="route.path.startsWith('/play/') ? 'play-tree' : 'main-tree'"
+						></component>
 					</Suspense>
 				</template>
 			</RouterView>
@@ -2514,6 +2533,10 @@ provideAppUpdateDownloadProgress(appUpdateDownload)
 	overflow: auto;
 	overflow-x: hidden;
 	scrollbar-gutter: stable;
+}
+.app-viewport--no-gutter {
+	scrollbar-gutter: auto;
+	overflow-y: hidden;
 }
 
 // Modrinth Studios addition: the sidebar toggle. `.sidebar-edge-zone` is a

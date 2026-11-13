@@ -1,8 +1,21 @@
 # Modrinth Studios
 
-Modrinth Studios is a fork of the [Modrinth App](https://modrinth.com/app), the official Minecraft mod and modpack launcher, with some extra features on top: a Replays tab for ReplayMod and Flashback recordings, a rebuilt Storage page, custom Discord Rich Presence, playtime correction, and an appearance system with accent colors, custom backgrounds, transparency, and window icons. It started as a personal project and grew from there.
+Modrinth Studios is a fork of the [Modrinth App](https://modrinth.com/app), the Minecraft launcher for mods and modpacks. It keeps everything the official app does and adds a few bigger things on top:
 
-This isn't affiliated with Modrinth or Rinth, Inc. in any way. If you're looking for the real thing, it's at [modrinth.com](https://modrinth.com), and the official app download is [here](https://modrinth.com/app).
+- Manage your own servers from a Pterodactyl panel in the Hosting tab, with the same console, file manager, backups and mod browser that Modrinth Hosting servers get. You don't need a Modrinth account for this.
+- See analytics for your servers, both Modrinth Hosting and Pterodactyl: live usage, who played and when, and stats from the world itself.
+- Play mode, if you mostly play one instance. The Play button takes you straight to it, and your library gets its own button.
+- A Replays tab for ReplayMod and Flashback recordings, a better Storage page, running more than one instance at a time, playtime correction, custom Discord status, and lots of options for how the app looks.
+
+[STUDIO.md](STUDIO.md) goes through all of it in more detail.
+
+This project isn't affiliated with Modrinth or Rinth, Inc. If you want the official app, get it from [modrinth.com/app](https://modrinth.com/app).
+
+## Download
+
+Grab the latest installer from the [releases page](https://github.com/Tigrolino/modrinth-studios/releases). Only Windows is built at the moment. The app updates itself when a new version is out.
+
+It can be installed next to the official Modrinth App without problems.
 
 ## AI notice
 
@@ -10,23 +23,9 @@ This fork was coded with AI. I've reviewed every function and made sure I unders
 approve of the changes, but there may still be issues I haven't discovered - if you come across
 anything that seems incorrect or broken, please report it to me.
 
-I also want to be transparent about my views on AI. I don't fully support its use in every context, and I believe there are areas where it shouldn't be used, such as the creation of images or videos. However, I found that adding these QoL features made the Modrinth launcher much more useful to me, which is why I decided to make this fork. I wanted to be upfront about how AI was used in the project and provide some context for why I chose to use it.
+I also want to be transparent about my views on AI. I don't fully support its use in every context, and I believe there are areas where it shouldn't be used, such as the creation of images or videos. However, I found that adding these features made the Modrinth launcher much more useful to me, which is why I decided to make this fork. I wanted to be upfront about how AI was used in the project and provide some context for why I chose to use it.
 
-## What's different from upstream
-
-The list above covers the highlights, but [STUDIO.md](STUDIO.md) goes into more detail on each one and is kept up to date as things change.
-
-## Repository layout
-
-This started as a full clone of Modrinth's monorepo, which also has the website, the backend API, and various internal tools in it. None of that is needed to build the desktop app, so it's been trimmed down to just the app and the packages it depends on:
-
-- `apps/app`: the Tauri/Rust shell
-- `apps/app-frontend`: the Vue UI
-- `packages/app-lib`: the core launcher logic (instance management, mod downloads, auth, etc.)
-- `packages/ui`, `packages/assets`, `packages/utils`, `packages/api-client`: shared frontend packages
-- `packages/daedalus`, `packages/ariadne`, and a few smaller Rust crates: supporting libraries the app depends on
-
-## Development
+## Building it yourself
 
 ```sh
 pnpm install
@@ -34,33 +33,26 @@ cp packages/app-lib/.env.prod packages/app-lib/.env
 pnpm app:dev
 ```
 
-That gets you a dev build with hot reload. Modrinth's contributor guide for the desktop app is still accurate for the parts of the codebase inherited from upstream, and worth reading before making changes: [docs.modrinth.com/contributing/theseus](https://docs.modrinth.com/contributing/theseus/).
+This starts a dev build with hot reload. Modrinth's [contributor guide](https://docs.modrinth.com/contributing/theseus/) for the app still applies to everything inherited from upstream.
 
-Before changing anything, take a look at the "How this repo is organized" section in [STUDIO.md](STUDIO.md). It covers how this fork stays mergeable with upstream, plus a Tauri command registration gotcha that's caused real bugs more than once.
+The repo only contains the desktop app and the packages it needs:
 
-## Pulling in upstream updates
-
-`main` tracks real Modrinth (`origin`) untouched. `studio` is the branch with everything custom on it, and it's what actually gets built and released.
-
-```sh
-git checkout main
-git pull origin main
-git checkout studio
-git merge main
-```
-
-STUDIO.md's "Releasing an update" section covers bumping the version and tagging a release after that.
+- `apps/app` is the Tauri/Rust side
+- `apps/app-frontend` is the Vue UI
+- `packages/app-lib` is the launcher logic (instances, downloads, accounts)
+- `packages/ui`, `packages/assets`, `packages/utils` and `packages/api-client` are shared frontend packages
+- `packages/daedalus`, `packages/ariadne` and a few small Rust crates are supporting libraries
 
 ## License
 
-Modrinth's code is split across packages, each under its own license: GPL-3.0 for `apps/app`, `apps/app-frontend`, `packages/ui`, `packages/assets`, and `packages/utils`; LGPL-3.0 for `packages/api-client`. Check the `LICENSE` file in a given package for specifics. Everything changed or added in this fork stays under the same terms as the code it touches.
+Modrinth's code is split across packages, each under its own license: GPL-3.0 for `apps/app`, `apps/app-frontend`, `packages/ui`, `packages/assets` and `packages/utils`, and LGPL-3.0 for `packages/api-client`. Check the `LICENSE` file in each package for details. Changes made in this fork use the same license as the code they're in.
 
-Modrinth's branding (the wrench-in-labyrinth logo, cover images, and so on) isn't covered by that and can't be reused without permission from Rinth, Inc. See [COPYING.md](COPYING.md) for the full list of what that covers; this fork doesn't ship any of it.
+Modrinth's branding (the logo, cover images and so on) isn't covered by those licenses and can't be reused without permission from Rinth, Inc. [COPYING.md](COPYING.md) lists what that includes. This fork doesn't ship any of it.
 
 ## Security
 
-If you find a security issue in code inherited from upstream Modrinth, report it through Modrinth's own [disclosure process](https://modrinth.com/legal/security) rather than here. This fork doesn't run any of its own backend services or handle user data beyond what the official app already does.
+Security issues in code that comes from Modrinth should go through their [disclosure process](https://modrinth.com/legal/security). This fork has no servers of its own. The only extra sensitive data it stores is your Pterodactyl API key, which stays on your computer and is only sent to your own panel.
 
 ## Support
 
-There's no formal support channel for this fork. For anything about the actual Modrinth platform (the website, the official app, accounts), use their [support page](https://support.modrinth.com) or [Discord](https://discord.modrinth.com).
+For problems with this fork, open an issue here. For anything about Modrinth itself (the website, the official app, your account), use their [support page](https://support.modrinth.com) or [Discord](https://discord.modrinth.com).

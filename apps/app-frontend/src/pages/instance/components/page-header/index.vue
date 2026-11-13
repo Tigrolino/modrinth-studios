@@ -1,16 +1,27 @@
 <template>
-	<PageHeader :title="instance.name">
+	<PageHeader
+		:title="instance.name"
+		:divider="!hero"
+		:header-class="hero ? 'pt-6 pb-2' : ''"
+		:row-class="hero ? '!flex-col !items-start !gap-6' : ''"
+		:main-class="hero ? 'items-center !gap-6' : ''"
+		:title-class="
+			hero
+				? '!text-[clamp(3rem,4.2vw,6.5rem)] !font-extrabold !leading-none tracking-tight drop-shadow-lg'
+				: ''
+		"
+	>
 		<template #leading>
 			<Avatar
 				:src="iconSrc"
 				:alt="instance.name"
-				size="64px"
+				:size="hero ? 'clamp(80px, 6vw, 128px)' : '64px'"
 				:tint-by="instance.id"
 				pad-transparent-corners
 			/>
 		</template>
 
-		<template v-if="instance.shared_instance || instance.quarantined" #badges>
+		<template v-if="!hero && (instance.shared_instance || instance.quarantined)" #badges>
 			<PageHeaderBadgeItem
 				v-if="instance.quarantined"
 				:icon="LockIcon"
@@ -79,7 +90,7 @@
 		</template>
 
 		<template #actions>
-			<PageHeaderActions>
+			<PageHeaderActions :class="{ 'studio-hero-actions': hero }">
 				<Button
 					v-if="isInstalling"
 					type="colored"
@@ -338,6 +349,8 @@ const props = withDefaults(
 		minecraftServer?: Labrinth.Projects.v3.Project['minecraft_server']
 		canHideFromLibrary?: boolean
 		hiddenFromLibrary?: boolean
+		/** Modrinth Studios: large "play mode" presentation (see features/play-mode). */
+		hero?: boolean
 	}>(),
 	{
 		iconSrc: null,
@@ -358,6 +371,7 @@ const props = withDefaults(
 		minecraftServer: undefined,
 		canHideFromLibrary: false,
 		hiddenFromLibrary: false,
+		hero: false,
 	},
 )
 
@@ -506,3 +520,30 @@ const moreActions = computed<ButtonMenuOption[]>(() => {
 	return actions
 })
 </script>
+
+<style scoped>
+/*
+ * Modrinth Studios: Play mode header actions. Every control in the row gets the
+ * same height and corner radius; the main action is just wider.
+ */
+.studio-hero-actions {
+	align-items: center;
+	gap: 0.75rem;
+}
+.studio-hero-actions :deep(button) {
+	height: 3.5rem;
+	min-width: 3.5rem;
+	border-radius: 1rem;
+}
+.studio-hero-actions :deep(button svg) {
+	width: 1.5rem;
+	height: 1.5rem;
+}
+/* Main action (Play / Stop / Repair, also inside a split button) */
+.studio-hero-actions :deep(> button:first-child),
+.studio-hero-actions :deep(> div:first-child > button:first-child) {
+	padding-inline: 2.5rem;
+	font-size: 1.25rem;
+	gap: 0.75rem;
+}
+</style>

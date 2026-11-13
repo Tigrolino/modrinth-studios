@@ -1,7 +1,66 @@
 <template>
-	<div v-if="instance" :class="{ 'flex h-full flex-col': isFixedRender }">
+	<div
+		v-if="instance"
+		:class="{
+			'flex h-full flex-col': isFixedRender,
+			'relative isolate overflow-x-clip': showPlayBackdrop,
+		}"
+	>
+		<!-- Only when no custom app background is set; otherwise that shows through. -->
+		<PlayBackdrop v-if="showPlayBackdrop" :instance-id="instance.id" :icon-src="icon" />
+		<!-- Modrinth Studios: Play mode puts the instance tabs at the very top -->
+		<!--
+			Play view tab bar: centred and frosted over the artwork on the Play tab; on the
+			other tabs a normal row with the instance's icon + name so it reads as a page.
+		-->
 		<div
-			:class="['p-6 pr-2 pb-4', { 'shrink-0': isFixedRender }]"
+			v-if="isPlayModeInstance"
+			:class="[
+				'play-nav grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-4 px-6 pt-5 pb-1',
+				{ 'shrink-0': isFixedRender },
+			]"
+		>
+			<!-- Same bar on every tab, so nothing jumps when switching. -->
+			<button
+				type="button"
+				class="flex min-w-0 cursor-pointer items-center gap-2 justify-self-start border-0 bg-transparent p-0 text-contrast hover:opacity-80"
+				@click="router.push(basePath)"
+			>
+				<Avatar :src="icon" :alt="instance.name" size="32px" :tint-by="instance.id" />
+				<span class="truncate text-lg font-extrabold max-xl:hidden">{{ instance.name }}</span>
+			</button>
+			<NavTabs :links="tabs" />
+			<div class="flex justify-end">
+				<!-- On the other tabs, keep Play/Stop one click away. -->
+				<template v-if="!isPlayRoute">
+					<Button
+						v-if="playing"
+						type="colored"
+						color="red"
+						size="lg"
+						:disabled="stopping"
+						@click="stopInstance('PlayModeBar')"
+					>
+						<StopCircleIcon /> {{ stopping ? 'Stopping…' : 'Stop' }}
+					</Button>
+					<Button
+						v-else
+						type="colored"
+						color="brand"
+						size="lg"
+						:disabled="loading || instance.install_stage !== 'installed' || !!instance.quarantined"
+						@click="startInstance('PlayModeBar')"
+					>
+						<PlayIcon /> {{ loading ? 'Starting…' : 'Play' }}
+					</Button>
+				</template>
+			</div>
+		</div>
+		<div
+			:class="[
+				isPlayModeInstance ? 'p-0' : 'p-6 pr-2 pb-4',
+				{ 'shrink-0': isFixedRender },
+			]"
 			@contextmenu.prevent.stop="(event) => handleRightClick(event)"
 		>
 			<ExportModal v-if="!instance.quarantined" ref="exportModal" :instance="instance" />
@@ -39,7 +98,11 @@
 				ref="sharedInstanceReportModal"
 				@reported="handleSharedInstanceReported"
 			/>
+			<!-- In the play view the header moves down next to the overview (#studio-play-hero) -->
+			<Teleport defer to="#studio-play-hero" :disabled="!playBottomLayout">
 			<InstancePageHeader
+				v-if="!isPlayModeInstance || isPlayRoute"
+				:hero="isPlayModeInstance"
 				:instance="instance"
 				:icon-src="icon"
 				:is-server-instance="isServerInstance"
@@ -72,10 +135,12 @@
 				@toggle-hidden="() => toggleHiddenFromLibrary()"
 				@report="reportSharedInstance"
 			/>
+			</Teleport>
 		</div>
 		<div :class="['px-6', { 'shrink-0': isFixedRender }]">
-			<NavTabs :links="tabs" />
+			<NavTabs v-if="!isPlayModeInstance" :links="tabs" />
 			<InstanceAdmonitions
+				v-if="!playBottomLayout"
 				class="mt-4"
 				:instance="instance"
 				:shared-instance-unavailable-reason="sharedInstanceUnavailableReason"
@@ -90,7 +155,40 @@
 				@review-update="reviewSharedInstanceUpdate"
 			/>
 		</div>
-		<div :class="['p-6 pt-4', { 'min-h-0 flex-1 overflow-y-auto': isFixedRender }]">
+		<div
+			:class="[
+				'p-6 pt-4',
+				{ 'min-h-0 flex-1 overflow-y-auto': isFixedRender },
+				{ 'flex flex-col gap-4': playBottomLayout },
+			]"
+		>
+			<!-- Play view: notices sit with the overview at the bottom (see play/index.vue) -->
+			<!-- Play view hero row: header (left) + the play page's highlights (right) -->
+			<div
+				:class="
+					playBottomLayout
+						? 'order-0 flex min-h-0 flex-1 flex-wrap items-end justify-between gap-x-10 gap-y-6 pb-2'
+						: 'hidden'
+				"
+			>
+				<div id="studio-play-hero" class="min-w-0" />
+				<div id="studio-play-side" class="min-w-0" />
+			</div>
+			<div v-if="playBottomLayout" class="order-1 shrink-0">
+			<InstanceAdmonitions
+					:instance="instance"
+					:shared-instance-unavailable-reason="sharedInstanceUnavailableReason"
+					:shared-instance-unavailable-manager="sharedInstanceUnavailableManager"
+					:shared-instance-wrong-account="sharedInstanceWrongAccount"
+					:shared-instance-expected-user-id="sharedInstanceExpectedUserId"
+					:shared-instance-role="instance.shared_instance?.role"
+					:shared-instance-signed-out="sharedInstanceSignedOut"
+					:shared-instance-update-available="sharedInstanceUpdatePreview?.updateAvailable === true"
+					@published="refreshInstance"
+					@delete="requestInstanceDeletion"
+					@review-update="reviewSharedInstanceUpdate"
+				/>
+			</div>
 			<RouterView v-slot="{ Component }">
 				<template v-if="Component">
 					<Suspense
@@ -127,6 +225,8 @@ import {
 	ContextMenu,
 	defineMessages,
 	injectNotificationManager,
+	Avatar,
+	Button,
 	NavTabs,
 	useLoadingBarToken,
 	useVIntl,
@@ -158,6 +258,7 @@ import { injectInstanceLaunchState } from '@/features/instances/launch-state'
 import { useLinkedServer } from '@/features/instances/linked-server/use-linked-server'
 import InstanceSettingsModal from '@/features/instances/settings-modal/index.vue'
 import { useHiddenInstances } from '@/features/library/hidden-instances/use-hidden-instances'
+import { usePlayMode } from '@/features/play-mode/state'
 import { serverStatusQueryOptions } from '@/features/servers/queries'
 import { trackEvent } from '@/helpers/analytics'
 import { toError } from '@/helpers/errors'
@@ -190,6 +291,7 @@ import { injectServerInstall } from '@/providers/server-install'
 import { useRootBreadcrumb } from '@/shared/breadcrumbs'
 
 import InstanceAdmonitions from './components/admonitions/index.vue'
+import PlayBackdrop from './play/play-backdrop.vue'
 import InstancePageHeader from './components/page-header/index.vue'
 import { provideInstancePage } from './instance-context'
 import {
@@ -255,11 +357,15 @@ const messages = defineMessages({
 })
 
 const router = useRouter()
+// Modrinth Studios: this layout serves two separate route trees: the normal
+// instance page (/instance/:id) and Play mode (/play/:id). Each mounted copy
+// only follows routes of its own tree.
+const routeTreePrefix = router.currentRoute.value.path.startsWith('/play/') ? '/play/' : '/instance/'
 const displayedInstanceRoute = shallowRef(router.currentRoute.value)
 watch(
 	() => router.currentRoute.value,
 	(nextRoute) => {
-		if (nextRoute.path.startsWith('/instance/')) {
+		if (nextRoute.path.startsWith(routeTreePrefix)) {
 			displayedInstanceRoute.value = nextRoute
 		}
 	},
@@ -478,7 +584,7 @@ useRootBreadcrumb({
 		alt: instance.value?.name,
 		tintBy: instance.value?.id ?? instanceId.value,
 	}),
-	to: () => `/instance/${encodeURIComponent(instanceId.value)}`,
+	to: () => `${routeTreePrefix}${encodeURIComponent(instanceId.value)}`,
 })
 
 const loading = ref(false)
@@ -611,7 +717,7 @@ watch(
 	{ immediate: true },
 )
 
-const basePath = computed(() => `/instance/${encodeURIComponent(instanceId.value)}`)
+const basePath = computed(() => `${routeTreePrefix}${encodeURIComponent(instanceId.value)}`)
 
 /**
  * Per-route layout mode.
@@ -638,11 +744,27 @@ const showShareTab = computed(() => {
 	)
 })
 
+// Modrinth Studios: Play mode (features/play-mode)
+const playMode = usePlayMode()
+const isPlayRoute = computed(() => displayedInstanceRoute.value.name === 'InstancePlay')
+// Play view = this layout is mounted for the /play tree. It never mixes with
+// the normal /instance page of the same instance.
+const isPlayModeInstance = computed(() => routeTreePrefix === '/play/')
+watch(isPlayModeInstance, (value) => (playMode.inPlayView.value = value), { immediate: true })
+const playBottomLayout = computed(() => isPlayModeInstance.value && isPlayRoute.value)
+const showPlayBackdrop = computed(
+	() => playBottomLayout.value && studioAppearance.backgroundMode === 'default',
+)
+onUnmounted(() => (playMode.inPlayView.value = false))
+
 const tabs = computed(() => {
 	const instanceTabs = [
+		...(isPlayModeInstance.value
+			? [{ label: 'Play', href: `${basePath.value}`, icon: PlayIcon }]
+			: []),
 		{
 			label: formatMessage(messages.contentTab),
-			href: `${basePath.value}`,
+			href: isPlayModeInstance.value ? `${basePath.value}/content` : `${basePath.value}`,
 			icon: BoxesIcon,
 		},
 	]
@@ -1177,3 +1299,4 @@ onUnmounted(() => {
 	}
 })
 </script>
+
