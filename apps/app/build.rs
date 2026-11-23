@@ -508,6 +508,38 @@ fn main() {
             )
             .plugin(
                 // Modrinth Studios addition
+                "studio-clients",
+                InlinedPlugin::new()
+                    .commands(&[
+                        "studio_clients_versions",
+                        "studio_clients_setup",
+                        "studio_clients_get",
+                        "studio_clients_prepare",
+                        "studio_clients_news",
+                        "studio_clients_icon",
+                        "studio_clients_import_sources",
+                        "studio_clients_import",
+                        "studio_news_text",
+                        "studio_news_media",
+                        "norisk_pack_mods",
+                        "norisk_sign_in",
+                        "norisk_signed_in",
+                        "norisk_capes_browse",
+                        "norisk_capes_mine",
+                        "norisk_cape_equip",
+                        "norisk_cape_unequip",
+                        "norisk_cape_upload",
+                        "norisk_cape_texture",
+                        "horizon_store_list",
+                        "horizon_store_install",
+                        "horizon_store_remove",
+                    ])
+                    .default_permission(
+                        DefaultPermissionRule::AllowAllCommands,
+                    ),
+            )
+            .plugin(
+                // Modrinth Studios addition
                 "replays",
                 InlinedPlugin::new()
                     .commands(&[

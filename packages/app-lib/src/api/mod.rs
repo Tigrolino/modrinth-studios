@@ -22,6 +22,8 @@ pub mod replays;
 pub mod reports;
 pub mod server_address;
 pub mod settings;
+// Modrinth Studios addition, see packages/app-lib/src/api/studio_clients/mod.rs
+pub mod studio_clients;
 pub mod tags;
 pub mod upload;
 pub mod users;

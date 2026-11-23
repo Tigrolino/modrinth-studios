@@ -64,7 +64,9 @@ fn is_link_sync(path: &Path) -> bool {
 /// this module creates — a hard-linked file (options.txt/servers.dat) has no
 /// separate "target" to read, since both paths just name the same
 /// underlying file; callers never need this for those.
-pub async fn read_link_target(path: impl AsRef<Path>) -> crate::Result<PathBuf> {
+pub async fn read_link_target(
+    path: impl AsRef<Path>,
+) -> crate::Result<PathBuf> {
     let path = path.as_ref();
     tokio::fs::read_link(path).await.map_err(|e| {
         anyhow::Error::new(crate::ErrorKind::FSError(format!(
@@ -83,9 +85,7 @@ pub async fn remove_link(path: impl AsRef<Path>) -> crate::Result<()> {
     tokio::task::spawn_blocking(move || remove_link_sync(&path))
         .await
         .map_err(|e| {
-            anyhow::anyhow!(
-                "shared folder unlink task panicked: {e}"
-            )
+            anyhow::anyhow!("shared folder unlink task panicked: {e}")
         })??;
     Ok(())
 }

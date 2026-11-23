@@ -143,9 +143,9 @@ fn main() {
         use windows::core::PCWSTR;
 
         let aumid: Vec<u16> = "ModrinthStudios.App\0".encode_utf16().collect();
-        if let Err(e) =
-            unsafe { SetCurrentProcessExplicitAppUserModelID(PCWSTR(aumid.as_ptr())) }
-        {
+        if let Err(e) = unsafe {
+            SetCurrentProcessExplicitAppUserModelID(PCWSTR(aumid.as_ptr()))
+        } {
             tracing::warn!("Failed to set AppUserModelID: {e}");
         }
     }
@@ -361,6 +361,7 @@ fn main() {
         .plugin(api::replays::init())
         .plugin(api::studio::init())
         .plugin(api::pterodactyl::init())
+        .plugin(api::studio_clients::init())
         .plugin(api::worlds::init())
         .manage(PendingUpdateData::default())
         .manage(RestartAfterPendingUpdate::default())

@@ -72,9 +72,9 @@ pub use self::tunnel::*;
 
 pub mod db;
 pub(crate) mod db_backup;
+mod mr_auth;
 pub(crate) mod shared_folder_reversion;
 pub(crate) mod studio_migrations;
-mod mr_auth;
 
 pub use self::mr_auth::*;
 
@@ -201,9 +201,7 @@ impl State {
             // tracked path (see reconcile_instance_paths.rs), and the
             // watcher needs to be registered against the corrected path,
             // not a stale one.
-            if let Err(e) =
-                instances::reconcile_instance_paths(state).await
-            {
+            if let Err(e) = instances::reconcile_instance_paths(state).await {
                 tracing::error!(
                     "Error reconciling renamed instance folders: {e}"
                 );

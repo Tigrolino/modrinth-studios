@@ -2,10 +2,11 @@
 
 Modrinth Studios is a fork of the [Modrinth App](https://modrinth.com/app), the Minecraft launcher for mods and modpacks. It keeps everything the official app does and adds a few bigger things on top:
 
+- Play Lunar Client, LabyMod, NoRisk Client and Horizon as normal instances, with their news, capes and patch notes built in, and Modrinth mods next to Lunar and NoRisk.
 - Manage your own servers from a Pterodactyl panel in the Hosting tab, with the same console, file manager, backups and mod browser that Modrinth Hosting servers get. You don't need a Modrinth account for this.
 - See analytics for your servers, both Modrinth Hosting and Pterodactyl: live usage, who played and when, and stats from the world itself.
-- Play mode, if you mostly play one instance. The Play button takes you straight to it, and your library gets its own button.
-- A Replays tab for ReplayMod and Flashback recordings, a better Storage page, running more than one instance at a time, playtime correction, custom Discord status, and lots of options for how the app looks.
+- Play mode, if you mostly play one instance. The Play button takes you straight to it, with your favourite instances one click away.
+- A Replays tab for ReplayMod and Flashback recordings, a better Storage page, running more than one instance at a time, playtime correction, custom Discord status, update articles in the news panel, and lots of options for how the app looks.
 
 [STUDIO.md](STUDIO.md) goes through all of it in more detail.
 

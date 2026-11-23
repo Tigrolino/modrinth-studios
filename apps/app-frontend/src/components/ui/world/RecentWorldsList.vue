@@ -57,6 +57,12 @@ const props = defineProps<{
 	hideTitle?: boolean
 	/** Modrinth Studios: only worlds/servers, no "launch the instance" entries. */
 	worldsOnly?: boolean
+	/**
+	 * Modrinth Studios: this instance's own worlds (Play mode). The app-wide
+	 * "recent worlds" list only holds the last few worlds of *any* instance, so
+	 * after playing something else this instance's worlds weren't in it.
+	 */
+	instanceWorlds?: WorldWithInstance[]
 }>()
 
 const appSettings = useAppSettings()
@@ -209,12 +215,14 @@ const recentWorldsOptions = recentWorldsQueryOptions(MAX_JUMP_BACK_IN)
 const recentWorldsQuery = useQuery({
 	...recentWorldsOptions,
 	queryKey: [...recentWorldsOptions.queryKey] as const,
-	enabled: showWorlds,
+	enabled: computed(() => showWorlds.value && !props.instanceWorlds),
 })
-const loading = computed(() => showWorlds.value && recentWorldsQuery.isLoading.value)
+const loading = computed(
+	() => showWorlds.value && !props.instanceWorlds && recentWorldsQuery.isLoading.value,
+)
 const worldItems = computed<WorldJumpBackInItem[]>(() => {
 	if (!showWorlds.value) return []
-	return (recentWorldsQuery.data.value ?? []).flatMap<WorldJumpBackInItem>((world) => {
+	return (props.instanceWorlds ?? recentWorldsQuery.data.value ?? []).flatMap<WorldJumpBackInItem>((world) => {
 		const instance = props.recentInstances.find((instance) => instance.id === world.instance_id)
 		if (!instance || !world.last_played) return []
 		return [{ type: 'world', sort_time: dayjs(world.last_played), world, instance }]

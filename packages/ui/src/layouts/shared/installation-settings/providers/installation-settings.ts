@@ -78,6 +78,7 @@ export interface InstallationSettingsContext {
 	afterSave?: () => Promise<void>
 	closeSettings?: () => void
 
+	editDisabledReason?: ComputedRef<string | null>
 	lockPlatform?: boolean
 	hideLoaderVersion?: boolean
 

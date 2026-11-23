@@ -10,6 +10,7 @@ import { computed } from 'vue'
 import { useRouter } from 'vue-router'
 
 import RecentWorldsList from '@/components/ui/world/RecentWorldsList.vue'
+import type { World } from '@/helpers/worlds'
 import {
 	instanceContentQueryOptions,
 	instancePlaytimeCorrectionQueryOptions,
@@ -51,6 +52,12 @@ const totalSeconds = computed(
 )
 
 const recent = computed(() => [instance.value])
+const hasPlayedWorld = computed(() =>
+	((worldsQuery.data.value ?? []) as World[]).some((w) => !!w.last_played),
+)
+const instanceWorlds = computed(() =>
+	((worldsQuery.data.value ?? []) as World[]).map((w) => ({ ...w, instance_id: instanceId.value })),
+)
 
 const router = useRouter()
 const base = computed(() => `/play/${encodeURIComponent(instanceId.value)}`)
@@ -120,7 +127,15 @@ const hours = computed(() => Math.floor(totalSeconds.value / 3600))
 			<div class="mb-1 px-1">
 				<span class="panel-title">Jump back in</span>
 			</div>
-			<RecentWorldsList :recent-instances="recent" hide-title worlds-only />
+			<RecentWorldsList
+				:recent-instances="recent"
+				:instance-worlds="instanceWorlds"
+				hide-title
+				worlds-only
+			/>
+			<p v-if="worldsQuery.isSuccess.value && !hasPlayedWorld" class="m-0 px-1 py-2 text-sm text-secondary">
+				Worlds and servers you play show up here.
+			</p>
 		</section>
 	</div>
 </template>

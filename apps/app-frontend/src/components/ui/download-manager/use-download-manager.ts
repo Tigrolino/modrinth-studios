@@ -37,11 +37,12 @@ import {
 	sharedInstancePublishes,
 	type SharedInstancePublishTask,
 } from './shared-instance-publishes'
+import { type StudioClientTask, studioClientTasks } from './studio-client-tasks'
 import { useInstallJobDisplay } from './use-install-job-display'
 
 export interface DownloadManagerJob {
 	id: string
-	kind?: 'external-file' | 'debug-export' | 'shared-instance-publish'
+	kind?: 'external-file' | 'debug-export' | 'shared-instance-publish' | 'studio-client'
 	serverId?: string
 	createdAt?: string
 	instanceId: string | null
@@ -189,11 +190,16 @@ export function useDownloadManager() {
 	const publishRows = computed(() =>
 		[...sharedInstancePublishes.value.values()].map(buildPublishRow),
 	)
+	// Modrinth Studios: client installation downloads
+	const clientRows = computed(() =>
+		[...studioClientTasks.value.values()].map(buildClientRow),
+	)
 	const allRows = computed(() => [
 		...rows.value,
 		...fileRows.value,
 		...debugExportRows.value,
 		...publishRows.value,
+		...clientRows.value,
 	])
 
 	const activeJobs = computed(() =>
@@ -264,6 +270,33 @@ export function useDownloadManager() {
 					? `${formatBytes(task.processedBytes)} / ${formatBytes(task.totalBytes)}`
 					: '',
 			waiting: task.stage !== 'exporting' || !task.totalBytes,
+			eta: '',
+			canRetry: false,
+			canCopyDetails: !!task.error,
+			copied: copiedJobs.value.has(task.id),
+			busy: busyJobs.value.has(task.id),
+		}
+	}
+
+	function buildClientRow(task: StudioClientTask): DownloadManagerJob {
+		return {
+			id: task.id,
+			kind: 'studio-client',
+			createdAt: task.createdAt,
+			instanceId: task.instanceId,
+			status: task.status,
+			paused: false,
+			canceling: false,
+			canPause: false,
+			canCancel: false,
+			title: task.title,
+			iconUrl: task.iconUrl,
+			text: task.message,
+			finishedAt: task.finishedAt,
+			progress: task.progress,
+			overallProgress: task.progress,
+			progressLabel: task.status === 'running' ? `${Math.round(task.progress * 100)}%` : '',
+			waiting: task.status === 'running' && task.progress === 0,
 			eta: '',
 			canRetry: false,
 			canCopyDetails: !!task.error,
@@ -515,6 +548,11 @@ export function useDownloadManager() {
 			if (publish.status !== 'running') sharedInstancePublishes.value.delete(id)
 			return
 		}
+		const clientTask = studioClientTasks.value.get(id)
+		if (clientTask) {
+			if (clientTask.status !== 'running') studioClientTasks.value.delete(id)
+			return
+		}
 		const job = jobs.value.get(id)
 		if (!job || job.status === 'queued' || job.status === 'running') return
 		await runAction(id, async () => {
@@ -533,7 +571,10 @@ export function useDownloadManager() {
 	async function copyDetails(id: string) {
 		await runAction(id, async () => {
 			const publish = sharedInstancePublishes.value.get(id)
-			const file = externalFileDownloads.value.get(id) ?? debugInfoExports.value.get(id)
+			const file =
+				externalFileDownloads.value.get(id) ??
+				debugInfoExports.value.get(id) ??
+				studioClientTasks.value.get(id)
 			const details = publish
 				? (publish.details ?? publish.error ?? '')
 				: file

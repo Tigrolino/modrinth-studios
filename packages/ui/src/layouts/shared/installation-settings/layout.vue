@@ -366,6 +366,7 @@ function handleIncompatibleResetServer() {
 }
 
 function handleStartEditing() {
+	if (ctx.isBusy.value || ctx.editDisabledReason?.value) return
 	debug('handleStartEditing: before', stateSnapshot())
 	form.isEditing.value = true
 	nextTick(() => {
@@ -1013,7 +1014,7 @@ const messages = defineMessages({
 							v-tooltip="ctx.isBusy.value ? ctx.busyMessage?.value : undefined"
 							type="colored"
 							color="orange"
-							:disabled="ctx.isBusy.value"
+							:disabled="ctx.isBusy.value || !!ctx.editDisabledReason?.value"
 							@click="handleStartEditing"
 						>
 							<PencilIcon class="size-5" />
@@ -1021,7 +1022,10 @@ const messages = defineMessages({
 						</Button>
 						<slot name="unlinked-extra-buttons" />
 					</div>
-					<div class="flex items-start gap-2">
+					<p v-if="ctx.editDisabledReason?.value" class="text-primary">
+						{{ ctx.editDisabledReason.value }}
+					</p>
+					<div v-else class="flex items-start gap-2">
 						<CircleAlertIcon class="mt-0.5 size-5 shrink-0 text-orange" />
 						<span class="text-primary">
 							{{

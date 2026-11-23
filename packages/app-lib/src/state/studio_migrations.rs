@@ -105,10 +105,12 @@ async fn ensure_table(pool: &Pool<Sqlite>) -> crate::Result<()> {
 }
 
 async fn is_recorded(pool: &Pool<Sqlite>, version: i64) -> crate::Result<bool> {
-    let count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM studio_migrations WHERE version = ?")
-        .bind(version)
-        .fetch_one(pool)
-        .await?;
+    let count: i64 = sqlx::query_scalar(
+        "SELECT COUNT(*) FROM studio_migrations WHERE version = ?",
+    )
+    .bind(version)
+    .fetch_one(pool)
+    .await?;
 
     Ok(count > 0)
 }
@@ -118,7 +120,9 @@ async fn is_recorded(pool: &Pool<Sqlite>, version: i64) -> crate::Result<bool> {
 /// "already applied" status into `studio_migrations` first so nothing is
 /// lost. Must run **before** `sqlx::migrate!().run(&pool)` — see the module
 /// doc comment for why.
-pub(crate) async fn reconcile_legacy_rows(pool: &Pool<Sqlite>) -> crate::Result<()> {
+pub(crate) async fn reconcile_legacy_rows(
+    pool: &Pool<Sqlite>,
+) -> crate::Result<()> {
     ensure_table(pool).await?;
 
     let legacy_table_count: i64 = sqlx::query_scalar(

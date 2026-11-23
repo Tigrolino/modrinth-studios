@@ -36,6 +36,7 @@ pub mod playtime_correction;
 pub mod pterodactyl;
 pub mod replays;
 pub mod studio;
+pub mod studio_clients;
 #[cfg(windows)]
 mod studio_pinned_icon_windows;
 pub mod worlds;

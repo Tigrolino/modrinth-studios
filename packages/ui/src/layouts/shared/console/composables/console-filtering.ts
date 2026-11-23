@@ -6,6 +6,7 @@ import type { LogLevel, LogLine } from '../types'
 export type FilterPredicate = (line: LogLine) => boolean
 
 export function colorize(line: LogLine, _searchQuery?: string): string {
+	if (line.repeat) return `\x1b[90;3m${line.text}\x1b[0m`
 	switch (line.level) {
 		case 'error':
 			return `\x1b[31;40m${line.text}\x1b[K\x1b[0m`

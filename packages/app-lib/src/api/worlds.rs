@@ -781,8 +781,14 @@ async fn get_world_session_lock(world: &Path) -> Result<tokio::fs::File> {
         .truncate(false)
         .open(&lock_path)
         .await?;
-    file.write_all("☃".as_bytes()).await?;
-    file.sync_all().await?;
+    // Minecraft before 1.13 doesn't lock this file; it writes a timestamp
+    // into it and refuses to save the world once that changes ("The save is
+    // being accessed from another location"). Only fill an empty file so a
+    // running old version is never cut off from saving.
+    if file.metadata().await?.len() == 0 {
+        file.write_all("☃".as_bytes()).await?;
+        file.sync_all().await?;
+    }
     match file.try_lock() {
         Ok(()) => Ok(file),
         Err(fs4::TryLockError::WouldBlock) => Err(io::IOError::IOPathError {
@@ -806,8 +812,12 @@ async fn try_get_world_session_lock(
         .truncate(false)
         .open(world.join("session.lock"))
         .await?;
-    file.sync_all().await?;
-    match file.try_lock() {
+    // Only checking whether the game has the world open, so take a shared
+    // lock: an exclusive one makes Windows fail the game's own reads of this
+    // file, and Minecraft before 1.13 (no OS lock, it re-reads a timestamp
+    // here before every save) then aborts saving chunks. A game that holds
+    // its own lock still makes this fail with WouldBlock.
+    match file.try_lock_shared() {
         Ok(()) => Ok(Some(file)),
         Err(fs4::TryLockError::WouldBlock) => Ok(None),
         Err(fs4::TryLockError::Error(error)) => Err(error.into()),
@@ -1167,5 +1177,58 @@ mod tests {
             entry.read_to_end(&mut actual).unwrap();
             assert_eq!(actual, expected);
         }
+    }
+
+    use super::{get_world_session_lock, try_get_world_session_lock};
+    use fs4::tokio::AsyncFileExt;
+
+    #[tokio::test]
+    async fn locking_keeps_an_old_versions_timestamp() {
+        // Minecraft before 1.13 writes a timestamp here and refuses to save
+        // once it changes, so the app must never overwrite it.
+        let world = tempfile::tempdir().unwrap();
+        let stamp = 1_763_900_000_000_i64.to_be_bytes();
+        fs::write(world.path().join("session.lock"), stamp).unwrap();
+        {
+            let _lock = get_world_session_lock(world.path()).await.unwrap();
+        }
+        assert_eq!(fs::read(world.path().join("session.lock")).unwrap(), stamp);
+        {
+            let _lock = try_get_world_session_lock(world.path()).await.unwrap();
+        }
+        assert_eq!(fs::read(world.path().join("session.lock")).unwrap(), stamp);
+    }
+
+    #[tokio::test]
+    async fn a_missing_lock_file_is_created_like_minecraft_does() {
+        let world = tempfile::tempdir().unwrap();
+        {
+            let _lock = get_world_session_lock(world.path()).await.unwrap();
+        }
+        assert_eq!(
+            fs::read_to_string(world.path().join("session.lock")).unwrap(),
+            "\u{2603}"
+        );
+    }
+
+    #[tokio::test]
+    async fn a_world_open_in_the_game_is_reported_as_locked() {
+        let world = tempfile::tempdir().unwrap();
+        let path = world.path().join("session.lock");
+        fs::write(&path, "\u{2603}").unwrap();
+        assert!(try_get_world_session_lock(world.path()).await.unwrap().is_some());
+
+        // Modern Minecraft holds an exclusive lock while the world is open.
+        let game = tokio::fs::File::options()
+            .read(true)
+            .write(true)
+            .open(&path)
+            .await
+            .unwrap();
+        game.try_lock().unwrap();
+        assert!(try_get_world_session_lock(world.path()).await.unwrap().is_none());
+        assert!(get_world_session_lock(world.path()).await.is_err());
+        drop(game);
+        assert!(try_get_world_session_lock(world.path()).await.unwrap().is_some());
     }
 }

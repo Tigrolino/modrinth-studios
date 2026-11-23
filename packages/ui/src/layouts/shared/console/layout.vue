@@ -226,6 +226,7 @@ onBeforeUnmount(() => {
 })
 
 let lastWrittenIndex = 0
+let lastWrittenTail: LogLine | null = null
 let searchDebounce: ReturnType<typeof setTimeout> | null = null
 
 const resolvedShowInput = computed(() => {
@@ -317,6 +318,7 @@ function rewriteFiltered() {
 	const predicate = buildCombinedPredicate()
 	rewriteTerminal(term, lines, predicate, activeSearchQuery())
 	lastWrittenIndex = lines.length
+	lastWrittenTail = lines[lines.length - 1] ?? null
 }
 
 function handleWindowKeyDown(event: KeyboardEvent) {
@@ -380,6 +382,13 @@ watch(ctx.logLines, (lines, oldLines) => {
 	}
 
 	const predicate = buildCombinedPredicate()
+	// A repeated entry's counter line ("↳ Repeated N more times") is the last
+	// line written and gets swapped for an updated one; redraw it in place.
+	const tail = lastWrittenIndex > 0 ? lines[lastWrittenIndex - 1] : undefined
+	if (tail && tail !== lastWrittenTail && tail.repeat && (!predicate || predicate(tail))) {
+		term.write('\r\x1b[2K' + colorize(tail))
+	}
+	lastWrittenTail = lines[lines.length - 1] ?? null
 	const newLines: string[] = []
 	for (let i = lastWrittenIndex; i < lines.length; i++) {
 		if (!predicate || predicate(lines[i])) {

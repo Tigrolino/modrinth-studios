@@ -216,7 +216,8 @@ async fn revert_instance(
     instance_id: &str,
     instance_path: &str,
 ) -> bool {
-    let instance_full_path = state.directories.instances_dir().join(instance_path);
+    let instance_full_path =
+        state.directories.instances_dir().join(instance_path);
 
     crate::state::instances::watcher::unwatch_instance_folder(
         instance_id,
@@ -263,13 +264,12 @@ async fn revert_instance(
         }
         any
     };
-    let still_linked_file = crate::util::io::read(
-        instance_full_path.join(LINK_STATE_FILE_NAME),
-    )
-    .await
-    .ok()
-    .and_then(|bytes| serde_json::from_slice::<LinkState>(&bytes).ok())
-    .is_some_and(|state| !state.linked_files.is_empty());
+    let still_linked_file =
+        crate::util::io::read(instance_full_path.join(LINK_STATE_FILE_NAME))
+            .await
+            .ok()
+            .and_then(|bytes| serde_json::from_slice::<LinkState>(&bytes).ok())
+            .is_some_and(|state| !state.linked_files.is_empty());
 
     !still_linked_dir && !still_linked_file
 }
@@ -291,12 +291,11 @@ pub(crate) async fn revert_all(state: &State) {
         return;
     }
 
-    let profile_ids: Vec<String> = sqlx::query_scalar(
-        "SELECT id FROM studio_shared_profiles",
-    )
-    .fetch_all(&state.pool)
-    .await
-    .unwrap_or_default();
+    let profile_ids: Vec<String> =
+        sqlx::query_scalar("SELECT id FROM studio_shared_profiles")
+            .fetch_all(&state.pool)
+            .await
+            .unwrap_or_default();
     if profile_ids.is_empty() {
         return;
     }

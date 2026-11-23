@@ -155,7 +155,8 @@ fn parse_server_address_inner(
 // mirroring the exact pattern `util/server_ping.rs`'s SERVER_STATUS_TIMEOUT
 // already uses for the ping itself, guarantees the permit is always released
 // within a bounded time no matter how badly the network misbehaves.
-const DNS_LOOKUP_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(5);
+const DNS_LOOKUP_TIMEOUT: std::time::Duration =
+    std::time::Duration::from_secs(5);
 
 pub async fn resolve_server_address(
     host: &str,
@@ -187,8 +188,7 @@ pub async fn resolve_server_address(
         Ok(Err(e)) if e.is_no_records_found() => None,
         Ok(Err(e)) => return Err(e.into()),
         Ok(Ok(lookup)) => lookup.answers().iter().find_map(|record| {
-            if let hickory_resolver::proto::rr::RData::SRV(srv) = &record.data
-            {
+            if let hickory_resolver::proto::rr::RData::SRV(srv) = &record.data {
                 Some((srv.target.to_string(), srv.port))
             } else {
                 None

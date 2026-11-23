@@ -143,7 +143,7 @@ assert_eq!(decoded, value);
 
 Representation-specific Serde options can be added with `human(...)` and `binary(...)`:
 
-```rust
+```rust,ignore
 #[serde_binhum::serde_binhum]
 struct Value {
     #[serde_binhum(human(flatten), binary(with = "binary_data"))]

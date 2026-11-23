@@ -1279,7 +1279,11 @@ async fn linked_modpack_ids_for_instance(
 // path let the blank value through.
 fn non_empty(id: &str) -> Option<&str> {
     let trimmed = id.trim();
-    if trimmed.is_empty() { None } else { Some(trimmed) }
+    if trimmed.is_empty() {
+        None
+    } else {
+        Some(trimmed)
+    }
 }
 
 fn linked_modpack_ids(link: &InstanceLink) -> Option<(String, String)> {

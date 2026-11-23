@@ -146,7 +146,10 @@ fn api_url(panel: &Panel, path: &str) -> String {
     format!("{}/api/client{}", panel.url, path)
 }
 
-fn authed(panel: &Panel, builder: reqwest::RequestBuilder) -> reqwest::RequestBuilder {
+fn authed(
+    panel: &Panel,
+    builder: reqwest::RequestBuilder,
+) -> reqwest::RequestBuilder {
     builder
         .bearer_auth(&panel.api_key)
         .header("Accept", "application/json")
@@ -156,7 +159,11 @@ fn authed(panel: &Panel, builder: reqwest::RequestBuilder) -> reqwest::RequestBu
 async fn ptero_list_panels<R: Runtime>(
     app: tauri::AppHandle<R>,
 ) -> Result<Vec<PanelInfo>> {
-    Ok(load_panels(&app).await?.iter().map(PanelInfo::from).collect())
+    Ok(load_panels(&app)
+        .await?
+        .iter()
+        .map(PanelInfo::from)
+        .collect())
 }
 
 #[tauri::command]
@@ -245,7 +252,8 @@ async fn ptero_request<R: Runtime>(
 ) -> Result<PteroResponse> {
     let panel = get_panel(&app, &panel_id).await?;
     let method = reqwest::Method::from_bytes(method.to_uppercase().as_bytes())?;
-    let mut builder = authed(&panel, HTTP.request(method, api_url(&panel, &path)));
+    let mut builder =
+        authed(&panel, HTTP.request(method, api_url(&panel, &path)));
     if let Some(body) = body {
         builder = builder.json(&body);
     } else if let Some(text) = text_body {
@@ -359,9 +367,10 @@ async fn upload_bytes(
     bytes: Vec<u8>,
 ) -> Result<()> {
     let (directory, filename) = match path.rsplit_once('/') {
-        Some((dir, name)) => {
-            (if dir.is_empty() { "/" } else { dir }.to_string(), name.to_string())
-        }
+        Some((dir, name)) => (
+            if dir.is_empty() { "/" } else { dir }.to_string(),
+            name.to_string(),
+        ),
         None => ("/".to_string(), path.to_string()),
     };
 
@@ -383,7 +392,11 @@ async fn upload_bytes(
     .json()
     .await?;
 
-    let separator = if signed.attributes.url.contains('?') { '&' } else { '?' };
+    let separator = if signed.attributes.url.contains('?') {
+        '&'
+    } else {
+        '?'
+    };
     let upload_url = format!(
         "{}{separator}directory={}",
         signed.attributes.url,
@@ -461,7 +474,9 @@ struct MrpackProgress {
 fn safe_relative_path(path: &str) -> Option<String> {
     let normalized = path.replace('\\', "/");
     if normalized.starts_with('/')
-        || normalized.split('/').any(|part| part == ".." || part.is_empty())
+        || normalized
+            .split('/')
+            .any(|part| part == ".." || part.is_empty())
         || normalized.contains(':')
     {
         return None;
@@ -554,9 +569,10 @@ async fn ptero_install_mrpack<R: Runtime>(
         let mut archive = zip::ZipArchive::new(Cursor::new(pack))
             .map_err(|e| anyhow::anyhow!("Not a valid .mrpack: {e}"))?;
         let index: MrIndex = {
-            let mut entry = archive
-                .by_name("modrinth.index.json")
-                .map_err(|_| anyhow::anyhow!("modrinth.index.json missing from pack"))?;
+            let mut entry =
+                archive.by_name("modrinth.index.json").map_err(|_| {
+                    anyhow::anyhow!("modrinth.index.json missing from pack")
+                })?;
             let mut text = String::new();
             entry.read_to_string(&mut text)?;
             serde_json::from_str(&text)?
@@ -627,9 +643,11 @@ async fn ptero_install_mrpack<R: Runtime>(
         let Some(url) = file.downloads.first() else {
             continue;
         };
-        pull_or_upload(&panel, &server, url, &path).await.map_err(|e| {
-            anyhow::anyhow!("Failed to install {path}: {}", e.0)
-        })?;
+        pull_or_upload(&panel, &server, url, &path)
+            .await
+            .map_err(|e| {
+                anyhow::anyhow!("Failed to install {path}: {}", e.0)
+            })?;
         installed.push(MrpackInstalledFile {
             path,
             sha1: file.hashes.get("sha1").cloned(),
@@ -655,7 +673,10 @@ async fn ptero_install_mrpack<R: Runtime>(
         let decompress_ok = decompress.status().is_success();
         let _ = authed(
             &panel,
-            HTTP.post(api_url(&panel, &format!("/servers/{server}/files/delete"))),
+            HTTP.post(api_url(
+                &panel,
+                &format!("/servers/{server}/files/delete"),
+            )),
         )
         .json(&serde_json::json!({ "root": "/", "files": [archive_name] }))
         .send()
@@ -849,4 +870,100 @@ async fn ptero_ws_close(conn_id: String) -> Result<()> {
         let _ = socket.send(WsCommand::Close);
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn panel(url: &str) -> Panel {
+        Panel {
+            id: "p1".into(),
+            name: "Home".into(),
+            url: url.into(),
+            api_key: "ptlc_secret".into(),
+        }
+    }
+
+    #[test]
+    fn panel_urls_are_normalized() {
+        assert_eq!(normalize_url(" panel.local:8080/ "), "http://panel.local:8080");
+        assert_eq!(normalize_url("https://panel.example.com///"), "https://panel.example.com");
+        assert_eq!(normalize_url("http://10.0.0.5"), "http://10.0.0.5");
+    }
+
+    #[test]
+    fn client_api_paths_are_built_without_redirect_slashes() {
+        let p = panel("https://panel.example.com");
+        assert_eq!(api_url(&p, "/"), "https://panel.example.com/api/client");
+        assert_eq!(
+            api_url(&p, "/?per_page=100"),
+            "https://panel.example.com/api/client?per_page=100"
+        );
+        assert_eq!(
+            api_url(&p, "/servers/abc/resources"),
+            "https://panel.example.com/api/client/servers/abc/resources"
+        );
+        assert_eq!(api_url(&p, "account"), "https://panel.example.com/api/client/account");
+    }
+
+    #[test]
+    fn the_api_key_never_reaches_the_frontend() {
+        let info = PanelInfo::from(&panel("https://panel.example.com"));
+        let json = serde_json::to_string(&info).unwrap();
+        assert!(!json.contains("ptlc_secret"), "{json}");
+        assert!(!json.contains("api_key"), "{json}");
+        assert!(json.contains("panel.example.com"));
+    }
+
+    #[test]
+    fn modpack_paths_cannot_leave_the_server_folder() {
+        assert_eq!(safe_relative_path("mods/sodium.jar").as_deref(), Some("mods/sodium.jar"));
+        assert_eq!(safe_relative_path("config\\a.toml").as_deref(), Some("config/a.toml"));
+        for bad in [
+            "../escape.jar",
+            "mods/../../escape.jar",
+            "/etc/passwd",
+            "\\windows\\evil",
+            "C:/evil",
+            "mods//double.jar",
+            "",
+        ] {
+            assert_eq!(safe_relative_path(bad), None, "{bad}");
+        }
+    }
+
+    #[test]
+    fn modpack_indexes_parse_with_optional_fields_missing() {
+        let index: MrIndex = serde_json::from_str(
+            r#"{
+                "formatVersion": 1, "game": "minecraft", "name": "Pack", "versionId": "1.0",
+                "files": [
+                    {"path": "mods/a.jar", "hashes": {"sha1": "abc"}, "downloads": ["https://cdn.modrinth.com/a.jar"],
+                     "env": {"client": "required", "server": "unsupported"}},
+                    {"path": "mods/b.jar"}
+                ],
+                "dependencies": {"minecraft": "1.21.11", "fabric-loader": "0.17.0"}
+            }"#,
+        )
+        .unwrap();
+        assert_eq!(index.name, "Pack");
+        assert_eq!(index.version_id, "1.0");
+        assert_eq!(index.files.len(), 2);
+        assert_eq!(index.files[0].env.as_ref().unwrap().server, "unsupported");
+        assert_eq!(index.files[0].hashes.get("sha1").map(String::as_str), Some("abc"));
+        assert!(index.files[1].downloads.is_empty() && index.files[1].env.is_none());
+        assert_eq!(index.dependencies["minecraft"], "1.21.11");
+        let minimal: MrIndex = serde_json::from_str(r#"{"name": "Bare"}"#).unwrap();
+        assert!(minimal.files.is_empty() && minimal.version_id.is_empty());
+    }
+
+    #[test]
+    fn console_auth_uses_wings_message_format() {
+        let Message::Text(text) = auth_message("tok123") else {
+            panic!("not a text message");
+        };
+        let value: serde_json::Value = serde_json::from_str(&text).unwrap();
+        assert_eq!(value, serde_json::json!({ "event": "auth", "args": ["tok123"] }));
+    }
 }

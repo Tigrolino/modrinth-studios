@@ -110,20 +110,17 @@ impl DiscordGuard {
                             &ctx.game_version,
                         )
                     };
-                let details_text = if rpc_settings
-                    .custom_details_template
-                    .trim()
-                    .is_empty()
-                {
-                    None
-                } else {
-                    Some(DiscordRpcSettings::render_template(
-                        &rpc_settings.custom_details_template,
-                        &ctx.instance_name,
-                        &ctx.loader,
-                        &ctx.game_version,
-                    ))
-                };
+                let details_text =
+                    if rpc_settings.custom_details_template.trim().is_empty() {
+                        None
+                    } else {
+                        Some(DiscordRpcSettings::render_template(
+                            &rpc_settings.custom_details_template,
+                            &ctx.instance_name,
+                            &ctx.loader,
+                            &ctx.game_version,
+                        ))
+                    };
                 (state_text, details_text)
             }
         };
@@ -301,7 +298,11 @@ impl DiscordGuard {
                 )
                 .await
                 .unwrap_or_else(|_| {
-                    (existing_child.instance_name.clone(), String::new(), String::new())
+                    (
+                        existing_child.instance_name.clone(),
+                        String::new(),
+                        String::new(),
+                    )
                 });
 
             self.set_instance_activity(

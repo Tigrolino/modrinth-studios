@@ -2,6 +2,7 @@ import { createGlobalState } from '@vueuse/core'
 import { type Ref, ref, shallowRef, triggerRef } from 'vue'
 
 import { detectLogLevel } from '../layouts/shared/console/composables/log-level'
+import { createRepeatCollapser } from '../layouts/shared/console/composables/repeat-collapse'
 import type { Log4jEvent, LogLevel, LogLine } from '../layouts/shared/console/types'
 
 // Flip to true during development to enable console perf logging.
@@ -152,6 +153,13 @@ class ColumnarRingBuffer {
 		return result
 	}
 
+	replaceLast(text: string, level: LogLevel | null): void {
+		if (this._size === 0) return
+		const last = (this.head - 1 + this.capacity) % this.capacity
+		this.texts[last] = text
+		this.levels[last] = encodeLevel(level)
+	}
+
 	clear(): void {
 		this.texts = new Array(this.capacity)
 		this.levels = new Uint8Array(this.capacity)
@@ -263,12 +271,48 @@ export function createConsoleState() {
 		initialHydrationMaxTimer = setTimeout(settleInitialLogHydration, initialHydrationMaxMs)
 	}
 
+	// Lines the collapser lets through in the current flush, and whether it
+	// updated a counter line that was already shown.
+	let toAppend: LogLine[] = []
+	let counterChanged = false
+	const collapser = createRepeatCollapser(
+		(line) => toAppend.push(line),
+		(previous, next) => {
+			const i = toAppend.lastIndexOf(previous)
+			if (i !== -1) {
+				toAppend[i] = next
+				return
+			}
+			const arr = output.value
+			if (arr[arr.length - 1] === previous) {
+				arr[arr.length - 1] = next
+				archive.replaceLast(next.text, next.level)
+				counterChanged = true
+			}
+		},
+	)
+
 	const flushBuffer = (): void => {
-		if (lineBuffer.length === 0) return
+		if (lineBuffer.length === 0 && !collapser.hasPending()) return
 
 		const t0 = DEBUG_PERF ? performance.now() : 0
 		const arr = output.value
-		const lines = groupContinuations(lineBuffer)
+		const incoming = groupContinuations(lineBuffer)
+		lineBuffer = []
+		batchTimer = null
+		toAppend = []
+		counterChanged = false
+
+		for (const line of incoming) collapser.feed(line)
+		if (collapser.hasPending()) {
+			// A possible repeat is waiting for the rest of its lines. Decide once
+			// nothing new arrived for a whole batch interval.
+			if (incoming.length === 0) collapser.finishPending()
+			else batchTimer = setTimeout(flushBuffer, batchTimeout)
+		}
+
+		const lines = toAppend
+		toAppend = []
 		const flushedCount = lines.length
 		let didWrap = false
 
@@ -276,6 +320,7 @@ export function createConsoleState() {
 			if (archive.push(line.text, line.level)) didWrap = true
 			arr.push(line)
 		}
+		if (lines.length === 0 && !counterChanged) return
 
 		if (didWrap) {
 			const evictedCount = Math.max(0, arr.length - archive.size)
@@ -285,8 +330,6 @@ export function createConsoleState() {
 			wrapCount++
 		}
 
-		lineBuffer = []
-		batchTimer = null
 		triggerRef(output)
 
 		if (DEBUG_PERF) {
@@ -365,6 +408,7 @@ export function createConsoleState() {
 		archive.clear()
 		output.value = []
 		lineBuffer = []
+		collapser.reset()
 		wsEventHistory.length = 0
 		wrapCount = 0
 		isInitialLogHydrating.value = false

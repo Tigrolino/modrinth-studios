@@ -50,6 +50,8 @@ export interface BrowseManagerContext {
 	applySavedAdvancedPrefs: () => void
 
 	getProjectLink: (result: Labrinth.Search.v3.ResultSearchProject) => string | RouteLocationRaw
+	/** Modrinth Studios: author link for results that aren't Modrinth users. */
+	getAuthorLink?: (result: Labrinth.Search.v3.ResultSearchProject) => string | undefined
 	getServerProjectLink: (
 		result: Labrinth.Search.v3.ResultSearchProject,
 	) => string | RouteLocationRaw

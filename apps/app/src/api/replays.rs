@@ -8,8 +8,8 @@
 use crate::api::Result;
 use tauri::Runtime;
 use theseus::instance::get_full_path;
-pub use theseus::replays::{Replay, ReplayKind};
 use theseus::replays;
+pub use theseus::replays::{Replay, ReplayKind};
 
 pub fn init<R: Runtime>() -> tauri::plugin::TauriPlugin<R> {
     tauri::plugin::Builder::new("replays")
@@ -55,8 +55,7 @@ pub async fn replays_rename(
     new_file_name: &str,
 ) -> Result<()> {
     let instance = get_full_path(instance_id).await?;
-    replays::rename_replay(&instance, kind, file_name, new_file_name)
-        .await?;
+    replays::rename_replay(&instance, kind, file_name, new_file_name).await?;
     Ok(())
 }
 

@@ -162,6 +162,7 @@
 </template>
 
 <script setup lang="ts">
+import { useQueryClient } from '@tanstack/vue-query'
 import {
 	ChevronDownIcon,
 	LogInIcon,
@@ -212,8 +213,10 @@ const compactRoot = ref<HTMLElement | null>(null)
 onClickOutside(compactRoot, () => (compactOpen.value = false))
 
 // Keep the sidebar card and the title-bar pill in sync when either changes accounts.
+const accountQueryClient = useQueryClient()
 const ACCOUNT_CHANGED_EVENT = 'studio:minecraft-account-changed'
 function announceChange() {
+	void accountQueryClient.invalidateQueries({ queryKey: ['minecraft-account'] })
 	window.dispatchEvent(new CustomEvent(ACCOUNT_CHANGED_EVENT, { detail: props.compact }))
 }
 function onAccountChanged(event: Event) {

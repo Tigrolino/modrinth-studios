@@ -1,6 +1,7 @@
 <template>
 	<div
 		v-if="instance"
+		:data-client="clientInfo?.kind"
 		:class="{
 			'flex h-full flex-col': isFixedRender,
 			'relative isolate overflow-x-clip': showPlayBackdrop,
@@ -21,14 +22,7 @@
 			]"
 		>
 			<!-- Same bar on every tab, so nothing jumps when switching. -->
-			<button
-				type="button"
-				class="flex min-w-0 cursor-pointer items-center gap-2 justify-self-start border-0 bg-transparent p-0 text-contrast hover:opacity-80"
-				@click="router.push(basePath)"
-			>
-				<Avatar :src="icon" :alt="instance.name" size="32px" :tint-by="instance.id" />
-				<span class="truncate text-lg font-extrabold max-xl:hidden">{{ instance.name }}</span>
-			</button>
+			<PlayInstancePicker :instance-id="instance.id" :name="instance.name" :icon="icon" />
 			<NavTabs :links="tabs" />
 			<div class="flex justify-end">
 				<!-- On the other tabs, keep Play/Stop one click away. -->
@@ -57,10 +51,7 @@
 			</div>
 		</div>
 		<div
-			:class="[
-				isPlayModeInstance ? 'p-0' : 'p-6 pr-2 pb-4',
-				{ 'shrink-0': isFixedRender },
-			]"
+			:class="[isPlayModeInstance ? 'p-0' : 'p-6 pr-2 pb-4', { 'shrink-0': isFixedRender }]"
 			@contextmenu.prevent.stop="(event) => handleRightClick(event)"
 		>
 			<ExportModal v-if="!instance.quarantined" ref="exportModal" :instance="instance" />
@@ -100,41 +91,44 @@
 			/>
 			<!-- In the play view the header moves down next to the overview (#studio-play-hero) -->
 			<Teleport defer to="#studio-play-hero" :disabled="!playBottomLayout">
-			<InstancePageHeader
-				v-if="!isPlayModeInstance || isPlayRoute"
-				:hero="isPlayModeInstance"
-				:instance="instance"
-				:icon-src="icon"
-				:is-server-instance="isServerInstance"
-				:show-instance-play-time="showInstancePlayTime"
-				:time-played="timePlayed"
-				:show-instance-storage-usage="showInstanceStorageUsage"
-				:storage-size-label="storageSizeLabel"
-				:playing="playing"
-				:loading="loading || checkingSharedInstanceLaunch || instanceLaunch.isStarting(instance.id)"
-				:stopping="stopping"
-				:processes="runningProcesses"
-				:loading-server-ping="loadingServerPing"
-				:players-online="playersOnline"
-				:status-online="statusOnline"
-				:hosting-status="hosting.isHostingInstance.value ? hosting.onlineStatus.value : undefined"
-				:ping="ping"
-				:minecraft-server="minecraftServer"
-				:can-hide-from-library="canHideInstance"
-				:hidden-from-library="hiddenFromLibrary"
-				@repair="() => repairInstance()"
-				@stop="() => stopInstance('InstancePage')"
-				@play="() => startInstance('InstancePage')"
-				@play-another="() => startAnotherInstance('InstancePage')"
-				@stop-one="(uuid) => stopOneProcess(uuid)"
-				@play-server="() => handlePlayServer()"
-				@settings="() => settingsModal?.show()"
-				@open-folder="() => instance && showInstanceInFolder(instance.id)"
-				@export="() => !instance?.quarantined && exportModal?.show()"
-				@create-shortcut="() => createShortcut()"
-				@toggle-hidden="() => toggleHiddenFromLibrary()"
-				@report="reportSharedInstance"
-			/>
+				<InstancePageHeader
+					v-if="!isPlayModeInstance || isPlayRoute"
+					:hero="isPlayModeInstance"
+					:instance="instance"
+					:client-name="clientInfo?.name"
+					:icon-src="icon"
+					:is-server-instance="isServerInstance"
+					:show-instance-play-time="showInstancePlayTime"
+					:time-played="timePlayed"
+					:show-instance-storage-usage="showInstanceStorageUsage"
+					:storage-size-label="storageSizeLabel"
+					:playing="playing"
+					:loading="
+						loading || checkingSharedInstanceLaunch || instanceLaunch.isStarting(instance.id)
+					"
+					:stopping="stopping"
+					:processes="runningProcesses"
+					:loading-server-ping="loadingServerPing"
+					:players-online="playersOnline"
+					:status-online="statusOnline"
+					:hosting-status="hosting.isHostingInstance.value ? hosting.onlineStatus.value : undefined"
+					:ping="ping"
+					:minecraft-server="minecraftServer"
+					:can-hide-from-library="canHideInstance"
+					:hidden-from-library="hiddenFromLibrary"
+					@repair="() => repairInstance()"
+					@stop="() => stopInstance('InstancePage')"
+					@play="() => startInstance('InstancePage')"
+					@play-another="() => startAnotherInstance('InstancePage')"
+					@stop-one="(uuid) => stopOneProcess(uuid)"
+					@play-server="() => handlePlayServer()"
+					@settings="() => settingsModal?.show()"
+					@open-folder="() => instance && showInstanceInFolder(instance.id)"
+					@export="() => !instance?.quarantined && exportModal?.show()"
+					@create-shortcut="() => createShortcut()"
+					@toggle-hidden="() => toggleHiddenFromLibrary()"
+					@report="reportSharedInstance"
+				/>
 			</Teleport>
 		</div>
 		<div :class="['px-6', { 'shrink-0': isFixedRender }]">
@@ -175,7 +169,7 @@
 				<div id="studio-play-side" class="min-w-0" />
 			</div>
 			<div v-if="playBottomLayout" class="order-1 shrink-0">
-			<InstanceAdmonitions
+				<InstanceAdmonitions
 					:instance="instance"
 					:shared-instance-unavailable-reason="sharedInstanceUnavailableReason"
 					:shared-instance-unavailable-manager="sharedInstanceUnavailableManager"
@@ -211,8 +205,11 @@ import {
 	EditIcon,
 	FolderOpenIcon,
 	GlobeIcon,
+	HomeIcon,
 	ImageIcon,
 	PlayIcon,
+	SparklesIcon,
+	NewspaperIcon,
 	PlusIcon,
 	StopCircleIcon,
 	TerminalSquareIcon,
@@ -259,8 +256,11 @@ import { useLinkedServer } from '@/features/instances/linked-server/use-linked-s
 import InstanceSettingsModal from '@/features/instances/settings-modal/index.vue'
 import { useHiddenInstances } from '@/features/library/hidden-instances/use-hidden-instances'
 import { usePlayMode } from '@/features/play-mode/state'
+import PlayInstancePicker from '@/features/play-mode/instance-picker.vue'
 import { serverStatusQueryOptions } from '@/features/servers/queries'
 import { trackEvent } from '@/helpers/analytics'
+import { syncClientLoader } from '@/features/studio-clients/loader-sync'
+import { clientMeta, getClientInstall } from '@/helpers/studio-clients'
 import { toError } from '@/helpers/errors'
 import {
 	getSharedInstanceUnavailableReason,
@@ -360,7 +360,9 @@ const router = useRouter()
 // Modrinth Studios: this layout serves two separate route trees: the normal
 // instance page (/instance/:id) and Play mode (/play/:id). Each mounted copy
 // only follows routes of its own tree.
-const routeTreePrefix = router.currentRoute.value.path.startsWith('/play/') ? '/play/' : '/instance/'
+const routeTreePrefix = router.currentRoute.value.path.startsWith('/play/')
+	? '/play/'
+	: '/instance/'
 const displayedInstanceRoute = shallowRef(router.currentRoute.value)
 watch(
 	() => router.currentRoute.value,
@@ -436,6 +438,35 @@ const hasReplaysQuery = useQuery(
 	})),
 )
 const showReplaysTab = computed(() => hasReplaysQuery.data.value === true)
+
+// Modrinth Studios: client installations (Lunar, LabyMod, NoRisk, Horizon).
+// They get a client tab; the ones that can't use Modrinth mods lose Content.
+const clientInstallQuery = useQuery({
+	queryKey: computed(() => ['studio-client', instanceId.value]),
+	queryFn: () => getClientInstall(instanceId.value),
+	networkMode: 'always',
+	enabled: computed(() => !!instanceId.value),
+})
+const clientInfo = computed(() => clientMeta(clientInstallQuery.data.value?.client))
+// Lunar's Fabric and Forge modules run Modrinth mods too, so they keep the Content tab.
+const clientRunsMods = computed(
+	() =>
+		!!clientInfo.value &&
+		(clientInfo.value.modrinthContent ||
+			(clientInfo.value.kind === 'lunar' &&
+				/\|(fabric|forge)$/.test(clientInstallQuery.data.value?.version_id ?? ''))),
+)
+const hidesModrinthContent = computed(() => !!clientInfo.value && !clientRunsMods.value)
+// Lunar + Fabric instances made before it counted as Fabric get switched once.
+watch(
+	() => [instance.value?.id, instance.value?.install_stage, clientInstallQuery.data.value] as const,
+	() => {
+		const inst = instance.value
+		if (!inst || inst.install_stage !== 'installed') return
+		void syncClientLoader(inst, clientInstallQuery.data.value).catch(() => {})
+	},
+	{ immediate: true },
+)
 
 const {
 	hiddenIds: hiddenInstanceIds,
@@ -737,6 +768,8 @@ const showShareTab = computed(() => {
 
 	return (
 		currentUserCanUseSharedInstances.value &&
+		// Modrinth Studios: client installations can't be shared.
+		!clientInfo.value &&
 		!instance.value?.quarantined &&
 		instance.value?.shared_instance?.role !== 'member' &&
 		linkType !== 'server_project' &&
@@ -762,11 +795,39 @@ const tabs = computed(() => {
 		...(isPlayModeInstance.value
 			? [{ label: 'Play', href: `${basePath.value}`, icon: PlayIcon }]
 			: []),
-		{
-			label: formatMessage(messages.contentTab),
-			href: isPlayModeInstance.value ? `${basePath.value}/content` : `${basePath.value}`,
-			icon: BoxesIcon,
-		},
+		// Modrinth Studios: client installations get their own tabs
+		...(clientInfo.value?.kind === 'horizon'
+			? [
+					{ label: 'Home', href: `${basePath.value}/client`, icon: HomeIcon },
+					{
+						label: formatMessage(messages.contentTab),
+						href: `${basePath.value}/client/content`,
+						icon: BoxesIcon,
+					},
+					{ label: 'Patch notes', href: `${basePath.value}/client/news`, icon: NewspaperIcon },
+				]
+			: clientInfo.value
+				? [{ label: 'News', href: `${basePath.value}/client`, icon: NewspaperIcon }]
+				: []),
+		...(hidesModrinthContent.value
+			? []
+			: [
+					{
+						label: formatMessage(messages.contentTab),
+						href: isPlayModeInstance.value ? `${basePath.value}/content` : `${basePath.value}`,
+						icon: BoxesIcon,
+					},
+				]),
+
+		...(clientInfo.value?.kind === 'norisk'
+			? [
+					{
+						label: clientInfo.value.kind === 'norisk' ? 'Capes' : 'Cosmetics',
+						href: `${basePath.value}/client/cosmetics`,
+						icon: SparklesIcon,
+					},
+				]
+			: []),
 	]
 
 	if (appSettings.showFilesTabInInstances) {
@@ -827,6 +888,31 @@ watch(
 	({ quarantined, routeName }) => {
 		if (quarantined && routeName === 'InstanceShare') {
 			void router.replace(basePath.value)
+		}
+	},
+	{ immediate: true },
+)
+
+watch(
+	() => ({
+		hides: hidesModrinthContent.value,
+		isClient: !!clientInfo.value,
+		routeName: router.currentRoute.value.name,
+	}),
+	({ hides, isClient, routeName }) => {
+		if (typeof routeName !== 'string') return
+		const contentRoutes = [
+			'InstanceContent',
+			'InstanceContentFilter',
+			'PlayContent',
+			'PlayContentFilter',
+		]
+		const shareRoutes = ['InstanceShare', 'PlayShare']
+		if (
+			(hides && contentRoutes.includes(routeName)) ||
+			(isClient && shareRoutes.includes(routeName))
+		) {
+			void router.replace(`${basePath.value}/client`)
 		}
 	},
 	{ immediate: true },
@@ -1156,7 +1242,7 @@ async function deleteSelectedInstance() {
 }
 
 const handleRightClick = (event: MouseEvent) => {
-	const canAddContent = !instance.value?.quarantined
+	const canAddContent = !instance.value?.quarantined && !hidesModrinthContent.value
 
 	options.value?.open(event, [
 		{
@@ -1171,7 +1257,7 @@ const handleRightClick = (event: MouseEvent) => {
 			id: 'play',
 			label: formatMessage(messages.play),
 			icon: PlayIcon,
-			shown: !playing.value && canAddContent,
+			shown: !playing.value && !instance.value?.quarantined,
 			tone: 'brand',
 			action: () => void startInstance('InstancePageContextMenu'),
 		},
@@ -1300,3 +1386,29 @@ onUnmounted(() => {
 })
 </script>
 
+<style>
+/*
+ * Modrinth Studios: a client installation's tint. Painted on the scrolling
+ * viewport itself (not this page), so it also covers the reserved scrollbar
+ * gutter instead of leaving a dark strip next to the sidebar.
+ */
+.app-viewport:has([data-client]) {
+	background: radial-gradient(ellipse at 90% 0%, var(--client-glow), transparent 65%), #101216;
+	border-top-left-radius: var(--radius-xl);
+}
+.app-viewport:has([data-client='norisk']) {
+	--client-glow: #164c5666;
+}
+.app-viewport:has([data-client='horizon']) {
+	--client-glow: #52418b66;
+}
+.app-viewport:has([data-client='lunar']) {
+	--client-glow: #344e7966;
+}
+.app-viewport:has([data-client='labymod']) {
+	--client-glow: #195b8066;
+}
+[data-client] {
+	min-height: 100%;
+}
+</style>

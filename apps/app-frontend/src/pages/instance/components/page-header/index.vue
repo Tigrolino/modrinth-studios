@@ -21,7 +21,19 @@
 			/>
 		</template>
 
-		<template v-if="!hero && (instance.shared_instance || instance.quarantined)" #badges>
+		<template
+			v-if="!hero && (instance.shared_instance || instance.quarantined || clientName)"
+			#badges
+		>
+			<!-- Modrinth Studios: client installations say which client they run -->
+			<PageHeaderBadgeItem
+				v-if="clientName"
+				tooltip="Client installation"
+				aria-label="Client installation"
+				class="!border-purple !bg-highlight-purple !text-purple"
+			>
+				{{ clientName }}
+			</PageHeaderBadgeItem>
 			<PageHeaderBadgeItem
 				v-if="instance.quarantined"
 				:icon="LockIcon"
@@ -31,7 +43,7 @@
 				Locked
 			</PageHeaderBadgeItem>
 			<PageHeaderBadgeItem
-				v-else
+				v-else-if="instance.shared_instance"
 				:tooltip="sharedInstanceTooltip"
 				aria-label="Shared instance information"
 				class="!border-blue !bg-highlight-blue !text-blue"
@@ -327,6 +339,8 @@ const messages = defineMessages({
 const props = withDefaults(
 	defineProps<{
 		instance: GameInstance
+		/** Modrinth Studios: shown instead of the loader for client installations. */
+		clientName?: string | null
 		iconSrc?: string | null
 		isServerInstance?: boolean
 		showInstancePlayTime?: boolean
@@ -399,7 +413,9 @@ const isInstalling = computed(() => installingStages.includes(props.instance.ins
 
 const loaderDisplayName = computed(() => formatLoaderLabel(props.instance.loader) as ServerLoader)
 const loaderLabel = computed(() =>
-	[loaderDisplayName.value, props.instance.game_version].filter(Boolean).join(' '),
+	[props.clientName || loaderDisplayName.value, props.instance.game_version]
+		.filter(Boolean)
+		.join(' '),
 )
 const sharedInstanceTooltip = computed(() =>
 	formatMessage(

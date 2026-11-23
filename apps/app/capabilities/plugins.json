@@ -125,6 +125,7 @@
 		"replays:default",
 		"studio:default",
 		"pterodactyl:default",
+		"studio-clients:default",
 		"playtime-correction:default",
 		"discord-rpc:default",
 		"worlds:default"

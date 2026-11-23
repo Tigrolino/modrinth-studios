@@ -82,6 +82,28 @@
 					:description="formatMessage(messages.importInstanceDescription)"
 					@click="ctx.setImportMode()"
 				/>
+				<!-- Modrinth Studios: start a third-party client (Horizon, Lunar, ...) -->
+				<BigOptionButton
+					v-if="ctx.openClientInstallation"
+					:disabled="ctx.navigating.value"
+					:icon="RocketIcon"
+					title="Client installation"
+					description="Play Lunar, LabyMod, NoRisk or Horizon from here."
+					@click="openClientInstallation"
+				>
+					<template #title-suffix>
+						<span
+							v-tooltip="
+								'Experimental'
+							"
+							class="inline-flex shrink-0 cursor-help text-secondary transition-colors hover:text-contrast"
+							aria-label="About client installations"
+							@click.stop
+						>
+							<UnknownIcon class="size-[18px]" aria-hidden="true" />
+						</span>
+					</template>
+				</BigOptionButton>
 			</div>
 		</template>
 
@@ -141,6 +163,8 @@ import {
 	CompassIcon,
 	DownloadIcon,
 	RightArrowIcon,
+	RocketIcon,
+	UnknownIcon,
 	UploadIcon,
 } from '@modrinth/assets'
 import { commonMessages, defineMessages, useVIntl } from '@modrinth/ui'
@@ -255,6 +279,11 @@ function isModpackOption(projectId: string) {
 function setSetupType(type: 'custom' | 'vanilla') {
 	debug('selected:', type)
 	_setSetupType(type)
+}
+
+function openClientInstallation() {
+	ctx.modal.value?.hide()
+	ctx.openClientInstallation?.()
 }
 
 function selectModpack() {

@@ -223,7 +223,8 @@ export function parseLogDetailed(text: string, baseDate: Date): { events: LogEve
 
 		const sep = line.indexOf(']: ')
 		const msg = sep === -1 ? '' : line.slice(sep + 3).trim()
-		const header = sep === -1 ? line : line.slice(0, sep)
+		// Keep the "]" so "[thread/WARN]" matches below.
+		const header = sep === -1 ? line : line.slice(0, sep + 1)
 
 		if (/\/ERROR\]|\[ERROR\]/.test(header)) events.push({ t, kind: 'error' })
 		else if (/\/WARN\]|\[WARN\]/.test(header)) events.push({ t, kind: 'warn' })

@@ -46,6 +46,10 @@ export interface ContentManagerContext {
 
 	// Labelling
 	contentTypeLabel: Ref<string> | ComputedRef<string>
+	itemsHeading?: Ref<string> | ComputedRef<string>
+	uploadActionLabel?: string
+	emptyHeading?: string
+	emptyDescription?: string
 	currentGameVersion?: Ref<string> | ComputedRef<string>
 	currentLoader?: Ref<string> | ComputedRef<string>
 

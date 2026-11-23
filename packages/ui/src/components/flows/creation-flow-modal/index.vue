@@ -54,6 +54,7 @@ const props = withDefaults(
 		getCurseForgeTarget?: () => Promise<CurseForgeTarget>
 		randomizeInstanceIcon?: () => Promise<{ path: string; previewUrl: string } | null>
 		customizeInstanceIcon?: () => void
+		openClientInstallation?: () => void
 		finishDisabled?: boolean
 		finishDisabledTooltip?: string
 	}>(),
@@ -70,6 +71,7 @@ const props = withDefaults(
 		browseModpacks: undefined,
 		randomizeInstanceIcon: undefined,
 		customizeInstanceIcon: undefined,
+		openClientInstallation: undefined,
 	},
 )
 
@@ -105,6 +107,7 @@ const ctx = createCreationFlowContext(
 		getCurseForgeTarget: props.getCurseForgeTarget,
 		randomizeInstanceIcon: props.randomizeInstanceIcon,
 		customizeInstanceIcon: props.customizeInstanceIcon,
+		openClientInstallation: props.openClientInstallation,
 		finishDisabled: computed(() => props.finishDisabled ?? false),
 		finishDisabledTooltip: computed(() => props.finishDisabledTooltip),
 	},

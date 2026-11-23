@@ -20,7 +20,10 @@ function load(): PlayModeState {
 		const raw = localStorage.getItem(STORAGE_KEY)
 		if (raw) {
 			const parsed = JSON.parse(raw) as Partial<PlayModeState>
-			return { enabled: !!parsed.enabled, instanceId: parsed.instanceId ?? null }
+			return {
+				enabled: !!parsed.enabled,
+				instanceId: typeof parsed.instanceId === 'string' ? parsed.instanceId : null,
+			}
 		}
 	} catch {
 		// ignore
@@ -61,6 +64,7 @@ export function usePlayMode() {
 		playPath: computed(() =>
 			active.value ? `/play/${encodeURIComponent(state.instanceId!)}` : null,
 		),
-		isPlayModeInstance: (id: string | null | undefined) => active.value && !!id && id === state.instanceId,
+		isPlayModeInstance: (id: string | null | undefined) =>
+			active.value && !!id && id === state.instanceId,
 	}
 }

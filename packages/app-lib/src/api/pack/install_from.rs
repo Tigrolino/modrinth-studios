@@ -583,7 +583,10 @@ pub async fn set_instance_information(
     // `list_content.rs`'s `linked_modpack_ids()` for the same fix applied to
     // instances that were already imported with a blank link before this.
     let non_blank = |s: &Option<String>| -> Option<String> {
-        s.as_deref().map(str::trim).filter(|s| !s.is_empty()).map(String::from)
+        s.as_deref()
+            .map(str::trim)
+            .filter(|s| !s.is_empty())
+            .map(String::from)
     };
     let pack_link = match (
         non_blank(&description.project_id),

@@ -5,6 +5,7 @@ import {
 	CodeIcon,
 	CoffeeIcon,
 	InfoIcon,
+	RocketIcon,
 	Settings2Icon,
 	UsersIcon,
 	WindowIcon,
@@ -27,9 +28,11 @@ import { useRoute, useRouter } from 'vue-router'
 import { get_project_v3 } from '@/helpers/cache'
 import { get_linked_modpack_info, getInstanceIconUrl } from '@/helpers/instance'
 import { get_loader_versions } from '@/helpers/metadata'
+import { clientMeta, getClientInstall } from '@/helpers/studio-clients'
 import { get_game_versions, get_loaders } from '@/helpers/tags'
 import type { GameInstance } from '@/helpers/types'
 
+import ClientSettings from './client-settings.vue'
 import GeneralSettings from './general-settings.vue'
 import HooksSettings from './hooks-settings.vue'
 import InstallationSettings from './installation-settings.vue'
@@ -104,7 +107,25 @@ const tabCategories = defineMessages({
 	},
 })
 
+// Modrinth Studios: client installations get a "Client" tab.
+const clientInstallQuery = useQuery({
+	queryKey: computed(() => ['studio-client', props.instance.id]),
+	queryFn: () => getClientInstall(props.instance.id),
+	networkMode: 'always',
+})
+const clientName = computed(() => clientMeta(clientInstallQuery.data.value?.client)?.name ?? null)
+
 const tabs = computed<TabbedModalTab[]>(() => [
+	{
+		name: defineMessage({
+			id: 'instance.settings.tabs.studio-client',
+			defaultMessage: 'Client',
+		}),
+		icon: RocketIcon,
+		category: tabCategories.instance,
+		content: ClientSettings,
+		shown: !!clientName.value,
+	},
 	{
 		name: defineMessage({
 			id: 'instance.settings.tabs.general',

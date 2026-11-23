@@ -111,7 +111,7 @@ async fn run_credentials(
         .or(settings.hooks.pre_launch.as_ref())
         .filter(|hook_command| !hook_command.is_empty());
 
-    let java_args = context
+    let mut java_args = context
         .launch_overrides
         .extra_launch_args
         .clone()
@@ -285,6 +285,31 @@ async fn run_credentials(
                 resp.status()
             ),
             Err(err) => warn!("Failed to join Mojang session server: {err:?}"),
+        }
+    }
+
+    // Modrinth Studios addition: client installations (Horizon, NoRisk,
+    // Lunar, LabyMod) start their own way; see api/studio_clients.
+    let studio_plan = crate::api::studio_clients::launch(
+        &context,
+        credentials,
+        crate::api::studio_clients::LaunchSettings {
+            java_args: &java_args,
+            env_args: &launch_env_args,
+            wrapper: &wrapper,
+            memory,
+            resolution,
+            post_exit_hook: post_exit_hook.clone(),
+        },
+    )
+    .await?;
+    match studio_plan {
+        crate::api::studio_clients::LaunchPlan::Normal => {}
+        crate::api::studio_clients::LaunchPlan::ExtraJvmArgs(extra) => {
+            java_args.extend(extra)
+        }
+        crate::api::studio_clients::LaunchPlan::Started(process) => {
+            return Ok(process);
         }
     }
 

@@ -21,7 +21,9 @@
 			/>
 		</div>
 		<div class="flex flex-1 flex-col gap-1">
-			<span class="text-base font-semibold text-contrast">{{ title }}</span>
+			<span class="flex items-center gap-1.5 text-base font-semibold text-contrast"
+				>{{ title }}<slot name="title-suffix"
+			/></span>
 			<span class="text-sm font-medium text-primary">{{ description }}</span>
 		</div>
 		<ChevronRightIcon

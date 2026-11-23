@@ -1,7 +1,7 @@
 import vue from '@vitejs/plugin-vue'
-import { existsSync, readFileSync } from 'fs'
+import { cpSync, existsSync, readFileSync, statSync } from 'fs'
 import { resolve } from 'path'
-import { defineConfig } from 'vite'
+import { defineConfig, type Plugin } from 'vite'
 import svgLoader from 'vite-svg-loader'
 
 import tauriConf from '../app/tauri.conf.json'
@@ -23,6 +23,53 @@ if (existsSync(envFilePath)) {
 		if (!(key in process.env)) {
 			process.env[key] = value
 		}
+	}
+}
+
+// Modrinth Studios: the repo's `studio-news/` folder (update articles) is
+// served at `/studio-news/` while developing, and copied into the build, so
+// the app can read articles locally before (or without) them being on GitHub.
+const studioNewsDir = resolve(projectRootDir, '../../studio-news')
+const STUDIO_NEWS_TYPES: Record<string, string> = {
+	json: 'application/json',
+	md: 'text/markdown; charset=utf-8',
+	png: 'image/png',
+	webp: 'image/webp',
+	jpg: 'image/jpeg',
+	jpeg: 'image/jpeg',
+	gif: 'image/gif',
+	webm: 'video/webm',
+	mp4: 'video/mp4',
+}
+function studioNews(): Plugin {
+	let outDir = 'dist'
+	return {
+		name: 'studio-news',
+		configResolved(config) {
+			outDir = resolve(config.root, config.build.outDir)
+		},
+		configureServer(server) {
+			server.middlewares.use('/studio-news', (req, res, next) => {
+				const rel = decodeURIComponent((req.url ?? '/').split('?')[0])
+				const file = resolve(studioNewsDir, '.' + rel)
+				if (!file.startsWith(studioNewsDir) || !existsSync(file) || !statSync(file).isFile()) {
+					return next()
+				}
+				const ext = file.split('.').pop()?.toLowerCase() ?? ''
+				res.setHeader('Content-Type', STUDIO_NEWS_TYPES[ext] ?? 'application/octet-stream')
+				res.setHeader('Cache-Control', 'no-cache')
+				res.end(readFileSync(file))
+			})
+		},
+		closeBundle() {
+			if (existsSync(studioNewsDir)) {
+				cpSync(studioNewsDir, resolve(outDir, 'studio-news'), {
+					recursive: true,
+					// Only what the app shows: no image scripts or readmes.
+					filter: (src) => !/\.(py|md)$/i.test(src) || src.endsWith('article.md'),
+				})
+			}
+		},
 	}
 }
 
@@ -49,6 +96,7 @@ export default defineConfig({
 		],
 	},
 	plugins: [
+		studioNews(),
 		vue(),
 		svgLoader({
 			svgoConfig: {

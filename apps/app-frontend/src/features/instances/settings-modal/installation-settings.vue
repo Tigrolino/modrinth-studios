@@ -32,6 +32,7 @@ import {
 	update_repair_modrinth,
 } from '@/helpers/instance'
 import { get_loader_versions } from '@/helpers/metadata'
+import { getClientInstall } from '@/platform/app-lib/studio-clients'
 import { get_game_versions, get_loaders } from '@/helpers/tags'
 import type { Manifest } from '@/helpers/types'
 import { instanceKeys } from '@/pages/instance/query-options'
@@ -51,6 +52,19 @@ const appSettings = useAppSettings()
 
 const { instance, offline, isMinecraftServer, onUnlinked, closeModal } = injectInstanceSettings()
 const managedContentPolicy = useManagedContentPolicy(instance)
+const clientInstallQuery = useQuery({
+	networkMode: 'always',
+	queryKey: computed(() => ['studio-client', instance.value.id]),
+	queryFn: () => getClientInstall(instance.value.id),
+})
+const editDisabledReason = computed(() => {
+	if (clientInstallQuery.isPending.value) return 'Checking installation type�'
+	if (clientInstallQuery.isError.value)
+		return 'Unable to read this installation�s client settings. Reopen settings to try again.'
+	return clientInstallQuery.data.value
+		? 'This client manages its Minecraft and loader versions. Create a new client installation to choose another version.'
+		: null
+})
 const skipNonEssentialWarnings = computed(() => appSettings.skipNonEssentialWarnings)
 
 debug('metadata load: start', {
@@ -212,6 +226,7 @@ async function installLocalModpackFromPicker() {
 provideInstanceBackup(instance)
 
 provideInstallationSettings({
+	editDisabledReason,
 	closeSettings: closeModal,
 	loading: computed(() => metadataLoading.value || modpackInfoQuery.isLoading.value),
 	installationInfo: computed(() => {
@@ -348,6 +363,7 @@ provideInstallationSettings({
 	},
 
 	async save(platform, gameVersion, loaderVersionId) {
+		if (editDisabledReason.value) throw new Error(editDisabledReason.value)
 		debug('save: called', {
 			instanceId: instance.value.id,
 			platform,

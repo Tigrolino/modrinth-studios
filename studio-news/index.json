@@ -1,0 +1,29 @@
+{
+	"articles": [
+		{
+			"slug": "news",
+			"title": "News, now in Studios",
+			"summary": "Update articles, feature guides and Modrinth news, all readable inside the launcher.",
+			"date": "2026-11-18T10:00:00+01:00",
+			"banner": "banner.webp",
+			"popup": false
+		},
+		{
+			"slug": "play-mode",
+			"title": "Your instance, ready to play",
+			"summary": "A dedicated home for your favourite instance, with quick switching and your worlds close by.",
+			"date": "2026-11-18T11:00:00+01:00",
+			"banner": "banner.webp",
+			"popup": false
+		},
+		{
+			"slug": "client-installations",
+			"title": "Client installations",
+			"summary": "Play Lunar Client, LabyMod, NoRisk Client and Horizon straight from Modrinth Studios.",
+			"date": "2026-11-23T12:00:00+01:00",
+			"version": "1.4.0",
+			"banner": "banner.webp",
+			"popup": true
+		}
+	]
+}

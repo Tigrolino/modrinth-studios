@@ -1053,7 +1053,7 @@ const confirmUnlinkModal = ref<InstanceType<typeof ConfirmUnlinkModal>>()
 				<template v-if="ctx.items.value.length > 0">
 					<div class="flex flex-col gap-2">
 						<span v-if="ctx.managedContent.value" class="mb-2 text-xl font-semibold text-contrast">
-							{{ formatMessage(messages.additionalContent) }}
+							{{ ctx.itemsHeading?.value ?? formatMessage(messages.additionalContent) }}
 						</span>
 
 						<div class="flex flex-wrap items-center gap-2">
@@ -1090,7 +1090,7 @@ const confirmUnlinkModal = ref<InstanceType<typeof ConfirmUnlinkModal>>()
 									@click="ctx.uploadFiles"
 								>
 									<FolderOpenIcon class="size-5" />
-									{{ formatMessage(messages.uploadFiles) }}
+									{{ ctx.uploadActionLabel ?? formatMessage(messages.uploadFiles) }}
 								</Button>
 								<Button
 									v-tooltip="
@@ -1218,6 +1218,7 @@ const confirmUnlinkModal = ref<InstanceType<typeof ConfirmUnlinkModal>>()
 				<EmptyState v-else type="empty-inbox">
 					<template #heading>
 						{{
+							ctx.emptyHeading ??
 							formatMessage(
 								ctx.managedContent.value
 									? messages.noExtraContentInstalled
@@ -1227,7 +1228,8 @@ const confirmUnlinkModal = ref<InstanceType<typeof ConfirmUnlinkModal>>()
 					</template>
 					<template #description>
 						{{
-							ctx.managedContent.value
+							ctx.emptyDescription ??
+							(ctx.managedContent.value
 								? formatMessage(messages.emptyModpackHint)
 								: formatMessage(messages.emptyHint, {
 										contentType: formatContentTypeSentence(
@@ -1236,7 +1238,7 @@ const confirmUnlinkModal = ref<InstanceType<typeof ConfirmUnlinkModal>>()
 											2,
 											'content',
 										),
-									})
+									}))
 						}}
 					</template>
 					<template #actions>
@@ -1251,7 +1253,7 @@ const confirmUnlinkModal = ref<InstanceType<typeof ConfirmUnlinkModal>>()
 							@click="ctx.uploadFiles"
 						>
 							<FolderOpenIcon class="size-5" />
-							{{ formatMessage(messages.uploadFiles) }}
+							{{ ctx.uploadActionLabel ?? formatMessage(messages.uploadFiles) }}
 						</Button>
 						<Button
 							v-tooltip="

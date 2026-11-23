@@ -6528,8 +6528,11 @@ name = "serde-binhum"
 version = "0.1.0"
 dependencies = [
  "darling 0.24.1",
+ "postcard",
  "proc-macro2",
  "quote",
+ "serde",
+ "serde_json",
  "syn 3.0.3",
 ]
 

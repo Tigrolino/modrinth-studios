@@ -27,7 +27,6 @@ pub async fn playtime_correction_set(
     instance_id: &str,
     seconds: i64,
 ) -> Result<()> {
-    playtime_correction::set_correction_seconds(instance_id, seconds)
-        .await?;
+    playtime_correction::set_correction_seconds(instance_id, seconds).await?;
     Ok(())
 }

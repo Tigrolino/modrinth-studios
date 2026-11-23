@@ -87,11 +87,6 @@ pub(crate) use self::shared::{
     shared_instance_update_data, shared_modpack_files,
 };
 // Modrinth Studios addition, see storage.rs
-pub use self::storage::{
-    InstanceStorageUsage, StorageBreakdown, SystemStorageOverview,
-    instance_storage_usage, instance_storage_usage_single,
-    system_storage_overview,
-};
 pub use self::shared::{
     SharedInstanceExternalFilePreview, SharedInstanceInstallPreview,
     SharedInstanceInvite, SharedInstanceInviteCreator,
@@ -115,6 +110,11 @@ pub use self::shared::{
     remove_shared_instance_users, revoke_shared_instance_invite,
     unlink_shared_instance, unpublish_remote_shared_instance,
     unpublish_shared_instance, update_shared_instance,
+};
+pub use self::storage::{
+    InstanceStorageUsage, StorageBreakdown, SystemStorageOverview,
+    instance_storage_usage, instance_storage_usage_single,
+    system_storage_overview,
 };
 pub use self::synced_options::game_options::{
     CanonicalValue as GameOptionCanonicalValue, EditableGameSetting,

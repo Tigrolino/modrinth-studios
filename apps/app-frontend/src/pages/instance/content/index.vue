@@ -21,12 +21,24 @@
 					:header="managedContentModalHeader"
 					:source-name="managedContent?.card.manager.name"
 					:source-icon-url="managedContent?.card.manager.iconUrl"
-					:enable-toggle="!isServerInstance && !isSharedMember && !isQuarantined"
+					:enable-toggle="
+						studioClient.data.value?.client !== 'norisk' &&
+						!isServerInstance &&
+						!isSharedMember &&
+						!isQuarantined
+					"
 					:action-disabled="isBulkOperating || isInstanceBusy"
 					override-files
-					:get-overflow-options="getOverflowOptions"
+					:get-overflow-options="
+						studioClient.data.value?.client === 'norisk' ? () => [] : getOverflowOptions
+					"
 					:switch-version="
-						isServerInstance || isSharedMember || isQuarantined ? undefined : handleSwitchVersion
+						studioClient.data.value?.client === 'norisk' ||
+						isServerInstance ||
+						isSharedMember ||
+						isQuarantined
+							? undefined
+							: handleSwitchVersion
 					"
 					@update:enabled="handleManagedContentToggle"
 					@bulk:enable="(items) => handleManagedContentBulkToggle(items, true)"
@@ -90,6 +102,9 @@
 </template>
 
 <script setup lang="ts">
+import { get_project_many } from '@/helpers/cache.js'
+import { clientLogo } from '@/features/studio-clients/catalog'
+import { getClientInstall, noriskPackMods } from '@/platform/app-lib/studio-clients'
 import type { Labrinth } from '@modrinth/api-client'
 import { ClipboardCopyIcon, FolderOpenIcon, LockIcon, LockOpenIcon } from '@modrinth/assets'
 import {
@@ -227,6 +242,28 @@ const appSettings = useAppSettings()
 const skipNonEssentialWarnings = computed(() => appSettings.skipNonEssentialWarnings)
 
 const instancePage = injectInstancePage()
+const studioClient = useQuery({
+	queryKey: computed(() => ['studio-client', instancePage.instanceId.value]),
+	queryFn: () => getClientInstall(instancePage.instanceId.value),
+	networkMode: 'always',
+})
+const includedMods = useQuery({
+	queryKey: computed(() => ['norisk-included-mods', instancePage.instanceId.value]),
+	queryFn: async () => {
+		const mods = await noriskPackMods(instancePage.instanceId.value)
+		const ids = mods.map((mod) => mod.modrinth_id).filter((id): id is string => !!id)
+		const projects = ids.length
+			? await get_project_many(ids, 'must_revalidate').catch(() => [])
+			: []
+		const byId = new Map(projects.map((project) => [project.id, project]))
+		return mods.map((mod) => ({
+			...mod,
+			icon_url: mod.modrinth_id ? byId.get(mod.modrinth_id)?.icon_url : null,
+		}))
+	},
+	enabled: computed(() => studioClient.data.value?.client === 'norisk'),
+})
+
 const sharedInstanceState = injectSharedInstance()
 const instance = instancePage.instance
 const isServerInstance = instancePage.isServerInstance
@@ -385,6 +422,25 @@ const hasSharedManagedContent = computed(() => {
 })
 
 const managedContentItems = computed(() => {
+	if (studioClient.data.value?.client === 'norisk')
+		return (includedMods.data.value ?? []).map(
+			(mod) =>
+				({
+					id: mod.id,
+					file_name: mod.name || mod.id,
+					project_type: 'mod',
+					enabled: true,
+					hideToggle: true,
+					hideSwitchVersion: true,
+					has_update: false,
+					update_version_id: null,
+					project: {
+						id: mod.id,
+						title: mod.name || mod.id,
+						icon_url: mod.icon_url || clientLogo('norisk'),
+					},
+				}) as ContentItem,
+		)
 	const linkedContent = instance.value.link ? (modpackContentQuery.data.value ?? []) : []
 	const sourcedContent = hasSharedManagedContent.value
 		? projects.value.filter((item) =>
@@ -416,6 +472,16 @@ const managedContentSummary = computed(() =>
 )
 
 const managedContent = computed<ManagedContentData | null>(() => {
+	if (studioClient.data.value?.client === 'norisk')
+		return {
+			card: {
+				kind: 'modpack',
+				manager: { name: 'NoRisk Client', iconUrl: clientLogo('norisk') },
+				versionNumber: studioClient.data.value.variant_name ?? studioClient.data.value.version_name,
+				canSwitchVersion: false,
+				summary: [{ type: 'mod', count: includedMods.data.value?.length ?? 0 }],
+			},
+		}
 	const attachment = instance.value.shared_instance
 	const sharedManager = sharedInstanceState.manager.value
 	const linkedProject = instancePage.linkedProject.value
@@ -1296,6 +1362,11 @@ async function setManagedContentEnabled(items: ContentItem[], enabled: boolean) 
 }
 
 async function handleManagedContent() {
+	if (studioClient.data.value?.client === 'norisk') {
+		await includedMods.refetch()
+		managedContentModal.value?.show(managedContentItems.value)
+		return
+	}
 	if (!instance.value?.id) return
 
 	if (modpackContentQuery.data.value !== undefined) {

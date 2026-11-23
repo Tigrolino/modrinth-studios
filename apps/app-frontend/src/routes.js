@@ -72,6 +72,13 @@ export default new createRouter({
 			],
 		},
 		{
+			// Modrinth Studios: Modrinth's browse page, fed with Horizon's registry
+			path: '/horizon-browse/:id/:type?',
+			name: 'HorizonBrowse',
+			component: () => import('@/pages/instance/client/horizon-browse.vue'),
+			meta: { saveScroll: true },
+		},
+		{
 			path: '/browse/:projectType',
 			name: 'Discover content',
 			component: () => import('@/platform/adapters/browse/browse-page.vue'),
@@ -156,6 +163,12 @@ export default new createRouter({
 					meta: { saveScroll: true },
 				},
 				{
+					// Modrinth Studios: client installations
+					path: 'client/:section?',
+					name: 'PlayClient',
+					component: () => import('@/pages/instance/client/index.vue'),
+				},
+				{
 					path: 'worlds',
 					name: 'PlayWorlds',
 					component: () => import('@/pages/instance/worlds/index.vue'),
@@ -193,6 +206,12 @@ export default new createRouter({
 			name: 'Instance',
 			component: () => import('@/pages/instance/layout.vue'),
 			children: [
+				{
+					// Modrinth Studios: client installations (Lunar, LabyMod, NoRisk, Horizon)
+					path: 'client/:section?',
+					name: 'InstanceClient',
+					component: () => import('@/pages/instance/client/index.vue'),
+				},
 				{
 					path: 'worlds',
 					name: 'InstanceWorlds',

@@ -98,7 +98,10 @@ watch(
 	directoryQuery.data,
 	(data) => {
 		if (!data) return
-		items.value = data
+		// Modrinth Studios: hide the app's own bookkeeping files.
+		items.value = data.filter(
+			(item) => !['.studio', '.modrinth-studio-instance.json'].includes(item.name),
+		)
 		firstPaintPending.value = false
 	},
 	{ immediate: true },

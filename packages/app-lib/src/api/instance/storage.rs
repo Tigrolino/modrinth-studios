@@ -60,8 +60,8 @@ pub struct InstanceStorageUsage {
 /// double-count content shared across instances or, in a pathological
 /// case, loop forever on a circular link. A plain recursive size count is
 /// the norm for most disk-usage tools anyway.
-pub async fn instance_storage_usage()
--> crate::Result<Vec<InstanceStorageUsage>> {
+pub async fn instance_storage_usage() -> crate::Result<Vec<InstanceStorageUsage>>
+{
     let state = State::get().await?;
     let instances = crate::state::list_instances(&state.pool).await?;
 
@@ -76,22 +76,23 @@ pub async fn instance_storage_usage()
     // `tokio::spawn`-ing each one) is enough here since there's no CPU-bound
     // work to actually spread across cores — just I/O to overlap — and it
     // avoids the `'static`/`Send` bookkeeping spawning each walk would need.
-    let usage = futures::future::join_all(instances.into_iter().map(|metadata| {
-        let instances_dir = state.directories.instances_dir();
-        async move {
-            let instance = metadata.instance;
-            let full_path = instances_dir.join(&instance.path);
-            let breakdown = categorize_instance_dir(&full_path).await;
-            let size_bytes = breakdown.total();
-            InstanceStorageUsage {
-                instance_id: instance.id,
-                name: instance.name,
-                size_bytes,
-                breakdown,
+    let usage =
+        futures::future::join_all(instances.into_iter().map(|metadata| {
+            let instances_dir = state.directories.instances_dir();
+            async move {
+                let instance = metadata.instance;
+                let full_path = instances_dir.join(&instance.path);
+                let breakdown = categorize_instance_dir(&full_path).await;
+                let size_bytes = breakdown.total();
+                InstanceStorageUsage {
+                    instance_id: instance.id,
+                    name: instance.name,
+                    size_bytes,
+                    breakdown,
+                }
             }
-        }
-    }))
-    .await;
+        }))
+        .await;
 
     Ok(usage)
 }

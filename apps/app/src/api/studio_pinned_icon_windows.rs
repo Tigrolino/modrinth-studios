@@ -44,8 +44,8 @@ use std::os::windows::ffi::OsStrExt;
 use std::path::{Path, PathBuf};
 
 use windows::Win32::System::Com::{
-    CLSCTX_INPROC_SERVER, CoCreateInstance, CoInitializeEx, CoUninitialize, COINIT_APARTMENTTHREADED,
-    IPersistFile, STGM_READWRITE,
+    CLSCTX_INPROC_SERVER, COINIT_APARTMENTTHREADED, CoCreateInstance,
+    CoInitializeEx, CoUninitialize, IPersistFile, STGM_READWRITE,
 };
 use windows::Win32::UI::Shell::{
     IShellLinkW, SHCNE_ASSOCCHANGED, SHCNF_IDLIST, SHChangeNotify, ShellLink,
@@ -108,7 +108,8 @@ fn shortcut_targets_exe(lnk_path: &Path, exe_path: &Path) -> bool {
         .collect();
     let ansi_needle: Vec<u8> = exe_str.bytes().collect();
 
-    contains_bytes_ci(&raw, &utf16le_needle) || contains_bytes_ci(&raw, &ansi_needle)
+    contains_bytes_ci(&raw, &utf16le_needle)
+        || contains_bytes_ci(&raw, &ansi_needle)
 }
 
 /// Points `lnk_path`'s `IconLocation` at `icon_path` and reports whether it
@@ -116,9 +117,13 @@ fn shortcut_targets_exe(lnk_path: &Path, exe_path: &Path) -> bool {
 /// up on that one shortcut — there's nothing destructive to roll back,
 /// since this only ever changes an icon reference, never the shortcut's
 /// target or anything else about it.
-unsafe fn set_shortcut_icon(lnk_path: &Path, icon_path: &Path) -> std::result::Result<(), &'static str> {
-    let shell_link: IShellLinkW = unsafe { CoCreateInstance(&ShellLink, None, CLSCTX_INPROC_SERVER) }
-        .map_err(|_| "CoCreateInstance(ShellLink) failed")?;
+unsafe fn set_shortcut_icon(
+    lnk_path: &Path,
+    icon_path: &Path,
+) -> std::result::Result<(), &'static str> {
+    let shell_link: IShellLinkW =
+        unsafe { CoCreateInstance(&ShellLink, None, CLSCTX_INPROC_SERVER) }
+            .map_err(|_| "CoCreateInstance(ShellLink) failed")?;
     let persist_file: IPersistFile = shell_link
         .cast()
         .map_err(|_| "cast to IPersistFile failed")?;
@@ -237,6 +242,8 @@ pub fn apply_pinned_icon(studio_dir: &Path, bytes: Vec<u8>) -> Result<String> {
         "exe={} icon={} lnk_scanned={lnk_count} target_matched={matched_count} icon_updated={updated_count}{}",
         exe_path.display(),
         icon_path.display(),
-        last_error.map(|e| format!(" last_error={e}")).unwrap_or_default(),
+        last_error
+            .map(|e| format!(" last_error={e}"))
+            .unwrap_or_default(),
     ))
 }

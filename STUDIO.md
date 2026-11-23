@@ -2,6 +2,24 @@
 
 Everything here is on top of the normal Modrinth App. If something isn't listed, it works the same as in the official app.
 
+## Client installations
+
+Create instance has a **Client installation** option for playing other Minecraft clients from the app: **Lunar Client**, **LabyMod**, **NoRisk Client** and **Horizon** (Minecraft 26.3 rewritten in Rust). Pick a client, a version and, where the client has one, a module, pack, channel or build. The client downloads in the background and shows up in the downloads menu.
+
+They work like your other instances, and each gets its own tabs:
+
+- **Lunar Client** and **LabyMod**: their latest news. Lunar's cosmetics, emotes and badges load in game.
+- **NoRisk Client**: news and a Capes page to browse, preview and equip capes. It signs in to NoRisk with your Minecraft account.
+- **Horizon**: a Home page with popular content from Horizon's registry, its own Content tab and a patch notes timeline. Your skin and account come along.
+
+Lunar + Fabric, Lunar + Forge and NoRisk keep the normal Content tab, so you can add mods from Modrinth next to the client's own. When creating, **Copy from …** brings your servers, settings, resource packs, shader packs and mods over from the client's own launcher, and the **Client** tab in instance settings lets you switch versions within the client, check for updates and copy again later.
+
+Client installations are unofficial. Each client is launched the way its own launcher does it, so one can break for a while when it changes. Check for updates in the Client tab fixes most problems.
+
+## News
+
+The News panel also shows Modrinth Studios' own update articles, and both kinds of article open inside the app instead of the browser. The article for a big update opens once by itself the first time you start that version.
+
 ## Hosting your own servers
 
 The Servers tab is called Hosting here, and besides Modrinth Hosting it can show servers from any [Pterodactyl](https://pterodactyl.io) panel. Each server in the list is labeled so you can tell which is which.
@@ -40,6 +58,8 @@ Live graphs only fill in while the app is open, but the player history and world
 Made for when you mostly play one instance. Turn it on in Settings → Features and pick the instance.
 
 After that, the Play button in the sidebar opens a full-screen page for that instance: a big Play button, your screenshots slowly cycling in the background, your playtime and mod count, and your recent worlds and servers so you can jump right back in. The instance's other tabs are still at the top. Your library moves to its own button under Play.
+
+Click the instance's name at the top left to switch to another one. Star the instances you play most and they stay at the top as big tiles; the rest are listed by when you last played them.
 
 ## Minecraft account in the title bar
 

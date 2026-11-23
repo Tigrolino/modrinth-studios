@@ -73,12 +73,15 @@ import { RouterView, useRoute, useRouter } from 'vue-router'
 
 import { useRouteLoading } from '@/app/runtime/use-route-loading'
 import AppSidebar from '@/app/shell/sidebar/index.vue'
+import ArticleViewerModal from '@/features/news/ArticleViewerModal.vue'
 import AppTitleBar from '@/app/shell/title-bar/index.vue'
 import { trackExternalFileDownload } from '@/components/ui/download-manager/external-file-downloads'
 import ErrorModal from '@/components/ui/ErrorModal.vue'
 import HostingUpdateRequired from '@/components/ui/HostingUpdateRequired.vue'
 import AddServerToInstanceModal from '@/components/ui/install_flow/AddServerToInstanceModal.vue'
 import UnknownPackWarningModal from '@/components/ui/install_flow/UnknownPackWarningModal.vue'
+// Modrinth Studios: client installations (Lunar, LabyMod, NoRisk, Horizon)
+import ClientInstallModal from '@/features/studio-clients/ClientInstallModal.vue'
 import IconEditorModal from '@/components/ui/instance_settings/InstanceIconEditorModal.vue'
 import MinecraftAuthErrorModal from '@/components/ui/minecraft-auth-error-modal/MinecraftAuthErrorModal.vue'
 import MinecraftRequiredModal from '@/components/ui/minecraft-required-modal/MinecraftRequiredModal.vue'
@@ -296,6 +299,8 @@ function onSidebarHoverLeave() {
 const forceSidebar = computed(
 	() =>
 		route.path.startsWith('/browse') ||
+		// Modrinth Studios: Horizon's store is Modrinth's browse page too
+		route.path.startsWith('/horizon-browse') ||
 		route.path.startsWith('/project') ||
 		route.path.startsWith('/user'),
 )
@@ -1519,6 +1524,7 @@ onMounted(() => {
 const sidebar = ref(null)
 // Modrinth Studios: the account switcher is in the title bar now.
 const titleBar = ref(null)
+const clientInstallModal = ref(null)
 provideMinecraftAccounts(computed(() => titleBar.value?.minecraftAccounts ?? null))
 
 useAppEvent('command', handleCommand, appEvents)
@@ -2119,6 +2125,7 @@ provideAppUpdateDownloadProgress(appUpdateDownload)
 			:get-loader-manifest="getLoaderManifest"
 			:randomize-instance-icon="randomizeCreationIcon"
 			:customize-instance-icon="customizeCreationIcon"
+			:open-client-installation="() => clientInstallModal?.show()"
 			@create="handleCreate"
 			@browse-modpacks="handleBrowseModpacks"
 		/>
@@ -2134,6 +2141,7 @@ provideAppUpdateDownloadProgress(appUpdateDownload)
 			@saved="onCreationIconSaved"
 		/>
 		<UnknownPackWarningModal ref="unknownPackWarningModal" />
+		<ClientInstallModal ref="clientInstallModal" />
 		<InstanceActionModals ref="instanceActionModals" />
 		<SharedInstanceModals ref="sharedInstanceModals" />
 		<div
@@ -2381,6 +2389,8 @@ provideAppUpdateDownloadProgress(appUpdateDownload)
 				</template>
 			</RouterView>
 		</div>
+		<!-- Modrinth Studios: news articles open here (and big updates pop up once) -->
+		<ArticleViewerModal />
 		<AppSidebar
 			ref="sidebar"
 			:credentials="credentials"

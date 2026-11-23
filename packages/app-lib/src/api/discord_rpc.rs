@@ -136,11 +136,9 @@ impl DiscordRpcSettings {
             activity_type: DiscordActivityKind::parse(
                 &row.try_get::<String, _>("activity_type")?,
             ),
-            show_elapsed_time: row.try_get::<i64, _>("show_elapsed_time")?
-                != 0,
+            show_elapsed_time: row.try_get::<i64, _>("show_elapsed_time")? != 0,
             custom_state_template: row.try_get("custom_state_template")?,
-            custom_details_template: row
-                .try_get("custom_details_template")?,
+            custom_details_template: row.try_get("custom_details_template")?,
             idle_text: row.try_get("idle_text")?,
             button_1_label: row.try_get("button_1_label")?,
             button_1_url: row.try_get("button_1_url")?,
@@ -169,11 +167,10 @@ impl DiscordRpcSettings {
 pub async fn get_settings() -> Result<DiscordRpcSettings> {
     let state = State::get().await?;
 
-    let row = sqlx::query(
-        "SELECT * FROM studio_discord_rpc_settings WHERE id = 1",
-    )
-    .fetch_optional(&state.pool)
-    .await?;
+    let row =
+        sqlx::query("SELECT * FROM studio_discord_rpc_settings WHERE id = 1")
+            .fetch_optional(&state.pool)
+            .await?;
 
     Ok(match row {
         Some(row) => DiscordRpcSettings::from_row(&row)?,

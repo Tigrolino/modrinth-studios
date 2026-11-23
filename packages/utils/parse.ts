@@ -164,6 +164,7 @@ export const configuredXss = new FilterXSS({
 					'imgur.com',
 					'i.imgur.com',
 					'cdn.modrinth.com',
+					'modrinth.com',
 					'staging-cdn.modrinth.com',
 					'github.com',
 					'raw.githubusercontent.com',

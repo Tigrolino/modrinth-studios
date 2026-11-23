@@ -36,10 +36,8 @@ async fn copy_into_studio_dir<R: Runtime>(
     tokio::fs::create_dir_all(&studio_dir).await?;
 
     let source = std::path::PathBuf::from(source_path);
-    let extension = source
-        .extension()
-        .and_then(|e| e.to_str())
-        .unwrap_or("png");
+    let extension =
+        source.extension().and_then(|e| e.to_str()).unwrap_or("png");
 
     // Modrinth Studios addition: this used to always copy to the exact same
     // filename (e.g. always `background.png`), so picking a *different*
@@ -87,17 +85,17 @@ async fn copy_into_studio_dir<R: Runtime>(
 const IMAGE_EXTENSIONS: &[&str] = &["png", "jpg", "jpeg", "webp", "gif", "bmp"];
 
 fn is_image_file(path: &std::path::Path) -> bool {
-    path.extension()
-        .and_then(|e| e.to_str())
-        .is_some_and(|e| IMAGE_EXTENSIONS.contains(&e.to_ascii_lowercase().as_str()))
+    path.extension().and_then(|e| e.to_str()).is_some_and(|e| {
+        IMAGE_EXTENSIONS.contains(&e.to_ascii_lowercase().as_str())
+    })
 }
 
 const VIDEO_EXTENSIONS: &[&str] = &["mp4", "webm", "mov", "m4v"];
 
 fn is_video_file(path: &std::path::Path) -> bool {
-    path.extension()
-        .and_then(|e| e.to_str())
-        .is_some_and(|e| VIDEO_EXTENSIONS.contains(&e.to_ascii_lowercase().as_str()))
+    path.extension().and_then(|e| e.to_str()).is_some_and(|e| {
+        VIDEO_EXTENSIONS.contains(&e.to_ascii_lowercase().as_str())
+    })
 }
 
 /// A fresh, empty `$APPCONFIG/studio/<root_name>/<unique>/` directory, with
@@ -149,10 +147,8 @@ async fn copy_images_into(
 ) -> Result<Vec<String>> {
     let mut dest_paths = Vec::new();
     for (index, source) in sources.iter().enumerate() {
-        let extension = source
-            .extension()
-            .and_then(|e| e.to_str())
-            .unwrap_or("png");
+        let extension =
+            source.extension().and_then(|e| e.to_str()).unwrap_or("png");
         let dest = batch_dir.join(format!("{index}.{extension}"));
         tokio::fs::copy(source, &dest).await?;
         dest_paths.push(dest.to_string_lossy().into_owned());
@@ -356,7 +352,11 @@ pub async fn studio_apply_pinned_icon<R: Runtime>(
     {
         let config_dir = app.path().app_config_dir()?;
         let studio_dir = config_dir.join("studio");
-        let summary = crate::api::studio_pinned_icon_windows::apply_pinned_icon(&studio_dir, bytes)?;
+        let summary =
+            crate::api::studio_pinned_icon_windows::apply_pinned_icon(
+                &studio_dir,
+                bytes,
+            )?;
         Ok(summary)
     }
     #[cfg(not(windows))]

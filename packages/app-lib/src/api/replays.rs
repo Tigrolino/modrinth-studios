@@ -10,7 +10,7 @@
 
 use crate::state::State;
 use crate::util::io;
-use crate::{Result, ErrorKind};
+use crate::{ErrorKind, Result};
 use futures::stream::{self, StreamExt};
 use serde::{Deserialize, Serialize};
 use sqlx::Row;
@@ -240,8 +240,8 @@ pub async fn list_replays(
         .map(|&index| (index, entries[index].0.clone()))
         .collect();
 
-    let metadata_results: Vec<(usize, std::io::Result<Vec<u8>>)> = stream::iter(
-        paths.into_iter().map(|(index, path)| async move {
+    let metadata_results: Vec<(usize, std::io::Result<Vec<u8>>)> =
+        stream::iter(paths.into_iter().map(|(index, path)| async move {
             let result = tokio::task::spawn_blocking(move || {
                 read_zip_metadata_json(&path)
             })
@@ -252,11 +252,10 @@ pub async fn list_replays(
                 )))
             });
             (index, result)
-        }),
-    )
-    .buffer_unordered(REPLAY_METADATA_READ_CONCURRENCY)
-    .collect()
-    .await;
+        }))
+        .buffer_unordered(REPLAY_METADATA_READ_CONCURRENCY)
+        .collect()
+        .await;
 
     for (index, result) in metadata_results {
         if let Ok(bytes) = result {
@@ -450,9 +449,8 @@ fn pretty_name(file_name: &str) -> String {
 /// `metaData.json` / `metadata.json` entry at the root.
 fn read_zip_metadata_json(path: &Path) -> std::io::Result<Vec<u8>> {
     let file = std::fs::File::open(path)?;
-    let mut archive = zip::ZipArchive::new(file).map_err(|e| {
-        std::io::Error::new(std::io::ErrorKind::InvalidData, e)
-    })?;
+    let mut archive = zip::ZipArchive::new(file)
+        .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e))?;
     for name in ["metaData.json", "metadata.json"] {
         if let Ok(mut entry) = archive.by_name(name) {
             let mut buf = Vec::new();
@@ -483,8 +481,11 @@ fn apply_metadata_json(replay: &mut Replay, bytes: &[u8]) {
     }
     if let Some(date) = value.get("date").and_then(|v| v.as_i64()) {
         // ReplayMod stores milliseconds since epoch.
-        replay.recorded_at =
-            Some(if date > 10_000_000_000 { date / 1000 } else { date });
+        replay.recorded_at = Some(if date > 10_000_000_000 {
+            date / 1000
+        } else {
+            date
+        });
     }
     if let Some(version) = value
         .get("mcversion")
@@ -520,7 +521,9 @@ fn apply_metadata_json(replay: &mut Replay, bytes: &[u8]) {
         }
     }
     if replay.duration_ms.is_none() {
-        if let Some(total_ticks) = value.get("total_ticks").and_then(|v| v.as_u64()) {
+        if let Some(total_ticks) =
+            value.get("total_ticks").and_then(|v| v.as_u64())
+        {
             // Flashback stores tick count, not a millisecond duration. This
             // assumes a steady 20 ticks/sec, which is the normal case but
             // won't be exactly right if the recording was ever paused or the
@@ -544,9 +547,8 @@ fn read_zip_thumbnail(
     kind: ReplayKind,
 ) -> std::io::Result<Option<(Vec<u8>, &'static str)>> {
     let file = std::fs::File::open(path)?;
-    let mut archive = zip::ZipArchive::new(file).map_err(|e| {
-        std::io::Error::new(std::io::ErrorKind::InvalidData, e)
-    })?;
+    let mut archive = zip::ZipArchive::new(file)
+        .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e))?;
 
     match kind {
         ReplayKind::Flashback => {
@@ -593,9 +595,7 @@ pub async fn get_replay_thumbnail(
     let result =
         tokio::task::spawn_blocking(move || read_zip_thumbnail(&path, kind))
             .await
-            .map_err(|e| {
-                anyhow::anyhow!("thumbnail task panicked: {e}")
-            })?
+            .map_err(|e| anyhow::anyhow!("thumbnail task panicked: {e}"))?
             .ok();
 
     Ok(result.flatten().map(|(bytes, mime)| {
@@ -633,10 +633,7 @@ pub async fn rename_replay(
 /// Copies an externally-picked replay file into the instance. The target
 /// folder is inferred from the extension (`.mcpr` -> ReplayMod, anything
 /// else -> Flashback) since that's the only reliable signal we have.
-pub async fn import_replay(
-    instance: &Path,
-    source_path: &str,
-) -> Result<()> {
+pub async fn import_replay(instance: &Path, source_path: &str) -> Result<()> {
     let source = PathBuf::from(source_path);
     let Some(file_name) = source.file_name().and_then(|f| f.to_str()) else {
         return Err(ErrorKind::InputError(
@@ -676,10 +673,10 @@ fn safe_join(dir: &Path, file_name: &str) -> Result<PathBuf> {
         || file_name.contains('\\')
         || file_name == ".."
     {
-        return Err(
-            ErrorKind::InputError("Invalid replay file name".to_string())
-                .into(),
-        );
+        return Err(ErrorKind::InputError(
+            "Invalid replay file name".to_string(),
+        )
+        .into());
     }
     Ok(dir.join(file_name))
 }

@@ -196,6 +196,8 @@ export interface CreationFlowContextValue {
 	instanceIconPath: Ref<string | null>
 	randomizeInstanceIcon: (() => Promise<GeneratedInstanceIcon | null>) | null
 	customizeInstanceIcon: (() => void) | null
+	/** Modrinth Studios: opens the app's "client installation" picker. */
+	openClientInstallation: (() => void) | null
 
 	// Loader/version state (custom setup)
 	selectedLoader: Ref<string | null>
@@ -326,6 +328,7 @@ export interface CreationFlowOptions {
 	getCurseForgeTarget?: () => Promise<CurseForgeTarget>
 	randomizeInstanceIcon?: () => Promise<GeneratedInstanceIcon | null>
 	customizeInstanceIcon?: () => void
+	openClientInstallation?: () => void
 	finishDisabled?: ComputedRef<boolean>
 	finishDisabledTooltip?: ComputedRef<string | undefined>
 }
@@ -353,6 +356,7 @@ export function createCreationFlowContext(
 	const onBack = options.onBack ?? null
 	const randomizeInstanceIcon = options.randomizeInstanceIcon ?? null
 	const customizeInstanceIcon = options.customizeInstanceIcon ?? null
+	const openClientInstallation = options.openClientInstallation ?? null
 	const searchProjects =
 		options.searchProjects ??
 		((query: string, limit?: number) => searchServerContent(client, query, limit))
@@ -831,6 +835,7 @@ export function createCreationFlowContext(
 		instanceIconPath,
 		randomizeInstanceIcon,
 		customizeInstanceIcon,
+		openClientInstallation,
 		selectedLoader,
 		selectedGameVersion,
 		loaderVersionType,

@@ -49,10 +49,9 @@ pub(crate) async fn write_instance_marker(
 }
 
 async fn read_instance_marker_id(instance_dir: &Path) -> Option<String> {
-    let bytes =
-        tokio::fs::read(instance_dir.join(INSTANCE_MARKER_FILE_NAME))
-            .await
-            .ok()?;
+    let bytes = tokio::fs::read(instance_dir.join(INSTANCE_MARKER_FILE_NAME))
+        .await
+        .ok()?;
     let marker: InstanceMarker = serde_json::from_slice(&bytes).ok()?;
     Some(marker.id)
 }
