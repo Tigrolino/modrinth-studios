@@ -1,12 +1,12 @@
 <script setup lang="ts">
 import type { Archon } from '@modrinth/api-client'
-import { ChevronRightIcon } from '@modrinth/assets'
 import { useQuery, useQueryClient } from '@tanstack/vue-query'
 import { computed, ref, watch } from 'vue'
 
 import type { TabbedModalTab } from '#ui/components'
 import { TabbedModal } from '#ui/components'
 import { defineMessage, defineMessages, useVIntl } from '#ui/composables/i18n'
+import { useHideSupportFeatures } from '#ui/composables/server-preferences'
 import {
 	ServerSettingsAdvancedPage,
 	ServerSettingsBackupsPage,
@@ -103,6 +103,7 @@ provideServerSettings({
 const ownerId = computed(() => server.value?.owner_id ?? 'Ghost')
 const isOwner = computed(() => currentUserId.value != null && currentUserId.value === ownerId.value)
 const isAdmin = computed(() => currentUserRole.value === 'admin')
+const hideSupportFeatures = useHideSupportFeatures()
 
 const tabs = computed<TabbedModalTab[]>(() =>
 	serverSettingsTabDefinitions.map((tab) => {
@@ -117,6 +118,7 @@ const tabs = computed<TabbedModalTab[]>(() =>
 				isPterodactylServerId(currentServerId) && pterodactylLoaders(server.value).length === 0,
 			isShared: !!serverFull.value?.worlds.find((world) => world.id === worldId.value)?.content
 				?.shared_instance_id,
+			hideSupportFeatures: hideSupportFeatures.value,
 		}
 		const name = defineMessage({
 			id: `server.settings.tabs.${tab.id}`,
@@ -194,8 +196,9 @@ async function show({ serverId, tabIndex, tabId }: ShowOptions) {
 			targetServerId,
 		])
 
-		modal.value?.setTab(resolveVisibleTabIndex(tabIndex, tabId))
-		modal.value?.show()
+		const requestedTab = resolveVisibleTabIndex(tabIndex, tabId)
+		modal.value?.setTab(requestedTab)
+		modal.value?.show(undefined, tabIndex !== undefined || tabId ? requestedTab : undefined)
 		const fetchPromises: Promise<unknown>[] = [fetchViewer()]
 
 		if (!cachedServer) {
@@ -249,20 +252,16 @@ defineExpose({ show, hide })
 	<TabbedModal
 		ref="modal"
 		:tabs="tabs"
+		:header="formatMessage(commonMessages.settingsLabel)"
 		:floating-action-bar-shown="saveBannerShown"
-		:max-width="'min(980px, calc(95vw - 2rem))'"
-		:width="'min(980px, calc(95vw - 2rem))'"
+		max-width="min(980px, calc(95vw - 2rem))"
+		width="min(980px, calc(95vw - 2rem))"
 	>
 		<template #floating-action-bar>
 			<div ref="saveBannerTarget" />
 		</template>
-		<template #title>
-			<span class="flex items-center gap-2 text-lg font-semibold text-primary">
-				{{ server.name || 'Server' }} <ChevronRightIcon />
-				<span class="font-extrabold text-contrast">{{
-					formatMessage(commonMessages.settingsLabel)
-				}}</span>
-			</span>
+		<template #breadcrumb>
+			<span class="truncate">{{ server.name || 'Server' }}</span>
 		</template>
 	</TabbedModal>
 </template>

@@ -52,7 +52,7 @@ pub use self::icon::{
 pub(crate) use self::icon::{
     cache_icon, cache_icon_from_path, migrate_legacy_icons,
 };
-pub use self::install::get_optimal_jre_key;
+pub use self::install::{get_optimal_jre_key, get_recommended_java_version};
 pub(crate) use self::lifecycle::{create, edit_keep_folder};
 pub use self::lifecycle::{edit, remove, set_synced_option};
 pub use self::paths::{get_full_path, get_mod_full_path};
@@ -82,7 +82,6 @@ pub use self::screenshots::{
 pub(crate) use self::shared::{
     CONFIG_BUNDLE_FILE_TYPE, CONFIG_DIRECTORY, CONFIG_FILE_EXTENSIONS,
     CONFIG_FILE_TYPE, CONFIG_SYNC_ENABLED, MAX_CONFIG_BUNDLE_ENTRIES,
-    MAX_SHARED_FILES_TOTAL_SIZE, is_shareable_file_path,
     is_supported_config_file, read_bounded_config_bundle_entry,
     shared_instance_update_data, shared_modpack_files,
 };
@@ -91,10 +90,11 @@ pub use self::shared::{
     SharedInstanceExternalFilePreview, SharedInstanceInstallPreview,
     SharedInstanceInvite, SharedInstanceInviteCreator,
     SharedInstanceInviteInstallPreview, SharedInstanceInviteLink,
-    SharedInstanceJoinType, SharedInstancePublishFile,
-    SharedInstancePublishPreview, SharedInstanceUpdateDiff,
-    SharedInstanceUpdateDiffType, SharedInstanceUpdatePreview,
-    SharedInstanceUser, SharedInstanceUsers,
+    SharedInstanceJoinType, SharedInstanceLockStatus,
+    SharedInstancePublishFile, SharedInstancePublishPreview,
+    SharedInstanceRelinkBlocker, SharedInstanceRelinkPreview,
+    SharedInstanceUpdateDiff, SharedInstanceUpdateDiffType,
+    SharedInstanceUpdatePreview, SharedInstanceUser, SharedInstanceUsers,
     accept_pending_shared_instance_invite,
     accept_shared_instance_invite_for_install, cache_shared_instance_library,
     cache_shared_instance_server_icon, can_active_user_use_shared_instances,
@@ -104,9 +104,11 @@ pub use self::shared::{
     get_shared_instance_invite_install_preview, get_shared_instance_invites,
     get_shared_instance_publish_preview,
     get_shared_instance_publish_support_details,
-    get_shared_instance_update_preview, get_shared_instance_users,
-    install_shared_instance, invite_shared_instance_users,
-    leave_remote_shared_instance, publish_shared_instance,
+    get_shared_instance_relink_preview, get_shared_instance_update_preview,
+    get_shared_instance_users, install_shared_instance,
+    invite_shared_instance_users, leave_remote_shared_instance,
+    publish_shared_instance, refresh_shared_instance_lock,
+    refresh_shared_instance_locks, relink_shared_instance,
     remove_shared_instance_users, revoke_shared_instance_invite,
     unlink_shared_instance, unpublish_remote_shared_instance,
     unpublish_shared_instance, update_shared_instance,

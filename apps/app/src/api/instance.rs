@@ -47,6 +47,7 @@ pub fn init<R: tauri::Runtime>() -> tauri::plugin::TauriPlugin<R> {
             instance_get_linked_modpack_info,
             instance_get_linked_modpack_content,
             instance_get_optimal_jre_key,
+            instance_get_recommended_java_version,
             instance_get_full_path,
             instance_get_mod_full_path,
             instance_list_screenshots,
@@ -122,6 +123,8 @@ pub fn init<R: tauri::Runtime>() -> tauri::plugin::TauriPlugin<R> {
             instance_share_publish,
             instance_share_publish_support_details,
             instance_share_unlink,
+            instance_share_get_relink_preview,
+            instance_share_relink,
             instance_share_unpublish,
             instance_share_unpublish_remote,
             instance_share_leave_remote,
@@ -130,6 +133,8 @@ pub fn init<R: tauri::Runtime>() -> tauri::plugin::TauriPlugin<R> {
             instance_get_hidden_ids,
             instance_set_hidden,
             instance_share_dismiss_restored_notice,
+            instance_share_refresh_lock,
+            instance_share_refresh_locks,
             instance_export_mrpack,
             instance_get_pack_export_candidates,
         ])
@@ -154,6 +159,8 @@ pub struct Instance {
     pub link: Option<InstanceLink>,
     pub shared_instance: Option<SharedInstanceAttachment>,
     pub quarantined: bool,
+    pub launch_blocked: bool,
+    pub content_locked: bool,
     pub update_channel: ReleaseChannel,
     pub created: chrono::DateTime<chrono::Utc>,
     pub modified: chrono::DateTime<chrono::Utc>,
@@ -336,6 +343,8 @@ impl From<InstanceMetadata> for Instance {
             link: InstanceLink::from_core(metadata.link),
             shared_instance: metadata.shared_instance.map(Into::into),
             quarantined: metadata.quarantined,
+            launch_blocked: metadata.launch_blocked,
+            content_locked: metadata.content_locked,
             update_channel: metadata.instance.update_channel,
             created: metadata.instance.created,
             modified: metadata.instance.modified,
@@ -1141,6 +1150,13 @@ pub async fn instance_get_optimal_jre_key(
 }
 
 #[tauri::command]
+pub async fn instance_get_recommended_java_version(
+    instance_id: &str,
+) -> Result<u32> {
+    Ok(theseus::instance::get_recommended_java_version(instance_id).await?)
+}
+
+#[tauri::command]
 pub async fn instance_check_installed(
     instance_id: &str,
     project_id: &str,
@@ -1540,6 +1556,28 @@ pub async fn instance_share_unlink(instance_id: &str) -> Result<()> {
 }
 
 #[tauri::command]
+pub async fn instance_share_get_relink_preview(
+    instance_id: &str,
+    input: &str,
+) -> Result<theseus::instance::SharedInstanceRelinkPreview> {
+    Ok(theseus::instance::get_shared_instance_relink_preview(
+        instance_id,
+        input,
+    )
+    .await?)
+}
+
+#[tauri::command]
+pub async fn instance_share_relink(
+    instance_id: &str,
+    shared_instance_id: &str,
+) -> Result<()> {
+    theseus::instance::relink_shared_instance(instance_id, shared_instance_id)
+        .await?;
+    Ok(())
+}
+
+#[tauri::command]
 pub async fn instance_share_unpublish(instance_id: &str) -> Result<()> {
     theseus::instance::unpublish_shared_instance(instance_id).await?;
     Ok(())
@@ -1579,6 +1617,19 @@ pub async fn instance_set_hidden(
     hidden: bool,
 ) -> Result<()> {
     theseus::instance::set_instance_hidden(instance_id, hidden).await?;
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn instance_share_refresh_lock(
+    instance_id: &str,
+) -> Result<theseus::instance::SharedInstanceLockStatus> {
+    Ok(theseus::instance::refresh_shared_instance_lock(instance_id).await?)
+}
+
+#[tauri::command]
+pub async fn instance_share_refresh_locks() -> Result<()> {
+    theseus::instance::refresh_shared_instance_locks().await?;
     Ok(())
 }
 

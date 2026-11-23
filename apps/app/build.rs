@@ -123,6 +123,9 @@ fn main() {
                         "flush_pending_skin_change_for_profile",
                         "normalize_skin_texture",
                         "get_dragged_skin_data",
+                        "render_skin_preview",
+                        "render_skin_head",
+                        "get_skin_ears",
                     ])
                     .default_permission(
                         DefaultPermissionRule::AllowAllCommands,
@@ -182,6 +185,8 @@ fn main() {
                         "install_job_cancel",
                         "install_job_dismiss",
                         "install_job_support_details",
+                        "install_job_support_paste_url",
+                        "install_job_set_support_paste_url",
                     ])
                     .default_permission(
                         DefaultPermissionRule::AllowAllCommands,
@@ -226,6 +231,7 @@ fn main() {
                         "instance_get_linked_modpack_info",
                         "instance_get_linked_modpack_content",
                         "instance_get_optimal_jre_key",
+                        "instance_get_recommended_java_version",
                         "instance_get_full_path",
                         "instance_get_mod_full_path",
                         "instance_list_screenshots",
@@ -308,6 +314,8 @@ fn main() {
                         "instance_share_publish",
                         "instance_share_publish_support_details",
                         "instance_share_unlink",
+                        "instance_share_get_relink_preview",
+                        "instance_share_relink",
                         "instance_share_unpublish",
                         "instance_share_unpublish_remote",
                         "instance_share_leave_remote",
@@ -316,6 +324,8 @@ fn main() {
                         "instance_get_hidden_ids",
                         "instance_set_hidden",
                         "instance_share_dismiss_restored_notice",
+                        "instance_share_refresh_lock",
+                        "instance_share_refresh_locks",
                         "instance_export_mrpack",
                         "instance_get_pack_export_candidates",
                     ])
@@ -333,6 +343,7 @@ fn main() {
                         "store_cleanup",
                         "store_set_cache_limit",
                         "cancel_directory_change",
+                        "default_app_directory",
                     ])
                     .default_permission(
                         DefaultPermissionRule::AllowAllCommands,

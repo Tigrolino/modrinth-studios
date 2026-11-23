@@ -45,6 +45,14 @@ async fn initialize_state(
     app.fs_scope()
         .allow_directory(state.directories.instances_dir(), true)?;
 
+    tauri::async_runtime::spawn(async {
+        if let Err(error) =
+            theseus::minecraft_skins::prewarm_skin_previews().await
+        {
+            tracing::warn!("Failed to prewarm skin previews: {error}");
+        }
+    });
+
     Ok(())
 }
 
@@ -158,7 +166,7 @@ fn main() {
     .expect("failed to export app event TypeScript bindings");
 
     /*
-        tracing is set basd on the environment variable RUST_LOG=xxx, depending on the amount of logs to show
+        tracing is set based on the environment variable RUST_LOG=xxx, depending on the amount of logs to show
             ERROR > WARN > INFO > DEBUG > TRACE
         eg. RUST_LOG=info will show info, warn, and error logs
             RUST_LOG="theseus=trace" will show *all* messages but from theseus only (and not dependencies using similar crates)

@@ -32,6 +32,7 @@ export interface ServerSettingsTabContext {
 	isOwner: boolean
 	isAdmin: boolean
 	isShared: boolean
+	hideSupportFeatures: boolean
 	/** Modrinth Studios: self-hosted Pterodactyl server (no billing, sharing or Modrinth support). */
 	isPterodactyl?: boolean
 	/** Modrinth Studios: no switchable loader (e.g. Pumpkin or a proxy on Pterodactyl). */
@@ -102,7 +103,8 @@ export const serverSettingsTabDefinitions: ServerSettingsTabDefinition[] = [
 		color: 'orange',
 		href: ({ ownerId }) => `/admin/billing/${ownerId}`,
 		external: true,
-		shown: ({ isAdmin, isPterodactyl }) => isAdmin && !isPterodactyl,
+		shown: ({ isAdmin, isPterodactyl, hideSupportFeatures }) =>
+			isAdmin && !isPterodactyl && !hideSupportFeatures,
 	},
 	{
 		id: 'support',

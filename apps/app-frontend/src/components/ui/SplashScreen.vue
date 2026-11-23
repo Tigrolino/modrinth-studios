@@ -23,8 +23,8 @@
 					<TextLogo class="app-logo" color="var(--color-contrast)" />
 					<span class="app-logo-suffix">Studios</span>
 				</div>
-				<ProgressBar class="loading-bar" :progress="Math.min(loadingProgress, 100)" />
-				<span v-if="message">{{ message }}</span>
+				<ProgressBar class="loading-bar" :progress="progress" />
+				<span v-if="message" class="text-secondary">{{ message }}</span>
 			</div>
 			<div class="gradient-bg" data-tauri-drag-region></div>
 			<video
@@ -55,7 +55,7 @@
 </template>
 
 <script setup>
-import { injectLoadingState, TextLogo } from '@modrinth/ui'
+import { defineMessages, injectLoadingState, TextLogo, useVIntl } from '@modrinth/ui'
 import { convertFileSrc } from '@tauri-apps/api/core'
 import { computed, onMounted, ref, watch } from 'vue'
 
@@ -65,9 +65,27 @@ import { SPLASH_PREVIEW_DURATION_MS, splashPreviewActive } from '@/composables/u
 import { useStudioAppearance } from '@/composables/use-studio-appearance'
 import { debugStartup } from '@/helpers/startup-debug'
 
+const { formatMessage } = useVIntl()
+
+const messages = defineMessages({
+	movingAppDirectory: {
+		id: 'app.splash.moving-app-directory',
+		defaultMessage: 'Moving your app directory...',
+	},
+})
+
 const doneLoading = ref(false)
 const loadingProgress = ref(0)
-const message = ref()
+const directoryMoveFraction = ref(null)
+
+const progress = computed(() =>
+	directoryMoveFraction.value === null
+		? Math.min(loadingProgress.value, 100)
+		: directoryMoveFraction.value * 100,
+)
+const message = computed(() =>
+	directoryMoveFraction.value === null ? null : formatMessage(messages.movingAppDirectory),
+)
 
 // Modrinth Studios addition: a user-picked replacement for the default cube
 // artwork below (see .cube-bg's `background` in the style block, which stays
@@ -114,7 +132,7 @@ const customBackgroundStyle = computed(() => {
 // just runs it as a flat few-second fill purely for looks.
 watch(splashPreviewActive, (active) => {
 	if (!active) return
-	message.value = undefined
+	directoryMoveFraction.value = null
 	loadingProgress.value = 0
 	const start = Date.now()
 	const tick = () => {
@@ -178,8 +196,7 @@ function fakeLoadingIncrease() {
 
 useAppEvent('loading', (e) => {
 	if (e.event.type === 'directory_move') {
-		loadingProgress.value = 100 * (e.fraction ?? 1)
-		message.value = 'Updating app directory...'
+		directoryMoveFraction.value = e.fraction ?? null
 	}
 })
 </script>

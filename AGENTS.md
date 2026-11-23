@@ -30,6 +30,7 @@ This is a personal fork of the Modrinth App (desktop launcher only — the upstr
 | `path-util`      | Path utilities                                 |
 | `modrinth-content-management` | Content management helpers       |
 | `serde-binhum`   | Binary/human serialization helper              |
+| `modrinth-skin-rendering` | CPU rendering of Minecraft player skins |
 
 ## Dev Commands
 

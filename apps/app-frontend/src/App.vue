@@ -72,6 +72,7 @@ import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import { RouterView, useRoute, useRouter } from 'vue-router'
 
 import { useRouteLoading } from '@/app/runtime/use-route-loading'
+import { useSharedInstanceLockSync } from '@/app/runtime/use-shared-instance-lock-sync'
 import AppSidebar from '@/app/shell/sidebar/index.vue'
 import ArticleViewerModal from '@/features/news/ArticleViewerModal.vue'
 import AppTitleBar from '@/app/shell/title-bar/index.vue'
@@ -116,6 +117,8 @@ import {
 	createInstanceLaunchState,
 	provideInstanceLaunchState,
 } from '@/features/instances/launch-state'
+import { maxMemoryQueryOptions } from '@/features/java/queries'
+import SharedInstanceLockNotice from '@/features/library/shared-instances/shared-instance-lock-notice.vue'
 import SharedInstanceModals from '@/features/library/shared-instances/shared-instance-modals.vue'
 import { provideMinecraftAccounts } from '@/features/minecraft-accounts/context'
 import AppSettingsModal from '@/features/settings/app-settings-modal/index.vue'
@@ -141,7 +144,6 @@ import {
 	run,
 	set_global_synced_option,
 } from '@/helpers/instance'
-import { maxMemoryQueryOptions } from '@/helpers/jre.js'
 import {
 	get as getCreds,
 	getAll as getAllCreds,
@@ -936,6 +938,7 @@ const {
 	onSuspensePending: onRouteSuspensePending,
 	onSuspenseResolve: onRouteSuspenseResolve,
 } = useRouteLoading({ stateInitialized, stateFailed })
+useSharedInstanceLockSync()
 provideLoadingState(loading)
 
 traceStartupStep('Initialize backend state', () => initialize_state(appEventChannel))
@@ -1076,6 +1079,7 @@ const addServerToInstanceModal = ref()
 const incompatibilityWarningModal = ref()
 const installToPlayModal = ref()
 const sharedInstanceInviteHandler = ref()
+const sharedInstanceLockNotice = ref()
 const updateToPlayModal = ref()
 
 const modrinthLoginModal = ref()
@@ -1584,6 +1588,7 @@ function openServerInviteInviterProfile(inviterName) {
 async function handleLiveNotification(notification) {
 	if (!liveNotificationsEnabled || !notification?.body || notification.read) return
 	if (await sharedInstanceInviteHandler.value?.handleNotification(notification)) return
+	if (await sharedInstanceLockNotice.value?.handleNotification(notification)) return
 
 	if (notification.body.type === 'server_invite') {
 		if (displayedServerInviteNotifications.has(notification.id)) return
@@ -1623,6 +1628,7 @@ function clearLiveNotifications() {
 	displayedServerInviteNotifications.clear()
 	serverInvitePopupNotificationIds.clear()
 	sharedInstanceInviteHandler.value?.clearNotifications()
+	sharedInstanceLockNotice.value?.clearNotifications()
 }
 
 async function handleCommand(e) {
@@ -1650,7 +1656,7 @@ async function handleCommand(e) {
 		}
 	} else if (e.event === 'LaunchInstance') {
 		const instance = await getInstance(e.id).catch(handleError)
-		if (!instance || instance.quarantined) return
+		if (!instance || instance.launch_blocked) return
 
 		if (e.server) {
 			await start_join_server(e.id, e.server).catch(handleError)
@@ -2456,6 +2462,7 @@ provideAppUpdateDownloadProgress(appUpdateDownload)
 	/>
 	<ServerPlayHandler ref="serverPlayHandler" />
 	<SharedInstanceInviteHandler ref="sharedInstanceInviteHandler" />
+	<SharedInstanceLockNotice ref="sharedInstanceLockNotice" />
 	<InstallToPlayModal ref="installToPlayModal" :show-external-warnings="false" />
 	<UpdateToPlayModal ref="updateToPlayModal" :show-external-warnings="false" />
 </template>

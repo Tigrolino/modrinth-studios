@@ -8,5 +8,6 @@ pub mod link;
 pub mod network;
 pub mod platform;
 pub mod protocol_version;
+pub mod redactions;
 pub mod rpc;
 pub mod server_ping;

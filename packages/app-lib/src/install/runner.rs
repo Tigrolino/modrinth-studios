@@ -2,9 +2,10 @@ use super::events::{InstallProgressReporter, emit_install_job};
 use super::model::{
     InstallCleanup, InstallErrorContext, InstallErrorView, InstallJobDisplay,
     InstallJobEventKind, InstallJobSnapshot, InstallJobState, InstallJobStatus,
-    InstallPhaseDetails, InstallPhaseId, InstallPostInstallEdit,
-    InstallProgress, InstallProgressSecondary, InstallRequest,
-    InstallRollbackState, InstallTarget, SharedInstanceInstallData,
+    InstallJobSupportDetails, InstallPhaseDetails, InstallPhaseId,
+    InstallPostInstallEdit, InstallProgress, InstallProgressSecondary,
+    InstallRequest, InstallRollbackState, InstallTarget,
+    SharedInstanceInstallData,
 };
 use super::shared_instance::{
     apply_shared_instance_content, apply_shared_instance_update,
@@ -161,6 +162,16 @@ pub async fn import_instance(
 pub async fn duplicate_instance(
     source_instance_id: String,
 ) -> crate::Result<InstallJobSnapshot> {
+    let state = State::get().await?;
+    if crate::state::get_instance(&source_instance_id, &state.pool)
+        .await?
+        .is_some_and(|metadata| metadata.quarantined)
+    {
+        bail!(ErrorKind::InputError(
+            "quarantined instances cannot be duplicated".to_string(),
+        ));
+    }
+
     start(InstallRequest::DuplicateInstance { source_instance_id }).await
 }
 
@@ -229,10 +240,36 @@ pub async fn get_job(job_id: Uuid) -> crate::Result<InstallJobSnapshot> {
     Ok(store::get_required(job_id, &state.pool).await?.snapshot())
 }
 
-pub async fn job_support_details(job_id: Uuid) -> crate::Result<String> {
+pub async fn job_support_details(
+    job_id: Uuid,
+) -> crate::Result<InstallJobSupportDetails> {
     let state = State::get().await?;
     let job = store::get_required(job_id, &state.pool).await?;
-    diagnostics::build_job_support_details(&job, &state).await
+    let details = diagnostics::build_job_support_details(&job, &state).await?;
+    Ok(InstallJobSupportDetails {
+        details,
+        finished_modified: job
+            .status
+            .is_finished()
+            .then(|| job.modified.timestamp()),
+    })
+}
+
+pub async fn job_support_paste_url(
+    job_id: Uuid,
+) -> crate::Result<Option<String>> {
+    let state = State::get().await?;
+    store::get_support_paste_url(job_id, &state.pool).await
+}
+
+pub async fn set_job_support_paste_url(
+    job_id: Uuid,
+    url: String,
+    finished_modified: i64,
+) -> crate::Result<()> {
+    let state = State::get().await?;
+    store::set_support_paste_url(job_id, &url, finished_modified, &state.pool)
+        .await
 }
 
 /// Keeps retry setup out of the command's future.
@@ -2016,7 +2053,7 @@ async fn prepare_existing_rollback(
         .ok_or(ErrorKind::InputError(format!(
             "unknown instance {instance_id}"
         )))?;
-    if instance.quarantined {
+    if instance.content_locked {
         bail!(ErrorKind::InputError(
             "content in quarantined instances cannot be changed".to_string(),
         ));
